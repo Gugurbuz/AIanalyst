@@ -1,0 +1,7 @@
+{
+  "name": "AI Business Analyst Assistant",
+  "description": "An AI-powered assistant that acts as a business analyst to help users understand, mature, and document their business requirements, as well as generate test scenarios.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
