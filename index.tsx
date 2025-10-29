@@ -4,27 +4,30 @@ import App from './App';
 import { AuthPage } from './components/AuthPage';
 import { authService } from './services/authService';
 import type { User } from './types';
+import type { Session } from '@supabase/supabase-js';
+
 
 const Main = () => {
-    const [currentUser, setCurrentUser] = useState<User | null>(null);
+    const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const user = authService.getCurrentUser();
-        if (user) {
-            setCurrentUser(user);
-        }
-        setIsLoading(false);
+        const getSession = async () => {
+            const currentSession = await authService.getSession();
+            setSession(currentSession);
+            setIsLoading(false);
+        };
+        
+        getSession();
+
+        const subscription = authService.onAuthStateChange((_event, session) => {
+            setSession(session);
+        });
+
+        return () => {
+            subscription?.unsubscribe();
+        };
     }, []);
-
-    const handleLoginSuccess = (user: User) => {
-        setCurrentUser(user);
-    };
-
-    const handleLogout = () => {
-        authService.logout();
-        setCurrentUser(null);
-    };
 
     if (isLoading) {
       return (
@@ -34,11 +37,11 @@ const Main = () => {
       );
     }
 
-    if (!currentUser) {
-        return <AuthPage onLoginSuccess={handleLoginSuccess} />;
+    if (!session?.user) {
+        return <AuthPage />;
     }
 
-    return <App user={currentUser} onLogout={handleLogout} />;
+    return <App user={session.user as User} onLogout={() => authService.logout()} />;
 };
 
 

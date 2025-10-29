@@ -2,8 +2,7 @@
 
 export interface User {
   id: string;
-  email: string;
-  password?: string; // Included for auth service, but should not be passed to client components
+  email?: string; // email can be undefined in some cases
 }
 
 export interface Message {
@@ -24,10 +23,11 @@ export interface GeneratedDocs {
 
 export interface Conversation {
   id: string;
-  userId: string;
+  user_id: string;
   title: string;
   messages: Message[];
   generatedDocs: GeneratedDocs;
+  created_at?: string;
 }
 
 export interface MaturityReport {

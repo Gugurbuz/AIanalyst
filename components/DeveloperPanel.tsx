@@ -5,6 +5,10 @@ interface DeveloperPanelProps {
     onApiKeyChange: (key: string) => void;
     modelName: string;
     onModelNameChange: (name: string) => void;
+    supabaseUrl: string;
+    onSupabaseUrlChange: (url: string) => void;
+    supabaseAnonKey: string;
+    onSupabaseAnonKeyChange: (key: string) => void;
     onClose: () => void;
 }
 
@@ -13,22 +17,33 @@ export const DeveloperPanel: React.FC<DeveloperPanelProps> = ({
     onApiKeyChange,
     modelName,
     onModelNameChange,
+    supabaseUrl,
+    onSupabaseUrlChange,
+    supabaseAnonKey,
+    onSupabaseAnonKeyChange,
     onClose
 }) => {
     const [localApiKey, setLocalApiKey] = useState(apiKey);
     const [localModelName, setLocalModelName] = useState(modelName);
+    const [localSupabaseUrl, setLocalSupabaseUrl] = useState(supabaseUrl);
+    const [localSupabaseAnonKey, setLocalSupabaseAnonKey] = useState(supabaseAnonKey);
+    const [savedMessage, setSavedMessage] = useState('');
 
-    useEffect(() => {
-        setLocalApiKey(apiKey);
-    }, [apiKey]);
-    
-    useEffect(() => {
-        setLocalModelName(modelName);
-    }, [modelName]);
+    useEffect(() => { setLocalApiKey(apiKey); }, [apiKey]);
+    useEffect(() => { setLocalModelName(modelName); }, [modelName]);
+    useEffect(() => { setLocalSupabaseUrl(supabaseUrl); }, [supabaseUrl]);
+    useEffect(() => { setLocalSupabaseAnonKey(supabaseAnonKey); }, [supabaseAnonKey]);
 
     const handleSave = () => {
         onApiKeyChange(localApiKey);
         onModelNameChange(localModelName);
+        onSupabaseUrlChange(localSupabaseUrl);
+        onSupabaseAnonKeyChange(localSupabaseAnonKey);
+
+        setSavedMessage('Ayarlar kaydedildi. Uygulama yeniden başlatılıyor...');
+        setTimeout(() => {
+            window.location.reload();
+        }, 1500); // Give user time to read the message
     };
 
     return (
@@ -43,7 +58,7 @@ export const DeveloperPanel: React.FC<DeveloperPanelProps> = ({
             <div className="space-y-4">
                 <div>
                     <label htmlFor="api-key" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        API Anahtarı
+                        Gemini API Anahtarı
                     </label>
                     <input
                         type="password"
@@ -56,7 +71,7 @@ export const DeveloperPanel: React.FC<DeveloperPanelProps> = ({
                 </div>
                 <div>
                     <label htmlFor="model-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        Model Adı
+                        Gemini Model Adı
                     </label>
                     <input
                         type="text"
@@ -67,14 +82,46 @@ export const DeveloperPanel: React.FC<DeveloperPanelProps> = ({
                         placeholder="Örn: gemini-2.5-flash"
                     />
                 </div>
+                <hr className="border-slate-300 dark:border-slate-600"/>
+                <div>
+                    <label htmlFor="supabase-url" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Supabase URL
+                    </label>
+                    <input
+                        type="text"
+                        id="supabase-url"
+                        value={localSupabaseUrl}
+                        onChange={(e) => setLocalSupabaseUrl(e.target.value)}
+                        className="w-full p-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-sky-500 focus:outline-none bg-slate-100 dark:bg-slate-700"
+                        placeholder="Supabase Proje URL'si"
+                    />
+                </div>
+                 <div>
+                    <label htmlFor="supabase-key" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Supabase Anon Key
+                    </label>
+                    <input
+                        type="password"
+                        id="supabase-key"
+                        value={localSupabaseAnonKey}
+                        onChange={(e) => setLocalSupabaseAnonKey(e.target.value)}
+                        className="w-full p-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-sky-500 focus:outline-none bg-slate-100 dark:bg-slate-700"
+                        placeholder="Supabase Proje Anon Key"
+                    />
+                </div>
             </div>
 
-            <div className="mt-6 flex justify-end">
+            <div className="mt-6 flex justify-between items-center">
+                {savedMessage ? 
+                    <span className="text-sm text-emerald-600 dark:text-emerald-400 flex-1">{savedMessage}</span>
+                    : <div/>
+                }
                  <button 
                     onClick={handleSave} 
-                    className="px-4 py-2 bg-sky-600 text-white text-sm font-semibold rounded-lg shadow-md hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-opacity-75 transition duration-200"
+                    disabled={!!savedMessage}
+                    className="px-4 py-2 bg-sky-600 text-white text-sm font-semibold rounded-lg shadow-md hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-opacity-75 transition duration-200 disabled:opacity-50"
                 >
-                    Ayarları Kaydet
+                    Kaydet ve Yeniden Başlat
                 </button>
             </div>
         </div>

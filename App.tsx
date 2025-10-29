@@ -14,6 +14,7 @@ import { MaturityCheckReport } from './components/MaturityCheckReport';
 import { TemplateSelector } from './components/TemplateSelector';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
 import type { Theme } from './components/ThemeSwitcher';
+import { supabase } from './services/supabaseClient';
 
 interface AppProps {
     user: User;
@@ -45,22 +46,8 @@ const ActionSpinner: React.FC = () => (
 
 
 const App: React.FC<AppProps> = ({ user, onLogout }) => {
-    const [allConversations, setAllConversations] = useState<Conversation[]>(() => {
-        try {
-            const localData = localStorage.getItem('conversations');
-            return localData ? JSON.parse(localData) : [];
-        } catch (error) {
-            console.error("Failed to parse conversations from localStorage", error);
-            return [];
-        }
-    });
-
+    const [conversations, setConversations] = useState<Conversation[]>([]);
     const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'system');
-
-    const conversations = useMemo(() => {
-        return allConversations.filter(c => c.userId === user.id);
-    }, [allConversations, user.id]);
-
     const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
@@ -81,11 +68,46 @@ const App: React.FC<AppProps> = ({ user, onLogout }) => {
 
     // --- Developer Mode State ---
     const [isDevMode, setIsDevMode] = useState(false);
+    // Hardcoded defaults to match supabaseClient.ts
+    const defaultSupabaseUrl = 'https://mjrshqlpomrezudlpmoj.supabase.co';
+    const defaultSupabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qcnNocWxwb21yZXp1ZGxwbW9qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzY1MDcsImV4cCI6MjA3NzM1MjUwN30.CY46g7Qnua63CrsWteAAFvMHeU75hwfZzeLfjOKCKNI';
+
+    // It's considered configured if we have localStorage values OR hardcoded defaults.
+    const [isSupabaseConfigured, setIsSupabaseConfigured] = useState(() => {
+        const url = localStorage.getItem('supabaseUrl');
+        const key = localStorage.getItem('supabaseAnonKey');
+        return !!(url && key) || !!(defaultSupabaseUrl && defaultSupabaseAnonKey);
+    });
+    
     const [devApiKey, setDevApiKey] = useState(() => localStorage.getItem('devApiKey') || process.env.API_KEY || '');
     const [devModelName, setDevModelName] = useState(() => localStorage.getItem('devModelName') || 'gemini-2.5-flash');
+    const [devSupabaseUrl, setDevSupabaseUrl] = useState(() => localStorage.getItem('supabaseUrl') || defaultSupabaseUrl);
+    const [devSupabaseAnonKey, setDevSupabaseAnonKey] = useState(() => localStorage.getItem('supabaseAnonKey') || defaultSupabaseAnonKey);
 
     const geminiConfig = useMemo(() => ({ apiKey: devApiKey, modelName: devModelName }), [devApiKey, devModelName]);
     
+
+    // --- Data Fetching from Supabase ---
+    useEffect(() => {
+        const fetchConversations = async () => {
+            if (!user || !isSupabaseConfigured) return;
+            // Set a loading state specific to fetching data, if needed
+            const { data, error } = await supabase
+                .from('conversations')
+                .select('*')
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('Error fetching conversations:', error);
+                setError('Geçmiş konuşmalar yüklenemedi. Supabase ayarlarınızı kontrol edin.');
+            } else {
+                setConversations(data as Conversation[] || []);
+            }
+        };
+        fetchConversations();
+    }, [user, isSupabaseConfigured]);
+
     // --- Theme Management ---
     useEffect(() => {
         const root = window.document.documentElement;
@@ -114,22 +136,12 @@ const App: React.FC<AppProps> = ({ user, onLogout }) => {
         localStorage.setItem('theme', newTheme);
     };
 
-    useEffect(() => {
-        try {
-            localStorage.setItem('conversations', JSON.stringify(allConversations));
-        } catch (error)
-        {
-            console.error("Failed to save conversations to localStorage", error);
-        }
-    }, [allConversations]);
-
     // Save dev settings to localStorage
-    useEffect(() => {
-        localStorage.setItem('devApiKey', devApiKey);
-    }, [devApiKey]);
-    useEffect(() => {
-        localStorage.setItem('devModelName', devModelName);
-    }, [devModelName]);
+    useEffect(() => { localStorage.setItem('devApiKey', devApiKey); }, [devApiKey]);
+    useEffect(() => { localStorage.setItem('devModelName', devModelName); }, [devModelName]);
+    useEffect(() => { localStorage.setItem('supabaseUrl', devSupabaseUrl); }, [devSupabaseUrl]);
+    useEffect(() => { localStorage.setItem('supabaseAnonKey', devSupabaseAnonKey); }, [devSupabaseAnonKey]);
+
 
     // Dev mode key sequence listener
     useEffect(() => {
@@ -210,54 +222,93 @@ const App: React.FC<AppProps> = ({ user, onLogout }) => {
         setMaturityReport(null);
     };
     
-    const handleUpdateConversationTitle = useCallback((id: string, title: string) => {
-        setAllConversations(prev =>
-            prev.map(c => {
-                if (c.id === id) {
-                    return { ...c, title: title.trim() || "Başlıksız Analiz" };
-                }
-                return c;
-            })
+    const handleUpdateConversationTitle = useCallback(async (id: string, title: string) => {
+        if (!isSupabaseConfigured) return;
+        const newTitle = title.trim() || "Başlıksız Analiz";
+        const originalConversations = conversations;
+        setConversations(prev =>
+            prev.map(c => c.id === id ? { ...c, title: newTitle } : c)
         );
-    }, []);
 
-    const updateConversation = (id: string, updates: Partial<Conversation>) => {
-        setAllConversations(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+        const { error } = await supabase
+            .from('conversations')
+            .update({ title: newTitle })
+            .eq('id', id);
+
+        if (error) {
+            console.error('Error updating title:', error);
+            setError('Başlık güncellenemedi.');
+            setConversations(originalConversations);
+        }
+    }, [conversations, isSupabaseConfigured]);
+    
+    const updateConversationInDb = async (id: string, updates: Partial<Omit<Conversation, 'id' | 'user_id' | 'created_at'>>) => {
+        if (!isSupabaseConfigured) return;
+        const originalConversations = [...conversations];
+        setConversations(prev => 
+            prev.map(c => c.id === id ? { ...c, ...updates } : c)
+        );
+
+        const { error } = await supabase
+            .from('conversations')
+            .update(updates)
+            .eq('id', id);
+        
+        if (error) {
+            console.error('Error updating conversation:', error);
+            setError('Konuşma güncellenemedi.');
+            setConversations(originalConversations);
+        }
     };
     
     const handleSendMessage = useCallback(async (message: string) => {
-        if (!message.trim()) return;
+        if (!message.trim() || !isSupabaseConfigured) return;
         
         setMaturityReport(null); 
         const userMessage = createMessage('user', message);
 
         if (!activeConversationId) { 
-            const newConversationId = Date.now().toString();
-            const newConversation: Conversation = {
-                id: newConversationId,
-                userId: user.id,
-                title: 'Yeni Analiz',
-                messages: [userMessage],
-                generatedDocs: { analysisDoc: '', testScenarios: '', visualization: '' }
-            };
-            
-            setAllConversations(prev => [newConversation, ...prev]);
-            setActiveConversationId(newConversationId);
             setIsLoading(true);
             setError(null);
 
             try {
+                const initialConversation = {
+                    user_id: user.id,
+                    title: 'Yeni Analiz...',
+                    messages: [userMessage],
+                    generatedDocs: { analysisDoc: '', testScenarios: '', visualization: '' }
+                };
+                
+                const { data: newConvData, error: insertError } = await supabase
+                    .from('conversations')
+                    .insert(initialConversation)
+                    .select()
+                    .single();
+
+                if (insertError) throw insertError;
+                
+                // Immediately add to state and set active
+                setConversations(prev => [newConvData as Conversation, ...prev]);
+                setActiveConversationId(newConvData.id);
+
                 const [title, response] = await Promise.all([
                     geminiService.generateConversationTitle(message, geminiConfig),
-                    geminiService.continueConversation(newConversation.messages, geminiConfig)
+                    geminiService.continueConversation(newConvData.messages as Message[], geminiConfig)
                 ]);
+                
                 const assistantMessage = createMessage('assistant', response);
-                updateConversation(newConversationId, { title: title || "Başlıksız Analiz", messages: [userMessage, assistantMessage] });
+                
+                const finalConversationData = {
+                    title: title || "Başlıksız Analiz",
+                    messages: [userMessage, assistantMessage]
+                };
+
+                await updateConversationInDb(newConvData.id, finalConversationData);
+
             } catch (e) {
                  const errorMessage = e instanceof Error ? e.message : 'Bilinmeyen bir hata oluştu.';
-                 setError(`API çağrısı başarısız oldu: ${errorMessage}`);
-                 const errorMsg = createMessage('assistant', `Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin. Hata: ${errorMessage}`);
-                 updateConversation(newConversationId, { messages: [userMessage, errorMsg] });
+                 setError(`API çağrısı veya veritabanı işlemi başarısız oldu: ${errorMessage}`);
+                 // Optionally remove the conversation from state if creation failed midway
             } finally {
                  setIsLoading(false);
             }
@@ -266,45 +317,36 @@ const App: React.FC<AppProps> = ({ user, onLogout }) => {
             const currentMessages = conversations.find(c => c.id === activeConversationId)?.messages || [];
             const updatedMessages = [...currentMessages, userMessage];
 
-            updateConversation(activeConversationId, { messages: updatedMessages });
+            updateConversationInDb(activeConversationId, { messages: updatedMessages });
             setIsLoading(true);
             setError(null);
 
             try {
                 const result = await geminiService.continueConversation(updatedMessages, geminiConfig);
                 const assistantMessage = createMessage('assistant', result);
-                setAllConversations(prev => prev.map(c =>
-                    c.id === activeConversationId
-                        ? { ...c, messages: [...updatedMessages, assistantMessage] }
-                        : c
-                ));
+                const finalMessages = [...updatedMessages, assistantMessage];
+                await updateConversationInDb(activeConversationId, { messages: finalMessages });
             } catch (e) {
                 const errorMessage = e instanceof Error ? e.message : 'Bilinmeyen bir hata oluştu.';
                 setError(`API çağrısı başarısız oldu: ${errorMessage}`);
                 const errorMsg = createMessage('assistant', `Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin. Hata: ${errorMessage}`);
-                setAllConversations(prev => prev.map(c =>
-                    c.id === activeConversationId
-                        ? { ...c, messages: [...updatedMessages, errorMsg] }
-                        : c
-                ));
+                const finalMessages = [...updatedMessages, errorMsg];
+                await updateConversationInDb(activeConversationId, { messages: finalMessages });
             } finally {
                 setIsLoading(false);
             }
         }
-    }, [activeConversationId, conversations, geminiConfig, user.id]);
+    }, [activeConversationId, conversations, geminiConfig, user.id, isSupabaseConfigured]);
 
     const handleMaturityCheck = useCallback(async () => {
-        if (isLoading || !activeConversationId) return;
+        if (isLoading || !activeConversation) return;
         
-        const conversation = conversations.find(c => c.id === activeConversationId);
-        if (!conversation) return;
-
         setIsLoading(true);
         setRunningAction('maturity');
         setError(null);
         setMaturityReport(null);
         try {
-            const report = await geminiService.checkAnalysisMaturity(conversation.messages, geminiConfig);
+            const report = await geminiService.checkAnalysisMaturity(activeConversation.messages, geminiConfig);
             setMaturityReport(report);
             setNotification("Analiz olgunluk raporu oluşturuldu.");
         } catch (e) {
@@ -314,17 +356,14 @@ const App: React.FC<AppProps> = ({ user, onLogout }) => {
             setIsLoading(false);
             setRunningAction(null);
         }
-    }, [activeConversationId, conversations, isLoading, geminiConfig]);
+    }, [activeConversation, isLoading, geminiConfig]);
 
     const handleSendSuggestedQuestion = useCallback((question: string) => {
         handleSendMessage(question);
     }, [handleSendMessage]);
 
     const handleGenerateDocument = useCallback(async () => {
-        if (isLoading || !activeConversationId) return;
-        
-        const conversation = conversations.find(c => c.id === activeConversationId);
-        if (!conversation) return;
+        if (isLoading || !activeConversation) return;
 
         const selectedTemplate = ANALYSIS_TEMPLATES.find(t => t.id === selectedAnalysisTemplateId);
         if (!selectedTemplate) {
@@ -336,40 +375,31 @@ const App: React.FC<AppProps> = ({ user, onLogout }) => {
         setRunningAction('document');
         setError(null);
         try {
-            const doc = await geminiService.generateAnalysisDocument(conversation.messages, selectedTemplate.prompt, geminiConfig);
+            const doc = await geminiService.generateAnalysisDocument(activeConversation.messages, selectedTemplate.prompt, geminiConfig);
             
             if (doc && doc.trim()) {
-                setAllConversations(prev => prev.map(c => 
-                    c.id === activeConversationId 
-                        ? { ...c, generatedDocs: { ...c.generatedDocs, analysisDoc: doc } }
-                        : c
-                ));
+                const newDocs = { ...activeConversation.generatedDocs, analysisDoc: doc };
+                await updateConversationInDb(activeConversation.id, { generatedDocs: newDocs });
                 setNotification("Analiz dokümanınız başarıyla oluşturuldu.");
             } else {
-                 setAllConversations(prev => prev.map(c => {
-                    if (c.id === activeConversationId) {
-                        const errorMsg = createMessage('assistant', "Üzgünüm, analiz dokümanı oluşturulamadı. Lütfen konuşmayı biraz daha detaylandırıp tekrar deneyin.");
-                        return { ...c, messages: [...c.messages, errorMsg] };
-                    }
-                    return c;
-                }));
+                 const errorMsg = createMessage('assistant', "Üzgünüm, analiz dokümanı oluşturulamadı. Lütfen konuşmayı biraz daha detaylandırıp tekrar deneyin.");
+                 const newMessages = [...activeConversation.messages, errorMsg];
+                 await updateConversationInDb(activeConversation.id, { messages: newMessages });
             }
         } catch (e) {
             const errorMessage = e instanceof Error ? e.message : 'Bilinmeyen bir hata oluştu.';
             setError(`API çağrısı başarısız oldu: ${errorMessage}`);
             const errorMsg = createMessage('assistant', `Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin. Hata: ${errorMessage}`);
-            setAllConversations(prev => prev.map(c => c.id === activeConversationId ? { ...c, messages: [...c.messages, errorMsg] } : c));
+            const newMessages = [...activeConversation.messages, errorMsg];
+            await updateConversationInDb(activeConversation.id, { messages: newMessages });
         } finally {
             setIsLoading(false);
             setRunningAction(null);
         }
-    }, [activeConversationId, conversations, isLoading, selectedAnalysisTemplateId, geminiConfig]);
+    }, [activeConversation, isLoading, selectedAnalysisTemplateId, geminiConfig]);
 
     const handleGenerateTestScenarios = useCallback(async () => {
-        if (isLoading || !activeConversationId) return;
-
-        const conversation = conversations.find(c => c.id === activeConversationId);
-        if (!conversation || !conversation.generatedDocs.analysisDoc) return;
+        if (isLoading || !activeConversation || !activeConversation.generatedDocs.analysisDoc) return;
 
         const selectedTemplate = TEST_SCENARIO_TEMPLATES.find(t => t.id === selectedTestTemplateId);
          if (!selectedTemplate) {
@@ -381,118 +411,86 @@ const App: React.FC<AppProps> = ({ user, onLogout }) => {
         setRunningAction('test-scenarios');
         setError(null);
         try {
-            const scenarios = await geminiService.generateTestScenarios(conversation.generatedDocs.analysisDoc, selectedTemplate.prompt, geminiConfig);
+            const scenarios = await geminiService.generateTestScenarios(activeConversation.generatedDocs.analysisDoc, selectedTemplate.prompt, geminiConfig);
 
             if (scenarios && scenarios.trim()) {
-                 setAllConversations(prev => prev.map(c => 
-                    c.id === activeConversationId 
-                        ? { ...c, generatedDocs: { ...c.generatedDocs, testScenarios: scenarios } }
-                        : c
-                ));
+                 const newDocs = { ...activeConversation.generatedDocs, testScenarios: scenarios };
+                 await updateConversationInDb(activeConversation.id, { generatedDocs: newDocs });
                 setNotification("Test senaryolarınız başarıyla oluşturuldu.");
             } else {
-                 setAllConversations(prev => prev.map(c => {
-                    if (c.id === activeConversationId) {
-                        const errorMsg = createMessage('assistant', "Üzgünüm, test senaryoları oluşturulamadı. Analiz dokümanını kontrol edip tekrar deneyin.");
-                        return { ...c, messages: [...c.messages, errorMsg] };
-                    }
-                    return c;
-                }));
+                 const errorMsg = createMessage('assistant', "Üzgünüm, test senaryoları oluşturulamadı. Analiz dokümanını kontrol edip tekrar deneyin.");
+                 const newMessages = [...activeConversation.messages, errorMsg];
+                 await updateConversationInDb(activeConversation.id, { messages: newMessages });
             }
         } catch (e) {
             const errorMessage = e instanceof Error ? e.message : 'Bilinmeyen bir hata oluştu.';
             setError(`API çağrısı başarısız oldu: ${errorMessage}`);
             const errorMsg = createMessage('assistant', `Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin. Hata: ${errorMessage}`);
-            setAllConversations(prev => prev.map(c => c.id === activeConversationId ? { ...c, messages: [...c.messages, errorMsg] } : c));
+            const newMessages = [...activeConversation.messages, errorMsg];
+            await updateConversationInDb(activeConversation.id, { messages: newMessages });
         } finally {
             setIsLoading(false);
             setRunningAction(null);
         }
-    }, [activeConversationId, conversations, isLoading, selectedTestTemplateId, geminiConfig]);
+    }, [activeConversation, isLoading, selectedTestTemplateId, geminiConfig]);
 
     const handleGenerateVisualization = useCallback(async () => {
-        if (isLoading || !activeConversationId) return;
-
-        const conversation = conversations.find(c => c.id === activeConversationId);
-        if (!conversation) return;
+        if (isLoading || !activeConversation) return;
 
         setIsLoading(true);
         setRunningAction('visualize');
         setError(null);
         try {
-            const mermaidCode = await geminiService.generateVisualization(conversation.messages, geminiConfig);
+            const mermaidCode = await geminiService.generateVisualization(activeConversation.messages, geminiConfig);
             if (mermaidCode && mermaidCode.trim()) {
-                 setAllConversations(prev => prev.map(c => 
-                    c.id === activeConversationId 
-                        ? { ...c, generatedDocs: { ...c.generatedDocs, visualization: mermaidCode } }
-                        : c
-                ));
+                const newDocs = { ...activeConversation.generatedDocs, visualization: mermaidCode };
+                await updateConversationInDb(activeConversation.id, { generatedDocs: newDocs });
                 setNotification("Özet görselleştirme başarıyla oluşturuldu.");
             } else {
-                 setAllConversations(prev => prev.map(c => {
-                    if (c.id === activeConversationId) {
-                        const errorMsg = createMessage('assistant', "Üzgünüm, bir görselleştirme oluşturulamadı. Lütfen konuşmayı biraz daha detaylandırıp tekrar deneyin.");
-                        return { ...c, messages: [...c.messages, errorMsg] };
-                    }
-                    return c;
-                }));
+                 const errorMsg = createMessage('assistant', "Üzgünüm, bir görselleştirme oluşturulamadı. Lütfen konuşmayı biraz daha detaylandırıp tekrar deneyin.");
+                 const newMessages = [...activeConversation.messages, errorMsg];
+                 await updateConversationInDb(activeConversation.id, { messages: newMessages });
             }
         } catch (e) {
             const errorMessage = e instanceof Error ? e.message : 'Bilinmeyen bir hata oluştu.';
             setError(`API çağrısı başarısız oldu: ${errorMessage}`);
             const errorMsg = createMessage('assistant', `Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin. Hata: ${errorMessage}`);
-            setAllConversations(prev => prev.map(c => c.id === activeConversationId ? { ...c, messages: [...c.messages, errorMsg] } : c));
+            const newMessages = [...activeConversation.messages, errorMsg];
+            await updateConversationInDb(activeConversation.id, { messages: newMessages });
         } finally {
             setIsLoading(false);
             setRunningAction(null);
         }
-    }, [activeConversationId, conversations, isLoading, geminiConfig]);
+    }, [activeConversation, isLoading, geminiConfig]);
 
     const handleDocumentUpdate = useCallback((docType: 'analysisDoc' | 'testScenarios', newContent: string) => {
         if (!activeConversationId) return;
-
-        setAllConversations(prev =>
-            prev.map(c => {
-                if (c.id === activeConversationId) {
-                    return {
-                        ...c,
-                        generatedDocs: {
-                            ...c.generatedDocs,
-                            [docType]: newContent,
-                        },
-                    };
-                }
-                return c;
-            })
-        );
-    }, [activeConversationId]);
+        const newDocs = { ...activeConversation?.generatedDocs, [docType]: newContent };
+        updateConversationInDb(activeConversationId, { generatedDocs: newDocs });
+    }, [activeConversation, activeConversationId]);
 
     const handleFeedbackUpdate = useCallback((messageId: string, feedbackData: { rating: 'up' | 'down' | null; comment?: string }) => {
         if (!activeConversationId) return;
 
-        setAllConversations(prev =>
-            prev.map(c => {
-                if (c.id === activeConversationId) {
-                    const updatedMessages = c.messages.map(m => {
-                        if (m.id === messageId) {
-                            return {
-                                ...m,
-                                feedback: {
-                                    ...(m.feedback || { rating: null }), 
-                                    ...feedbackData
-                                }
-                            };
-                        }
-                        return m;
-                    });
-                    return { ...c, messages: updatedMessages };
-                }
-                return c;
-            })
-        );
+        const updatedMessages = activeConversation?.messages.map(m => {
+            if (m.id === messageId) {
+                return {
+                    ...m,
+                    feedback: {
+                        ...(m.feedback || { rating: null }),
+                        ...feedbackData
+                    }
+                };
+            }
+            return m;
+        });
+
+        if (updatedMessages) {
+            updateConversationInDb(activeConversationId, { messages: updatedMessages });
+        }
         setNotification("Geri bildiriminiz için teşekkürler!");
 
-    }, [activeConversationId]);
+    }, [activeConversation]);
     
     const canPerformActions = useMemo(() => activeConversation && activeConversation.messages.length > 0, [activeConversation]);
 
@@ -508,6 +506,11 @@ const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 setIsOpen={setIsSidebarOpen}
             />
             <main className="flex-1 flex flex-col overflow-hidden">
+                 {!isSupabaseConfigured && (
+                    <div className="p-3 bg-yellow-50 border-b border-yellow-200 text-yellow-800 dark:bg-yellow-900/50 dark:border-yellow-700 dark:text-yellow-300 text-sm font-semibold text-center z-30">
+                        <strong>Uyarı:</strong> Supabase ayarları yapılmamış. Uygulama düzgün çalışmayacaktır. Lütfen Geliştirici Panelini açıp (klavyeden 'devmode' yazın) bilgilerinizi girin.
+                    </div>
+                )}
                 <header className="flex-shrink-0 bg-white dark:bg-slate-800 shadow-sm p-2 flex items-center justify-between h-16 border-b border-slate-200 dark:border-slate-700 z-20">
                      <div className="flex items-center">
                         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none">
@@ -696,6 +699,10 @@ const App: React.FC<AppProps> = ({ user, onLogout }) => {
                         onApiKeyChange={setDevApiKey}
                         modelName={devModelName}
                         onModelNameChange={setDevModelName}
+                        supabaseUrl={devSupabaseUrl}
+                        onSupabaseUrlChange={setDevSupabaseUrl}
+                        supabaseAnonKey={devSupabaseAnonKey}
+                        onSupabaseAnonKeyChange={setDevSupabaseAnonKey}
                         onClose={() => setIsDevMode(false)}
                     />
                 )}

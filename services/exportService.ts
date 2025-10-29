@@ -1,15 +1,7 @@
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
-
-// Fix: Add a manual module augmentation for the 'jspdf-autotable' plugin.
-// This resolves the TypeScript error where the 'autoTable' method was not
-// found on the jsPDF type.
-declare module 'jspdf' {
-  interface jsPDF {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    autoTable: (options: any) => jsPDF;
-  }
-}
+// FIX: Use the functional `autoTable` import instead of a side-effect import.
+// This resolves a module augmentation error with 'jspdf' by using a more direct and explicit approach.
+import autoTable from 'jspdf-autotable';
 
 const exportAsMarkdown = (content: string, filename: string): void => {
   const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
@@ -73,7 +65,8 @@ const exportAsPdf = (content: string, filename: string, isTable: boolean): void 
     if (head.length > 0 && body.length > 0) {
         // The table content might contain HTML line breaks `<br>`. Replace them with newlines for jspdf-autotable.
         const cleanedBody = body.map(row => row.map(cell => cell.replace(/<br\s*\/?>/gi, '\n')));
-        doc.autoTable({ 
+        // FIX: Changed from `doc.autoTable(...)` to the functional call `autoTable(doc, ...)`.
+        autoTable(doc, { 
             head, 
             body: cleanedBody,
             styles: {

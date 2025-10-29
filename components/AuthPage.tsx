@@ -1,13 +1,8 @@
 import React, { useState } from 'react';
 import { LoginPage } from './LoginPage';
 import { SignupPage } from './SignupPage';
-import type { User } from '../types';
 
-interface AuthPageProps {
-    onLoginSuccess: (user: User) => void;
-}
-
-export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
+export const AuthPage: React.FC = () => {
     const [isLoginView, setIsLoginView] = useState(true);
 
     return (
@@ -24,12 +19,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
 
                 {isLoginView ? (
                     <LoginPage 
-                        onLoginSuccess={onLoginSuccess} 
                         switchToSignup={() => setIsLoginView(false)} 
                     />
                 ) : (
                     <SignupPage 
-                        onSignupSuccess={onLoginSuccess} 
                         switchToLogin={() => setIsLoginView(true)} 
                     />
                 )}

@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import { authService } from '../services/authService';
-import type { User } from '../types';
 
 interface LoginPageProps {
-    onLoginSuccess: (user: User) => void;
     switchToSignup: () => void;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, switchToSignup }) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ switchToSignup }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -18,8 +16,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, switchToSi
         setError(null);
         setIsLoading(true);
         try {
-            const user = await authService.login(email, password);
-            onLoginSuccess(user);
+            await authService.login(email, password);
+            // onLoginSuccess is no longer needed; onAuthStateChange handles session.
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Bir hata oluştu.');
         } finally {
@@ -31,11 +29,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, switchToSi
         setError(null);
         setIsLoading(true);
         try {
-            // Get or create the test user
-            const testUser = await authService.getOrCreateTestUser();
-            // Log in with the test user's credentials
-            const loggedInUser = await authService.login(testUser.email, testUser.password as string);
-            onLoginSuccess(loggedInUser);
+           await authService.loginWithTestUser();
+           // onLoginSuccess is no longer needed.
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Test kullanıcısı ile giriş yapılamadı.');
         } finally {

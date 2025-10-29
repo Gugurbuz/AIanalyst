@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import { authService } from '../services/authService';
-import type { User } from '../types';
 
 interface SignupPageProps {
-    onSignupSuccess: (user: User) => void;
     switchToLogin: () => void;
 }
 
-export const SignupPage: React.FC<SignupPageProps> = ({ onSignupSuccess, switchToLogin }) => {
+export const SignupPage: React.FC<SignupPageProps> = ({ switchToLogin }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -24,9 +22,8 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignupSuccess, switchT
         setIsLoading(true);
         try {
             await authService.signup(email, password);
-            // After successful signup, log the user in automatically
-            const loggedInUser = await authService.login(email, password);
-            onSignupSuccess(loggedInUser);
+            // After successful signup, onAuthStateChange will handle the new session.
+            // No need to manually log the user in.
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Bir hata oluştu.');
         } finally {
