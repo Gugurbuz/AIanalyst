@@ -1,10 +1,7 @@
 // templates.ts
 
-export interface Template {
-    id: string;
-    name: string;
-    prompt: string;
-}
+// FIX: Import Template type from the central types file.
+import type { Template } from './types';
 
 export const SAMPLE_ANALYSIS_DOCUMENT = `## 1. Giriş ve Amaç
 - *Bu bölüme projenin temel hedefini, hangi iş ihtiyacını karşıladığını ve tamamlandığında ne gibi bir değer yaratacağını yazın...*

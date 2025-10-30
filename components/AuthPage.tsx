@@ -2,30 +2,39 @@ import React, { useState } from 'react';
 import { LoginPage } from './LoginPage';
 import { SignupPage } from './SignupPage';
 
+const Logo = () => (
+    <div className="flex items-center justify-center gap-3">
+         <svg width="36" height="36" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <path fill="currentColor" className="text-indigo-600 dark:text-indigo-500" d="M50 5L0 95h25l25-50 25 50h25L50 5z"/>
+            <circle fill="currentColor" className="text-indigo-300 dark:text-indigo-400" cx="50" cy="58" r="10"/>
+        </svg>
+        <span className="text-3xl font-bold text-slate-800 dark:text-slate-200">Asisty.ai</span>
+    </div>
+);
+
+
 export const AuthPage: React.FC = () => {
-    const [isLoginView, setIsLoginView] = useState(true);
+    const [isLogin, setIsLogin] = useState(true);
 
     return (
-        <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900 font-sans">
-            <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-xl dark:bg-slate-800">
-                <div className="text-center">
-                    <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-200">
-                        AI İş Analisti Asistanı
-                    </h1>
-                    <p className="mt-2 text-slate-600 dark:text-slate-400">
-                        {isLoginView ? 'Devam etmek için giriş yapın' : 'Başlamak için bir hesap oluşturun'}
+        <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900 p-4">
+            <div className="w-full max-w-md">
+                <div className="text-center mb-8">
+                    <Logo />
+                    <h2 className="mt-4 text-2xl font-bold text-slate-800 dark:text-slate-200">
+                        Asisty.ai'ye Hoş Geldiniz
+                    </h2>
+                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                        Yapay zeka iş analisti asistanınızla gereksinimlerinizi olgunlaştırın, kullanıcı hikayeleri ve test senaryoları oluşturun.
                     </p>
                 </div>
-
-                {isLoginView ? (
-                    <LoginPage 
-                        switchToSignup={() => setIsLoginView(false)} 
-                    />
-                ) : (
-                    <SignupPage 
-                        switchToLogin={() => setIsLoginView(true)} 
-                    />
-                )}
+                <div className="bg-white dark:bg-slate-800 p-8 rounded-lg shadow-md border border-slate-200 dark:border-slate-700">
+                    {isLogin ? (
+                        <LoginPage switchToSignup={() => setIsLogin(false)} />
+                    ) : (
+                        <SignupPage switchToLogin={() => setIsLogin(true)} />
+                    )}
+                </div>
             </div>
         </div>
     );

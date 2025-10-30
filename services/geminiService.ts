@@ -1,33 +1,46 @@
 // services/geminiService.ts
 
-import { GoogleGenAI, Type, Content } from "@google/genai";
-import type { Message, MaturityReport, TaskSuggestion, TaskPriority } from '../types';
+import { GoogleGenAI, Type, Content, FunctionDeclaration } from "@google/genai";
+import type { Message, MaturityReport, TaskSuggestion, GeminiModel, FeedbackItem, GeneratedDocs } from '../types';
 import { promptService } from './promptService'; // Import the new prompt service
 
-const MODEL_NAME = localStorage.getItem('devModelName') || 'gemini-2.5-flash';
+/**
+ * Parses Gemini API errors and throws a user-friendly error message.
+ * @param error The original error caught from the API call.
+ */
+function handleGeminiError(error: any): never {
+    console.error("Gemini API Hatası:", error);
+    const errorMessage = error?.message || String(error);
 
-const generateContent = async (prompt: string, modelConfig?: object): Promise<string> => {
+    // 1. Check for the most specific error: Quota/Rate limit
+    if (errorMessage.includes('429') || errorMessage.includes('RESOURCE_EXHAUSTED') || errorMessage.includes('quota')) {
+        throw new Error("API Kota Limiti Aşıldı: Mevcut kotanızı aştınız. Lütfen planınızı ve fatura detaylarınızı kontrol edin veya bir süre sonra tekrar deneyin. Daha fazla bilgi için: https://ai.google.dev/gemini-api/docs/rate-limits");
+    }
+
+    // 2. Check for other specific known errors
+    if (errorMessage.includes('API key not valid')) {
+        throw new Error("Geçersiz API Anahtarı. Lütfen Geliştirici Panelindeki ayarları kontrol edin veya ortam değişkenlerini yapılandırın.");
+    }
+    
+    // 3. Generic fallback
+    throw new Error(`Gemini API ile iletişim kurulamadı: ${errorMessage}`);
+}
+
+
+const generateContent = async (prompt: string, model: GeminiModel, modelConfig?: object): Promise<string> => {
     if (!process.env.API_KEY) {
         throw new Error("API Anahtarı bulunamadı. Lütfen ortam değişkenlerini yapılandırın.");
     }
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const response = await ai.models.generateContent({
-            model: MODEL_NAME,
+            model: model,
             contents: prompt,
             ...(modelConfig && { config: modelConfig }),
         });
         return response.text;
     } catch (error) {
-        console.error("Gemini API call failed:", error);
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (errorMessage.includes('API key not valid')) {
-             throw new Error("Geçersiz API Anahtarı. Lütfen ortam değişkenlerini kontrol edin.");
-        }
-        if (errorMessage.toLowerCase().includes('json')) {
-            throw new Error(`Modelden geçersiz JSON yanıtı alındı. Lütfen tekrar deneyin.`);
-        }
-        throw new Error(`Gemini API ile iletişim kurulamadı: ${errorMessage}`);
+        handleGeminiError(error);
     }
 };
 
@@ -62,46 +75,26 @@ const convertMessagesToGeminiFormat = (history: Message[]): Content[] => {
     }));
 };
 
-const sanitizeMermaidCode = (code: string): string => {
-    // This function programmatically quotes Mermaid node labels that contain special characters
-    // like parentheses, which would otherwise cause a syntax error.
-    
-    // Regex for node definitions.
-    // Captures: 1: ID (allows hyphens), 2: open bracket, 3: text, 4: close bracket
-    const nodeRegexes = [
-        /([\w-]+)(\[)([^\]\n]*?)(\])/g,      // Rectangular: A[text]
-        /([\w-]+)(\()([^)\n]*?)(\))/g,      // Round edges: B(text)
-        /([\w-]+)(\{)([^}\n]*?)(\})/g,      // Rhombus: C{text}
-        /([\w-]+)(>)([^\]\n]*?)(\])/g,      // Stadium: D>text]
-    ];
-
-    let sanitizedCode = code;
-
-    nodeRegexes.forEach(regex => {
-        sanitizedCode = sanitizedCode.replace(regex, (match, id, open, text, close) => {
-            // Check if the text is already properly quoted (handles leading/trailing spaces).
-            if (text.trim().startsWith('"') && text.trim().endsWith('"')) {
-                return match;
-            }
-            
-            // Check if the text contains special characters that require quoting.
-            if (/[()\[\]{}]/.test(text)) {
-                // Escape any existing double quotes inside the text to avoid breaking the string.
-                const sanitizedText = text.replace(/"/g, '#quot;');
-                return `${id}${open}"${sanitizedText}"${close}`;
-            }
-            
-            // If no special characters, return the original match.
-            return match;
-        });
-    });
-
-    return sanitizedCode;
-};
-
+const tools: FunctionDeclaration[] = [
+    {
+        name: 'generateAnalysisDocument',
+        description: 'Mevcut konuşma geçmişine dayanarak iş analizi dokümanını oluşturur veya günceller.',
+        parameters: { type: Type.OBJECT, properties: {} } // No parameters needed, uses conversation context
+    },
+    {
+        name: 'generateTestScenarios',
+        description: 'Mevcut iş analizi dokümanına dayanarak test senaryoları oluşturur veya günceller.',
+        parameters: { type: Type.OBJECT, properties: {} } // No parameters needed
+    },
+    {
+        name: 'generateVisualization',
+        description: 'Mevcut iş analizi dokümanına dayanarak süreç akışını açıklayan bir metin oluşturur veya günceller.',
+        parameters: { type: Type.OBJECT, properties: {} } // No parameters needed
+    }
+];
 
 export const geminiService = {
-    continueConversation: async (history: Message[]): Promise<string> => {
+    continueConversation: async (history: Message[], model: GeminiModel): Promise<string> => {
         if (!process.env.API_KEY) {
             throw new Error("API Anahtarı bulunamadı. Lütfen ortam değişkenlerini yapılandırın.");
         }
@@ -111,7 +104,7 @@ export const geminiService = {
             const geminiHistory = convertMessagesToGeminiFormat(history);
 
             const response = await ai.models.generateContent({
-                model: MODEL_NAME,
+                model: model,
                 contents: geminiHistory,
                 config: {
                     systemInstruction: systemInstruction,
@@ -119,16 +112,11 @@ export const geminiService = {
             });
             return response.text;
         } catch (error) {
-            console.error("Gemini API call failed in continueConversation:", error);
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            if (errorMessage.includes('API key not valid')) {
-                 throw new Error("Geçersiz API Anahtarı. Lütfen ortam değişkenlerini kontrol edin.");
-            }
-            throw new Error(`Gemini API ile iletişim kurulamadı: ${errorMessage}`);
+            handleGeminiError(error);
         }
     },
     
-    checkAnalysisMaturity: async (history: Message[]): Promise<MaturityReport> => {
+    checkAnalysisMaturity: async (history: Message[], model: GeminiModel, modelConfig?: object): Promise<MaturityReport> => {
         const schema = {
             type: Type.OBJECT,
             properties: {
@@ -143,9 +131,9 @@ export const geminiService = {
         const basePrompt = promptService.getPrompt('checkAnalysisMaturity');
         const prompt = `${basePrompt}\n\nKonuşma Geçmişi:\n${formatHistory(history)}`;
         
-        const modelConfig = { responseMimeType: "application/json", responseSchema: schema };
+        const config = { responseMimeType: "application/json", responseSchema: schema, ...modelConfig };
 
-        const jsonString = await generateContent(prompt, modelConfig);
+        const jsonString = await generateContent(prompt, model, config);
         try {
             return JSON.parse(jsonString) as MaturityReport;
         } catch (e) {
@@ -154,85 +142,110 @@ export const geminiService = {
         }
     },
 
-    generateAnalysisDocument: async (history: Message[], templateId: string): Promise<string> => {
+    generateAnalysisDocument: async (history: Message[], templateId: string, model: GeminiModel, modelConfig?: object): Promise<string> => {
         const templatePrompt = promptService.getPrompt(templateId);
         const prompt = `${templatePrompt}\n\n**TALİMAT:**\nDokümanı yalnızca ve yalnızca aşağıda sağlanan konuşma geçmişine dayanarak oluştur.\n\n**Konuşma Geçmişi:**\n${formatHistory(history)}`;
-        return generateContent(prompt);
+        return generateContent(prompt, model, modelConfig);
     },
 
-    generateTestScenarios: async (analysisDocument: string, templateId: string): Promise<string> => {
+    generateTestScenarios: async (analysisDocument: string, templateId: string, model: GeminiModel, modelConfig?: object): Promise<string> => {
+        if (!analysisDocument || analysisDocument.includes("Bu bölüme projenin temel hedefini")) {
+            throw new Error("Lütfen önce geçerli bir analiz dokümanı oluşturun.");
+        }
         const templatePrompt = promptService.getPrompt(templateId);
         const prompt = `${templatePrompt}\n\n**TALİMAT:**\nTest senaryolarını yalnızca aşağıda sağlanan İş Analizi Dokümanına dayanarak oluştur.\n\n**İş Analizi Dokümanı:**\n'${analysisDocument}'`;
-        return generateContent(prompt);
+        return generateContent(prompt, model, modelConfig);
+    },
+    
+    generateTraceabilityMatrix: async (analysisDocument: string, testScenarios: string, model: GeminiModel, modelConfig?: object): Promise<string> => {
+        if (!analysisDocument || analysisDocument.includes("Bu bölüme projenin temel hedefini") || !testScenarios) {
+            throw new Error("Lütfen önce geçerli bir analiz dokümanı ve test senaryoları oluşturun.");
+        }
+        const templatePrompt = promptService.getPrompt('generateTraceabilityMatrix');
+        const prompt = `${templatePrompt}\n\n**İş Analizi Dokümanı:**\n'${analysisDocument}'\n\n**Test Senaryoları Dokümanı:**\n'${testScenarios}'`;
+        return generateContent(prompt, model, modelConfig);
     },
 
     generateConversationTitle: async (firstMessage: string): Promise<string> => {
         const basePrompt = promptService.getPrompt('generateConversationTitle');
         const prompt = `${basePrompt}: "${firstMessage}"`;
-        const title = await generateContent(prompt);
+        const title = await generateContent(prompt, 'gemini-2.5-flash-lite');
         return title.replace(/["*]/g, '').trim();
     },
 
-    generateVisualization: async (analysisDocument: string, diagramType: string): Promise<string> => {
+    generateVisualization: async (analysisDocument: string, model: GeminiModel, modelConfig?: object): Promise<string> => {
+         if (!analysisDocument || analysisDocument.includes("Bu bölüme projenin temel hedefini")) {
+            throw new Error("Lütfen önce geçerli bir analiz dokümanı oluşturun.");
+        }
         const basePrompt = promptService.getPrompt('generateVisualization');
-        // ... (rest of the function is the same, no changes needed here)
-        const diagramTypeInstruction = {
-            'auto': `
-                **DİYAGRAM TÜRÜ SEÇİMİ:**
-                - Doküman bir süreç veya iş akışı tanımlıyorsa, **akış şeması (flowchart)** kullan (\`graph TD\`).
-                - Doküman, sistemler veya kullanıcılar arasında zaman sıralı bir etkileşim içeriyorsa, **sekans diyagramı (sequenceDiagram)** kullan.
-                - Doküman, merkezi bir konsept etrafındaki fikirleri veya özellikleri araştırıyorsa, **zihin haritası (mindmap)** kullan.
-                - Dokümanın içeriğine göre en uygun diyagram türünü kendin seç. Önceliğin akış şeması olsun.
-            `,
-            'flowchart': `
-                **DİYAGRAM TÜRÜ SEÇİMİ:**
-                - **SADECE** bir **akış şeması (flowchart)** kullanarak (\`graph TD\`) bir diyagram oluştur. Dokümandaki ana iş akışını veya süreci göster.
-            `,
-            'sequenceDiagram': `
-                **DİYAGRAM TÜRÜ SEÇİMİ:**
-                - **SADECE** bir **sekans diyagramı (sequenceDiagram)** kullanarak bir diyagram oluştur. Sistemler veya kullanıcılar arasındaki zaman sıralı etkileşimi göster.
-            `,
-            'mindmap': `
-                **DİYAGRAM TÜRÜ SEÇİMİ:**
-                - **SADECE** bir **zihin haritası (mindmap)** kullanarak bir diyagram oluştur. Merkezi bir konsept etrafındaki fikirleri veya özellikleri göster.
-            `
-        };
+        
         const prompt = `
             ${basePrompt}
-            ${diagramTypeInstruction[diagramType as keyof typeof diagramTypeInstruction] || diagramTypeInstruction['auto']}
-            **KRİTİK KURALLAR:**
-            1.  Çıktın **SADECE** ve **SADECE** seçtiğin diyagram türü için geçerli Mermaid.js sözdizimi içermelidir.
-            2.  Sözdizimini \`\`\`mermaid ... \`\`\` kod bloğu içine ALMA. Sadece ham sözdizimini döndür.
-            3.  **EN KRİTİK KURAL - OK SÖZDİZİMİ:** Bağlantılar için **ASLA** ikiden fazla tire (\`-\`) art arda kullanma. **SADECE** şu formatlara izin verilir: \`-->\` ve \`-- Metin -->\`. **ÖRNEK YANLIŞ KULLANIM:** \`A --- B\` **KESİNLİKLE YANLIŞTIR**. **ÖRNEK DOĞRU KULLANIM:** \`A --> B\`.
-            4.  **EN ÖNEMLİ KURAL - DÜĞÜM METİNLERİ:** Düğüm (node) metinleri içerisinde parantez \`()\`, köşeli parantez \`[]\` gibi özel karakterler varsa, metni **MUTLAKA** çift tırnak içine almalısın. **ÖRNEK DOĞRU KULLANIM:** \`A["Bu bir (örnek) metindir"]\`. **ÖRNEK YANLIŞ KULLANIM:** \`A[Bu bir (örnek) metindir]\`.
+            
+            ---
             **İş Analizi Dokümanı:**
             \`\`\`
             ${analysisDocument}
             \`\`\`
         `;
-         const rawMermaidCode = await generateContent(prompt);
-         return sanitizeMermaidCode(rawMermaidCode);
+        const result = await generateContent(prompt, model, modelConfig);
+        // Extract content from markdown code block
+        const mermaidMatch = result.match(/```mermaid\n([\s\S]*?)\n```/);
+        return mermaidMatch ? mermaidMatch[1].trim() : result.trim();
     },
 
-    // FIX: Implement the missing 'analyzeFeedback' function.
-    analyzeFeedback: async (feedbackItems: { comment?: string; rating: 'up' | 'down' | null }[]): Promise<string> => {
+    rephraseText: async (textToRephrase: string): Promise<string> => {
+        const prompt = promptService.getPrompt('rephraseText');
+        const fullPrompt = `${prompt}\n\n**Yeniden Yazılacak Metin:**\n"${textToRephrase}"`;
+        const rephrased = await generateContent(fullPrompt, 'gemini-2.5-flash-lite');
+        return rephrased.replace(/["*]/g, '').trim();
+    },
+
+    modifySelectedText: async (originalText: string, userPrompt: string): Promise<string> => {
+        const systemPrompt = promptService.getPrompt('modifySelectedText');
+        const fullPrompt = `**Orijinal Metin:**\n\`\`\`\n${originalText}\n\`\`\`\n\n**Talimat:**\n${userPrompt}`;
+        
+        if (!process.env.API_KEY) {
+            throw new Error("API Anahtarı bulunamadı.");
+        }
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: fullPrompt,
+                config: {
+                    systemInstruction: systemPrompt,
+                }
+            });
+            return response.text.trim();
+        } catch (error) {
+            handleGeminiError(error);
+        }
+    },
+
+
+    analyzeFeedback: async (feedbackItems: FeedbackItem[]): Promise<string> => {
         const basePrompt = promptService.getPrompt('analyzeFeedback');
-        const formattedFeedback = feedbackItems.map(item => {
-            if (!item.rating) return null; // Skip items without a rating
-            const ratingText = item.rating === 'up' ? 'Beğenildi' : 'Beğenilmedi';
-            const commentText = item.comment ? `Yorum: "${item.comment}"` : 'Yorum yok.';
-            return `- Oylama: ${ratingText}, ${commentText}`;
-        }).filter(Boolean).join('\n');
+        const formattedFeedback = feedbackItems
+            .map(item => {
+                const feedback = item.message.feedback;
+                if (!feedback || !feedback.rating) return null;
+                const ratingText = feedback.rating === 'up' ? 'Beğenildi' : 'Beğenilmedi';
+                const commentText = feedback.comment ? `Yorum: "${feedback.comment}"` : 'Yorum yok.';
+                return `- Oylama: ${ratingText}, ${commentText}`;
+            })
+            .filter(Boolean)
+            .join('\n');
 
         if (!formattedFeedback) {
             return "Analiz edilecek geri bildirim bulunmuyor.";
         }
 
         const prompt = `${basePrompt}\n\n**Analiz Edilecek Geri Bildirimler:**\n${formattedFeedback}`;
-        return generateContent(prompt);
+        return generateContent(prompt, 'gemini-2.5-flash');
     },
 
-    generateTasksFromAnalysis: async (analysisDocument: string): Promise<TaskSuggestion[]> => {
+    generateTasksFromAnalysis: async (analysisDocument: string, model: GeminiModel, modelConfig?: object): Promise<TaskSuggestion[]> => {
         const schema = {
             type: Type.ARRAY,
             items: {
@@ -249,12 +262,10 @@ export const geminiService = {
         const basePrompt = promptService.getPrompt('generateTasksFromAnalysis');
         const prompt = `${basePrompt}\n\n**İş Analizi Dokümanı:**\n${analysisDocument}`;
 
-        const modelConfig = { responseMimeType: "application/json", responseSchema: schema };
+        const config = { responseMimeType: "application/json", responseSchema: schema, ...modelConfig };
 
-        const jsonString = await generateContent(prompt, modelConfig);
+        const jsonString = await generateContent(prompt, model, config);
         try {
-            // The model may return an object with a root key (e.g., { "tasks": [...] }). 
-            // We need to handle this to find the array.
             const parsed = JSON.parse(jsonString);
             if (Array.isArray(parsed)) {
                 return parsed as TaskSuggestion[];
@@ -269,6 +280,88 @@ export const geminiService = {
         } catch (e) {
             console.error("Failed to parse task suggestions JSON:", e, "Received string:", jsonString);
             throw new Error("Görev önerileri ayrıştırılamadı.");
+        }
+    },
+
+    suggestNextFeature: async (analysisDoc: string, history: Message[], model: GeminiModel, modelConfig?: object): Promise<string> => {
+        const basePrompt = promptService.getPrompt('suggestNextFeature');
+        const prompt = `
+            ${basePrompt}
+
+            ---
+            **Mevcut İş Analizi Dokümanı:**
+            \`\`\`
+            ${analysisDoc}
+            \`\`\`
+            ---
+            **Konuşma Geçmişi:**
+            ${formatHistory(history)}
+        `;
+        return generateContent(prompt, model, modelConfig);
+    },
+    
+    processAnalystMessage: async (
+        history: Message[],
+        currentDocs: GeneratedDocs,
+        templates: { analysis: string; test: string },
+        model: GeminiModel,
+        modelConfig?: object
+    ): Promise<{ type: 'chat'; content: string } | { type: 'doc_update'; docKey: 'analysisDoc' | 'testScenarios' | 'visualization'; content: string; confirmation: string }> => {
+        if (!process.env.API_KEY) {
+            throw new Error("API Anahtarı bulunamadı.");
+        }
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const systemInstruction = promptService.getPrompt('continueConversation');
+            const geminiHistory = convertMessagesToGeminiFormat(history);
+
+            const response = await ai.models.generateContent({
+                model,
+                contents: geminiHistory,
+                config: {
+                    systemInstruction: `${systemInstruction}. Kullanıcının amacı bir doküman oluşturmak veya güncellemek ise, uygun aracı çağır. Aksi takdirde, normal şekilde sohbet et.`,
+                    tools: [{ functionDeclarations: tools }],
+                    ...modelConfig,
+                }
+            });
+            
+            if (response.functionCalls && response.functionCalls.length > 0) {
+                const call = response.functionCalls[0];
+                let newContent = '';
+                let docKey: 'analysisDoc' | 'testScenarios' | 'visualization' | null = null;
+                let confirmation = '';
+
+                switch (call.name) {
+                    case 'generateAnalysisDocument':
+                        docKey = 'analysisDoc';
+                        newContent = await geminiService.generateAnalysisDocument(history, templates.analysis, model, modelConfig);
+                        confirmation = "Elbette, analiz dokümanını konuşmamıza göre güncelledim.";
+                        break;
+                    case 'generateTestScenarios':
+                        docKey = 'testScenarios';
+                        newContent = await geminiService.generateTestScenarios(currentDocs.analysisDoc, templates.test, model, modelConfig);
+                        confirmation = "Harika, test senaryolarını oluşturdum. 'Test Senaryoları' sekmesinden inceleyebilirsiniz.";
+                        break;
+                    case 'generateVisualization':
+                        docKey = 'visualization';
+                        newContent = await geminiService.generateVisualization(currentDocs.analysisDoc, model, modelConfig);
+                        confirmation = "İsteğiniz üzerine, süreç akışını 'Görselleştirme' sekmesinde güncelledim.";
+                        break;
+                    default:
+                        // If an unknown tool is called, just provide a default chat response.
+                        return { type: 'chat', content: "İstediğiniz işlemi anladım ancak şu an gerçekleştiremiyorum. Başka nasıl yardımcı olabilirim?" };
+                }
+
+                if (docKey) {
+                    return { type: 'doc_update', docKey, content: newContent, confirmation };
+                }
+            }
+            
+            // If no function call, it's a regular chat message
+            return { type: 'chat', content: response.text };
+
+        } catch (error) {
+            handleGeminiError(error);
         }
     },
 };

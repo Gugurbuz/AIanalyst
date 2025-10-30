@@ -10,7 +10,7 @@ interface ProjectBoardProps {
 
 const columnStyles: Record<TaskStatus, { bg: string; text: string }> = {
     todo: { bg: 'bg-slate-200 dark:bg-slate-800', text: 'text-slate-700 dark:text-slate-300' },
-    inprogress: { bg: 'bg-sky-100 dark:bg-sky-900/50', text: 'text-sky-800 dark:text-sky-200' },
+    inprogress: { bg: 'bg-indigo-100 dark:bg-indigo-900/50', text: 'text-indigo-800 dark:text-indigo-200' },
     done: { bg: 'bg-emerald-100 dark:bg-emerald-900/50', text: 'text-emerald-800 dark:text-emerald-200' },
 };
 
@@ -109,7 +109,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({ user }) => {
                 onDrop={(e) => handleDrop(e, status)}
                 onDragOver={(e) => { e.preventDefault(); setDragOverColumn(status); }}
                 onDragLeave={() => setDragOverColumn(null)}
-                className={`flex-1 flex flex-col rounded-lg p-3 transition-colors ${dragOverColumn === status ? 'bg-sky-200 dark:bg-sky-800' : bg}`}
+                className={`flex-1 flex flex-col rounded-lg p-3 transition-colors min-w-[300px] ${dragOverColumn === status ? 'bg-indigo-200 dark:bg-indigo-800' : bg}`}
             >
                 <h2 className={`font-bold text-lg mb-4 px-2 ${text}`}>{columnNames[status]} ({columnTasks.length})</h2>
                 <div className="flex-1 space-y-3 overflow-y-auto pr-1">
@@ -135,7 +135,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({ user }) => {
     }
 
     return (
-        <div className="flex h-full p-4 gap-4">
+        <div className="flex h-full p-4 gap-4 overflow-x-auto whitespace-nowrap">
             {(['todo', 'inprogress', 'done'] as TaskStatus[]).map(status => renderColumn(status))}
             {isModalOpen && (
                 <TaskDetailModal

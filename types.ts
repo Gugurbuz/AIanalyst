@@ -1,3 +1,4 @@
+// types.ts
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 // Re-exporting Supabase user type for convenience
@@ -6,6 +7,8 @@ export type User = SupabaseUser;
 export type Theme = 'light' | 'dark' | 'system';
 
 export type AppMode = 'analyst' | 'board';
+
+export type GeminiModel = 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.5-flash-lite';
 
 export interface Feedback {
     rating: 'up' | 'down' | null;
@@ -30,6 +33,8 @@ export interface GeneratedDocs {
     analysisDoc: string;
     testScenarios: string;
     visualization: string;
+    traceabilityMatrix: string;
+    maturityReport?: MaturityReport | null;
 }
 
 export interface Conversation {
@@ -41,7 +46,6 @@ export interface Conversation {
     is_shared: boolean;
     share_id: string | null;
     created_at: string;
-    updated_at: string;
 }
 
 // --- Project Board Types ---
@@ -68,6 +72,12 @@ export interface TaskSuggestion {
 
 
 // Types for prompt management
+export interface Template {
+    id: string;
+    name: string;
+    prompt: string;
+}
+
 export interface PromptVersion {
     versionId: string;
     name: string;
@@ -90,3 +100,9 @@ export interface PromptCategory {
 }
 
 export type PromptData = PromptCategory[];
+
+// A type for the structured feedback data passed to the dashboard
+export interface FeedbackItem {
+    message: Message;
+    conversationTitle: string;
+}

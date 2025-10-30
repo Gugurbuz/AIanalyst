@@ -67,7 +67,33 @@ const defaultPrompts: PromptData = [
                 description: 'Belirli bir formata göre analiz dokümanı oluşturur.',
                 versions: [createDefaultVersion(template.prompt)],
                 activeVersionId: 'default' as string,
-            }))
+            })),
+             {
+                id: 'generateTraceabilityMatrix',
+                name: 'İzlenebilirlik Matrisi Oluşturma',
+                description: 'Analiz dokümanındaki fonksiyonel gereksinimleri, test senaryoları dokümanındaki ilgili test durumlarıyla eşleştirir.',
+                versions: [createDefaultVersion(`
+                    **GÖREV:** Titiz bir Kıdemli Kalite Güvence (QA) Analisti olarak hareket et. Sana sunulan İş Analizi Dokümanı ve Test Senaryoları Dokümanını kullanarak bir İzlenebilirlik Matrisi (Traceability Matrix) oluştur.
+
+                    **FORMATLAMA KURALLARI:**
+                    - Çıktı, **yalnızca** aşağıda belirtilen sütunları içeren bir Markdown tablosu olmalıdır. Tablo dışında hiçbir metin (giriş, açıklama, sonuç vb.) ekleme.
+
+                    **İŞLEM ADIMLARI:**
+                    1.  İş Analizi Dokümanındaki her bir Fonksiyonel Gereksinimi (örn. "FR-001", "FR-002") ve açıklamasını bul.
+                    2.  Test Senaryoları Dokümanındaki her bir test senaryosunu ("Senaryo ID" sütunu, örn. "TC-FR001-01") ve açıklamasını ("Test Durumu Açıklaması" sütunu) bul.
+                    3.  Her bir gereksinimi, ilgili test senaryosu/senaryolarıyla eşleştir. Eşleştirmeyi "FR-001" ve "TC-FR001-xx" gibi ID'ler üzerinden yap.
+                    4.  Bir gereksinimin birden fazla test senaryosu varsa, her eşleşme için tabloda ayrı bir satır oluştur.
+
+                    **TABLO YAPISI:**
+
+                    | Gereksinim ID | Gereksinim Açıklaması | Test Senaryo ID | Test Durumu Açıklaması |
+                    |---------------|-------------------------|-----------------|--------------------------|
+                    | FR-001        | [Gereksinimin kısa açıklaması] | TC-FR001-01     | [Test senaryosunun açıklaması] |
+                    | FR-001        | [Gereksinimin kısa açıklaması] | TC-FR001-02     | [İkinci test senaryosunun açıklaması] |
+                    | FR-002        | [Diğer gereksinimin açıklaması] | TC-FR002-01     | [İlgili testin açıklaması] |
+                `)],
+                activeVersionId: 'default',
+            },
         ]
     },
     {
@@ -87,10 +113,35 @@ const defaultPrompts: PromptData = [
         prompts: [
             {
                 id: 'generateVisualization',
-                name: 'Diyagram Oluşturma',
-                description: 'Analiz dokümanından Mermaid.js diyagramı üretir.',
+                name: 'Süreç Akış Diyagramı Oluşturma',
+                description: 'Analiz dokümanındaki süreçleri Mermaid.js diyagramı olarak görselleştirir.',
                 versions: [createDefaultVersion(`
-                    **GÖREV:** Deneyimli bir sistem mimarı olarak, sana sağlanan iş analizi dokümanını dikkatlice incele. Dokümanda açıklanan ana iş akışını, kullanıcı adımlarını, sistem etkileşimlerini veya süreçleri temel alarak bir **Mermaid.js diyagramı** oluştur.
+                    **GÖREV:** Bir Mermaid.js akış şeması (flowchart) kodu oluştur.
+
+                    **EN ÖNEMLİ KURAL: ÇİFT TIRNAK ZORUNLULUĞU**
+                    - Bir düğümün (node) metni parantez \`()\`, soru işareti \`?\`, tire \`-\`, virgül \`,\` gibi herhangi bir özel karakter içeriyorsa veya birden fazla kelimeden oluşuyorsa, bu metin **KESİNLİKLE** çift tırnak \`""\` içine alınmalıdır.
+                    - Hata yapmamak için en güvenli yol, **TÜM** düğüm metinlerini istisnasız olarak çift tırnak içine almaktır. Bu kurala uymamak, diyagramın oluşturulmasını engelleyen bir "ayrıştırma hatası" (parse error) ile sonuçlanır. Bu hatayı yapman KESİNLİKLE YASAKTIR.
+
+                    ---
+                    **ÖRNEKLER:**
+                    **DOĞRU (BUNU YAP):**
+                    - \`A["Bu geçerli bir metindir"]\`
+                    - \`B["Soru Sor (?)"]\`
+                    - \`C{"Karar (Evet/Hayır)"}\`
+                    - \`D[TekKelime]\` --> Bu teknik olarak geçerli olsa da, hatayı önlemek için \`D["TekKelime"]\` kullanmak daha iyidir.
+
+                    **YANLIŞ (BUNU ASLA YAPMA):**
+                    - \`A[Bu bir metindir]\` --> HATA: Birden fazla kelime var, çift tırnak eksik.
+                    - \`B[Soru Sor (?)]\` --> HATA: Özel karakter var, çift tırnak zorunlu.
+                    - \`C{Karar (Evet/Hayır)}\` --> HATA: Özel karakter var, çift tırnak zorunlu.
+                    ---
+
+                    **ZORUNLU ÇIKTI FORMATI:**
+                    - Çıktı olarak **SADECE** ve **SADECE** \`\`\`mermaid\n...\n\`\`\` kod bloğunu ver. Başka hiçbir giriş, açıklama veya sonuç metni ekleme.
+
+                    **DİĞER KURALLAR:**
+                    - Diyagram yönü \`graph TD;\` olmalıdır.
+                    - Karar düğümleri için kıvrık parantez \`{}\`, normal adımlar için köşeli parantez \`[]\` kullan. Metin **her zaman** çift tırnak içinde kalmalıdır.
                 `)],
                 activeVersionId: 'default',
             }
@@ -120,10 +171,26 @@ const defaultPrompts: PromptData = [
                     - Başlık: "Giriş Doğrulama API Uç Noktası Geliştir", Açıklama: "Kullanıcı kimlik bilgilerini doğrulayan bir backend servisi oluştur.", Öncelik: "critical"
                 `)],
                 activeVersionId: 'default',
+            },
+            {
+                id: 'suggestNextFeature',
+                name: 'Sonraki Özelliği Öner',
+                description: 'Mevcut analize dayanarak bir sonraki mantıksal özelliği veya iyileştirmeyi önerir.',
+                versions: [createDefaultVersion(`
+                    **GÖREV:** Deneyimli bir Ürün Yöneticisi olarak hareket et. Sana sunulan İş Analizi Dokümanını ve mevcut konuşma geçmişini analiz et. Bu bilgilere dayanarak, projenin bir sonraki mantıksal adımı olabilecek **tek bir yeni özellik veya iyileştirme önerisi** sun.
+
+                    **KURALLAR:**
+                    - Önerin, mevcut projeye değer katacak ve kapsamı mantıklı bir şekilde genişletecek bir fikir olmalıdır.
+                    - Önerini, sohbete devam etmeyi teşvik edecek şekilde bir soru olarak formüle et.
+                    - Cevabın **SADECE** ve **SADECE** öneri sorusunu içermelidir. Başka hiçbir açıklama, giriş veya sonuç cümlesi ekleme.
+
+                    **ÖRNEK ÇIKTI:**
+                    "Mevcut raporlama özellikleri harika. Bir sonraki adım olarak, kullanıcıların bu raporları belirli zaman aralıklarında otomatik olarak e-posta ile alabilmeleri için bir 'Zamanlanmış Raporlar' özelliği eklemeyi değerlendirelim mi?"
+                `)],
+                activeVersionId: 'default',
             }
         ]
     },
-    // FIX: Add a new prompt category and prompt for analyzing feedback.
     {
         id: 'feedback',
         name: 'Geri Bildirim Analizi',
@@ -158,6 +225,37 @@ const defaultPrompts: PromptData = [
 
                     ## Acil Aksiyon Önerileri
                     - Analizine dayanarak, en yüksek önceliğe sahip olduğunu düşündüğün 2-3 somut eylem önerisi sun.
+                `)],
+                activeVersionId: 'default',
+            }
+        ]
+    },
+    {
+        id: 'textManipulation',
+        name: 'Metin Düzenleme',
+        prompts: [
+            {
+                id: 'rephraseText',
+                name: 'Metni Yeniden İfade Etme',
+                description: 'Verilen bir metni daha profesyonel veya farklı bir tonda yeniden yazar.',
+                versions: [createDefaultVersion(`
+                    **GÖREV:** Sen, metinleri yeniden ifade etme konusunda uzman bir dil modelisin. Sana verilen metnin ana anlamını ve niyetini koruyarak, onu daha profesyonel, akıcı ve açık bir şekilde yeniden yaz.
+                    **KURALLAR:**
+                    - Sadece ve sadece yeniden yazılmış metni çıktı olarak ver.
+                    - Başına veya sonuna ek açıklama, giriş cümlesi ekleme.
+                    - Orijinal metindeki anahtar bilgileri ve terminolojiyi koru.
+                `)],
+                activeVersionId: 'default',
+            },
+            {
+                id: 'modifySelectedText',
+                name: 'Seçili Metni Değiştir',
+                description: 'Verilen bir metni, yine verilen bir talimata göre değiştirir.',
+                versions: [createDefaultVersion(`
+                    **GÖREV:** Sen bir metin editörüsün. Sana bir "Orijinal Metin" ve bu metni değiştirmek için bir "Talimat" verilecek. Görevin, talimatı orijinal metne uygulamak ve **SADECE ve SADECE** değiştirilmiş metni geri döndürmektir.
+                    **KURALLAR:**
+                    - Çıktın, başka hiçbir açıklama, özür veya giriş cümlesi olmadan, yalnızca değiştirilmiş metni içermelidir.
+                    - Talimat ne olursa olsun, anlamını yorumla ve en iyi şekilde uygula.
                 `)],
                 activeVersionId: 'default',
             }

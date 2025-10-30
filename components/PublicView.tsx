@@ -1,3 +1,4 @@
+// components/PublicView.tsx
 import React, { useState, useEffect } from 'react';
 import type { Conversation, Theme } from '../types';
 import { supabase } from '../services/supabaseClient';
@@ -13,7 +14,7 @@ interface PublicViewProps {
 const LoadingScreen: React.FC = () => (
     <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900">
         <div className="flex flex-col items-center">
-             <svg className="animate-spin h-8 w-8 text-sky-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+             <svg className="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
@@ -98,12 +99,12 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
     return (
         <div className="font-sans bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 min-h-screen">
              <header className="sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md shadow-sm p-2 flex items-center justify-between h-16 border-b border-slate-200 dark:border-slate-700 z-20">
-                 <h1 className="text-lg font-bold text-slate-800 dark:text-slate-200 ml-4 truncate" title={title}>
+                 <h1 className="text-lg font-bold text-slate-800 dark:text-slate-200 ml-4 truncate flex-1 min-w-0" title={title}>
                     {title}
                 </h1>
-                <div className="flex items-center gap-4 mr-4">
+                <div className="flex items-center gap-4 mr-4 flex-shrink-0">
                     <ThemeSwitcher theme={theme} onThemeChange={handleThemeChange} />
-                    <a href="/" className="px-3 py-1.5 text-sm font-semibold text-white bg-sky-600 rounded-md shadow-sm hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 transition">
+                    <a href="/" className="px-3 py-1.5 text-sm font-semibold text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition">
                        Asistanı Kullan
                     </a>
                 </div>
@@ -126,7 +127,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-md font-bold">Analiz Dokümanı</h3>
                                     </div>
-                                    <GeneratedDocument content={generatedDocs.analysisDoc} onContentChange={() => {}} />
+                                    <GeneratedDocument content={generatedDocs.analysisDoc} onContentChange={() => {}} docKey='analysisDoc' onRephraseSelection={() => {}} rephrasingState={null} isGenerating={false}/>
                                 </div>
                             )}
 
@@ -144,7 +145,23 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-md font-bold">Test Senaryoları</h3>
                                     </div>
-                                    <GeneratedDocument content={generatedDocs.testScenarios} onContentChange={() => {}} />
+                                    <GeneratedDocument content={generatedDocs.testScenarios} onContentChange={() => {}} docKey='testScenarios' onRephraseSelection={() => {}} rephrasingState={null} isGenerating={false}/>
+                                </div>
+                            )}
+
+                            {generatedDocs.traceabilityMatrix && (
+                                <div className="max-w-4xl mx-auto w-full bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700">
+                                    <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+                                        <h3 className="text-md font-bold">İzlenebilirlik Matrisi</h3>
+                                    </div>
+                                    <GeneratedDocument 
+                                        content={generatedDocs.traceabilityMatrix} 
+                                        onContentChange={() => {}} 
+                                        docKey='analysisDoc' // Dummy key for type compliance
+                                        onRephraseSelection={() => {}} 
+                                        rephrasingState={null}
+                                        isGenerating={false}
+                                    />
                                 </div>
                             )}
                         </div>

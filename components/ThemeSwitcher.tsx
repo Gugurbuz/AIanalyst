@@ -56,7 +56,7 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ theme, onThemeChan
         <div className="relative" ref={dropdownRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="p-2 rounded-md text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-100 dark:focus:ring-offset-slate-800 focus:ring-sky-500 transition"
+                className="p-2 rounded-md text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-100 dark:focus:ring-offset-slate-800 focus:ring-indigo-500 transition"
                 aria-label={`Current theme: ${theme}`}
             >
                 {theme === 'light' && icons.light}
@@ -72,7 +72,7 @@ export const ThemeSwitcher: React.FC<ThemeSwitcherProps> = ({ theme, onThemeChan
                                 onClick={() => handleSelect(option.value)}
                                 className={`w-full text-left flex items-center px-4 py-2 text-sm ${
                                     theme === option.value 
-                                        ? 'bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-200' 
+                                        ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-200' 
                                         : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                                 }`}
                                 role="menuitem"

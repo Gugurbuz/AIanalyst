@@ -1,13 +1,11 @@
 import React from 'react';
-import type { Message } from '../types';
+// FIX: Import the centralized FeedbackItem type from types.ts, which is now used across the app.
+import type { FeedbackItem } from '../types';
 import { geminiService } from '../services/geminiService';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 // A type for the structured feedback data
-export interface FeedbackItem {
-    message: Message;
-    conversationTitle: string;
-}
+// This type has been moved to types.ts to be shared across the application.
 
 interface FeedbackDashboardProps {
     isOpen: boolean;
@@ -42,10 +40,9 @@ export const FeedbackDashboard: React.FC<FeedbackDashboardProps> = ({ isOpen, on
         setError(null);
         setAnalysis(null);
         try {
-            const feedbackItems = feedbackData.map(f => f.message.feedback).filter(Boolean) as { comment?: string; rating: 'up' | 'down' | null }[];
-            // FIX: Call the 'analyzeFeedback' function with the correct arguments.
-            // The 'geminiConfig' parameter was removed as it's not used by the service.
-            const result = await geminiService.analyzeFeedback(feedbackItems);
+            // FIX: The geminiService.analyzeFeedback function expects an array of FeedbackItem,
+            // which is exactly what the `feedbackData` prop is. We can pass it directly.
+            const result = await geminiService.analyzeFeedback(feedbackData);
             setAnalysis(result);
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Analiz sırasında bir hata oluştu.');
@@ -56,7 +53,7 @@ export const FeedbackDashboard: React.FC<FeedbackDashboardProps> = ({ isOpen, on
 
     return (
         <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4 animate-fade-in-up" style={{ animationDuration: '0.2s' }}>
-            <div className="bg-slate-50 dark:bg-slate-800 rounded-lg shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col">
+            <div className="bg-slate-50 dark:bg-slate-800 rounded-lg shadow-2xl w-full max-w-full sm:max-w-4xl h-full max-h-[90vh] flex flex-col">
                 <header className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
                     <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">Geri Bildirim Paneli</h2>
                     <button onClick={onClose} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700">

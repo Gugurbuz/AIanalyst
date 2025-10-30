@@ -79,6 +79,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
     const recognitionRef = useRef<SpeechRecognition | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     // Effect for initializing and managing Speech Recognition
     useEffect(() => {
@@ -100,7 +101,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
                         interimTranscript += event.results[i][0].transcript;
                     }
                 }
-                setInput(prevInput => prevInput + finalTranscript);
+                 setInput(prevInput => prevInput + finalTranscript);
             };
 
             recognition.onend = () => {
@@ -130,6 +131,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
         setAttachedFile(null);
     }, [activeConversationId]);
 
+    // Auto-resize textarea
+    useEffect(() => {
+        const textarea = textareaRef.current;
+        if (textarea) {
+            textarea.style.height = 'auto';
+            const scrollHeight = textarea.scrollHeight;
+            // Max height for 5 rows, adjust as needed
+            const maxHeight = 5 * 24; // Assuming line height of 24px
+            textarea.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
+        }
+    }, [input]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -173,12 +185,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
         if (isListening) {
             recognitionRef.current.stop();
         } else {
-            // Clear previous input before starting new dictation
-            setInput(''); 
             recognitionRef.current.start();
         }
         setIsListening(!isListening);
     };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSubmit(e as any);
+        }
+    }
 
     return (
         <div className="w-full bg-white dark:bg-slate-800 rounded-lg shadow-md p-2 space-y-2">
@@ -192,7 +209,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
                     </button>
                 </div>
             )}
-            <form onSubmit={handleSubmit} className="flex items-center space-x-2">
+            <form onSubmit={handleSubmit} className="flex items-end space-x-2">
                  <input
                     type="file"
                     ref={fileInputRef}
@@ -200,38 +217,38 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
                     style={{ display: 'none' }}
                     accept=".txt,.md"
                  />
-                 <div className="relative flex-1">
+                 <div className="relative flex-1 flex items-end">
                     <button 
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         title="Dosya Ekle"
                         disabled={isLoading}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
+                        className="absolute left-3 bottom-3 p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
                     >
                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M8 4a3 3 0 00-3 3v4a3 3 0 106 0V7a1 1 0 112 0v4a5 5 0 11-10 0V7a5 5 0 0110 0v4a1 1 0 11-2 0V7a3 3 0 00-3-3z" clipRule="evenodd" />
                         </svg>
                     </button>
-                    <input
-                        type="text"
+                    <textarea
+                        ref={textareaRef}
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={handleKeyDown}
                         placeholder="Mesajınızı buraya yazın veya mikrofonu kullanın..."
                         disabled={isLoading}
-                        className="w-full p-3 pl-12 pr-12 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-sky-500 focus:outline-none bg-slate-100 dark:bg-slate-700 disabled:opacity-50 transition-colors"
+                        className="w-full p-3 pl-12 pr-12 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-slate-100 dark:bg-slate-700 disabled:opacity-50 transition-colors resize-none overflow-y-auto"
+                        rows={1}
+                        style={{ lineHeight: '1.5rem', maxHeight: '120px' }}
                     />
                      <button
                         type="button"
                         onClick={toggleListening}
                         title={isSpeechSupported ? (isListening ? 'Kaydı Durdur' : 'Sesle Yaz') : 'Tarayıcı desteklemiyor'}
                         disabled={isLoading || !isSpeechSupported}
-                        className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors ${isListening ? 'text-red-500 animate-pulse' : ''}`}
+                        className={`absolute right-3 bottom-3 p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors ${isListening ? 'text-red-500 animate-pulse' : ''}`}
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                            <path d="M7 4a3 3 0 016 0v6a3 3 0 11-6 0V4z" />
-                           <path d="M5.5 8.5a.5.5 0 01.5.5v1.5a.5.5 0 01-1 0V9a.5.5 0 01.5-.5z" />
-                           <path d="M14.5 8.5a.5.5 0 01.5.5v1.5a.5.5 0 01-1 0V9a.5.5 0 01.5-.5z" />
-                           <path fillRule="evenodd" d="M4 8a1 1 0 011 1v1a1 1 0 11-2 0V9a1 1 0 011-1zM15 8a1 1 0 011 1v1a1 1 0 11-2 0V9a1 1 0 011-1z" clipRule="evenodd" />
                            <path fillRule="evenodd" d="M10 18a4 4 0 004-4H6a4 4 0 004 4z" clipRule="evenodd" />
                         </svg>
                     </button>
@@ -239,7 +256,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
                 <button
                     type="submit"
                     disabled={isLoading || (!input.trim() && !attachedFile)}
-                    className="px-5 py-3 bg-sky-600 text-white font-semibold rounded-lg shadow-md hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-opacity-75 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200 flex-shrink-0"
+                    className="self-end px-4 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-75 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200 flex-shrink-0"
                 >
                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />

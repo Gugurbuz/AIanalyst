@@ -16,16 +16,29 @@ const exportAsMarkdown = (content: string, filename: string): void => {
 };
 
 const exportAsMermaid = (content: string, filename: string): void => {
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 };
+
+const exportAsSvg = (svgContent: string, filename: string): void => {
+    const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+};
+
 
 const parseMarkdownTable = (markdown: string): { head: string[][]; body: string[][] } => {
     const lines = markdown.trim().split('\n');
@@ -157,4 +170,4 @@ const exportAsPdf = (content: string, filename: string, isTable: boolean): void 
   doc.save(`${filename}.pdf`);
 };
 
-export const exportService = { exportAsMarkdown, exportAsPdf, exportAsMermaid };
+export const exportService = { exportAsMarkdown, exportAsPdf, exportAsMermaid, exportAsSvg };

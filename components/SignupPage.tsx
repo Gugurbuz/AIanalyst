@@ -42,7 +42,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ switchToLogin }) => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    className="w-full px-3 py-2 mt-1 border border-slate-300 rounded-md shadow-sm dark:bg-slate-700 dark:border-slate-600 focus:ring-sky-500 focus:border-sky-500"
+                    className="w-full px-3 py-2 mt-1 border border-slate-300 rounded-md shadow-sm dark:bg-slate-700 dark:border-slate-600 focus:ring-indigo-500 focus:border-indigo-500"
                 />
             </div>
             <div>
@@ -53,7 +53,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ switchToLogin }) => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    className="w-full px-3 py-2 mt-1 border border-slate-300 rounded-md shadow-sm dark:bg-slate-700 dark:border-slate-600 focus:ring-sky-500 focus:border-sky-500"
+                    className="w-full px-3 py-2 mt-1 border border-slate-300 rounded-md shadow-sm dark:bg-slate-700 dark:border-slate-600 focus:ring-indigo-500 focus:border-indigo-500"
                 />
             </div>
              <div>
@@ -64,21 +64,21 @@ export const SignupPage: React.FC<SignupPageProps> = ({ switchToLogin }) => {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
-                    className="w-full px-3 py-2 mt-1 border border-slate-300 rounded-md shadow-sm dark:bg-slate-700 dark:border-slate-600 focus:ring-sky-500 focus:border-sky-500"
+                    className="w-full px-3 py-2 mt-1 border border-slate-300 rounded-md shadow-sm dark:bg-slate-700 dark:border-slate-600 focus:ring-indigo-500 focus:border-indigo-500"
                 />
             </div>
             <div>
                 <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full px-4 py-2 text-sm font-semibold text-white bg-sky-600 rounded-md shadow-sm hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 disabled:opacity-50"
+                    className="w-full px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
                 >
                     {isLoading ? 'Hesap oluşturuluyor...' : 'Kayıt Ol'}
                 </button>
             </div>
              <p className="text-sm text-center text-slate-600 dark:text-slate-400">
                 Zaten bir hesabınız var mı?{' '}
-                <button type="button" onClick={switchToLogin} className="font-medium text-sky-600 hover:text-sky-500">
+                <button type="button" onClick={switchToLogin} className="font-medium text-indigo-600 hover:text-indigo-500">
                     Giriş Yapın
                 </button>
             </p>

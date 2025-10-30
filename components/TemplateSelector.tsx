@@ -1,5 +1,6 @@
 import React from 'react';
-import type { Template } from '../templates';
+// FIX: Import the 'Template' type from the central types file.
+import type { Template } from '../types';
 
 interface TemplateSelectorProps {
     label: string;
