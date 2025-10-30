@@ -1,21 +1,19 @@
 // services/geminiService.ts
 
-import { GoogleGenAI, Type } from "@google/genai";
-import type { Message, MaturityReport } from '../types';
+import { GoogleGenAI, Type, Content } from "@google/genai";
+import type { Message, MaturityReport, TaskSuggestion, TaskPriority } from '../types';
+import { promptService } from './promptService'; // Import the new prompt service
 
-export interface GeminiConfig {
-    apiKey: string;
-    modelName: string;
-}
+const MODEL_NAME = localStorage.getItem('devModelName') || 'gemini-2.5-flash';
 
-const generateContent = async (prompt: string, config: GeminiConfig, modelConfig?: object): Promise<string> => {
-    if (!config.apiKey) {
-        throw new Error("API Anahtarı sağlanmadı.");
+const generateContent = async (prompt: string, modelConfig?: object): Promise<string> => {
+    if (!process.env.API_KEY) {
+        throw new Error("API Anahtarı bulunamadı. Lütfen ortam değişkenlerini yapılandırın.");
     }
     try {
-        const ai = new GoogleGenAI({ apiKey: config.apiKey });
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const response = await ai.models.generateContent({
-            model: config.modelName,
+            model: MODEL_NAME,
             contents: prompt,
             ...(modelConfig && { config: modelConfig }),
         });
@@ -24,7 +22,7 @@ const generateContent = async (prompt: string, config: GeminiConfig, modelConfig
         console.error("Gemini API call failed:", error);
         const errorMessage = error instanceof Error ? error.message : String(error);
         if (errorMessage.includes('API key not valid')) {
-             throw new Error("Geçersiz API Anahtarı. Lütfen Geliştirici Panelinden kontrol edin.");
+             throw new Error("Geçersiz API Anahtarı. Lütfen ortam değişkenlerini kontrol edin.");
         }
         if (errorMessage.toLowerCase().includes('json')) {
             throw new Error(`Modelden geçersiz JSON yanıtı alındı. Lütfen tekrar deneyin.`);
@@ -37,74 +35,117 @@ const formatHistory = (history: Message[]): string => {
     return history.map(m => `${m.role === 'user' ? 'Kullanıcı' : m.role === 'assistant' ? 'Asistan' : 'Sistem'}: ${m.content}`).join('\n');
 }
 
-export const geminiService = {
-    continueConversation: async (history: Message[], config: GeminiConfig): Promise<string> => {
-        const prompt = `
-            Sen uzman bir iş analisti yapay zekasısın. 
-            Görevin, kullanıcının iş talebini konuşma yoluyla anlamak, netleştirmek ve olgunlaştırmaktır.
-            Kullanıcının son mesajına ve tüm konuşma geçmişine dayanarak uygun bir yanıt ver.
-            - Eğer talep belirsizse, netleştirici sorular sor.
-            - Eğer talep yeterince açıksa, bunu belirt ve bir analiz dokümanı veya test senaryosu oluşturabileceğini söyle.
-            - Kullanıcının sorularını yanıtla ve sürece rehberlik et.
-            Cevabını samimi ve profesyonel bir asistan gibi ifade et.
+const convertMessagesToGeminiFormat = (history: Message[]): Content[] => {
+    const relevantMessages = history.filter(msg => msg.role === 'user' || msg.role === 'assistant');
+
+    if (relevantMessages.length === 0) {
+        return [];
+    }
+    
+    const processedMessages: Message[] = [];
+    let currentMessage = { ...relevantMessages[0] }; 
+
+    for (let i = 1; i < relevantMessages.length; i++) {
+        const message = relevantMessages[i];
+        if (message.role === currentMessage.role) {
+            currentMessage.content += "\n\n" + message.content;
+        } else {
+            processedMessages.push(currentMessage);
+            currentMessage = { ...message };
+        }
+    }
+    processedMessages.push(currentMessage);
+
+    return processedMessages.map(msg => ({
+        role: msg.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: msg.content }]
+    }));
+};
+
+const sanitizeMermaidCode = (code: string): string => {
+    // This function programmatically quotes Mermaid node labels that contain special characters
+    // like parentheses, which would otherwise cause a syntax error.
+    
+    // Regex for node definitions.
+    // Captures: 1: ID (allows hyphens), 2: open bracket, 3: text, 4: close bracket
+    const nodeRegexes = [
+        /([\w-]+)(\[)([^\]\n]*?)(\])/g,      // Rectangular: A[text]
+        /([\w-]+)(\()([^)\n]*?)(\))/g,      // Round edges: B(text)
+        /([\w-]+)(\{)([^}\n]*?)(\})/g,      // Rhombus: C{text}
+        /([\w-]+)(>)([^\]\n]*?)(\])/g,      // Stadium: D>text]
+    ];
+
+    let sanitizedCode = code;
+
+    nodeRegexes.forEach(regex => {
+        sanitizedCode = sanitizedCode.replace(regex, (match, id, open, text, close) => {
+            // Check if the text is already properly quoted (handles leading/trailing spaces).
+            if (text.trim().startsWith('"') && text.trim().endsWith('"')) {
+                return match;
+            }
             
-            Konuşma Geçmişi:
-            ${formatHistory(history)}
-        `;
-        return generateContent(prompt, config);
+            // Check if the text contains special characters that require quoting.
+            if (/[()\[\]{}]/.test(text)) {
+                // Escape any existing double quotes inside the text to avoid breaking the string.
+                const sanitizedText = text.replace(/"/g, '#quot;');
+                return `${id}${open}"${sanitizedText}"${close}`;
+            }
+            
+            // If no special characters, return the original match.
+            return match;
+        });
+    });
+
+    return sanitizedCode;
+};
+
+
+export const geminiService = {
+    continueConversation: async (history: Message[]): Promise<string> => {
+        if (!process.env.API_KEY) {
+            throw new Error("API Anahtarı bulunamadı. Lütfen ortam değişkenlerini yapılandırın.");
+        }
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const systemInstruction = promptService.getPrompt('continueConversation');
+            const geminiHistory = convertMessagesToGeminiFormat(history);
+
+            const response = await ai.models.generateContent({
+                model: MODEL_NAME,
+                contents: geminiHistory,
+                config: {
+                    systemInstruction: systemInstruction,
+                }
+            });
+            return response.text;
+        } catch (error) {
+            console.error("Gemini API call failed in continueConversation:", error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            if (errorMessage.includes('API key not valid')) {
+                 throw new Error("Geçersiz API Anahtarı. Lütfen ortam değişkenlerini kontrol edin.");
+            }
+            throw new Error(`Gemini API ile iletişim kurulamadı: ${errorMessage}`);
+        }
     },
     
-    checkAnalysisMaturity: async (history: Message[], config: GeminiConfig): Promise<MaturityReport> => {
+    checkAnalysisMaturity: async (history: Message[]): Promise<MaturityReport> => {
         const schema = {
             type: Type.OBJECT,
             properties: {
-                isSufficient: { type: Type.BOOLEAN, description: 'Analiz dokümanı oluşturmak için bilgilerin yeterli olup olmadığı.' },
-                summary: { type: Type.STRING, description: 'Analizin mevcut durumunun kısa bir özeti.' },
-                missingTopics: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING },
-                    description: 'Konuşmada eksik olan veya daha fazla detaylandırılması gereken ana başlıkların listesi.'
-                },
-                suggestedQuestions: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING },
-                    description: 'Eksik konuları netleştirmek için kullanıcıya sorulabilecek 1-3 adet bağlamsal ve akıllı soru.'
-                }
+                isSufficient: { type: Type.BOOLEAN },
+                summary: { type: Type.STRING },
+                missingTopics: { type: Type.ARRAY, items: { type: Type.STRING } },
+                suggestedQuestions: { type: Type.ARRAY, items: { type: Type.STRING } }
             },
             required: ['isSufficient', 'summary', 'missingTopics', 'suggestedQuestions']
         };
-
-        const prompt = `
-            **GÖREV:** Sen, bir iş analizi sürecini denetleyen son derece yetenekli bir Kıdemli İş Analistisin. Sağlanan konuşma geçmişini dikkatlice inceleyerek, analizin olgunluğunu değerlendir. Amacın, analizin bir sonraki aşamaya (dokümantasyon) geçmeye hazır olup olmadığını belirlemek ve değilse, en kritik eksiklikleri yapısal bir şekilde ortaya koymaktır.
-
-            **DEĞERLENDİRME KRİTERLERİ:**
-            Konuşmayı aşağıdaki anahtar iş analizi alanları açısından değerlendir:
-            1.  **Ana Amaç ve İş Değeri:** Projenin temel hedefi net mi?
-            2.  **Kapsam:** Kapsam dahilindeki ve dışındaki maddeler yeterince tanımlanmış mı?
-            3.  **Kullanıcılar ve Roller:** Hedef kullanıcı kitlesi ve ihtiyaçları belli mi?
-            4.  **Fonksiyonel Gereksinimler:** Sistemin ne yapması gerektiği açıkça belirtilmiş mi?
-            5.  **Fonksiyonel Olmayan Gereksinimler:** Performans, güvenlik, kullanılabilirlik gibi konulara değinilmiş mi?
-            6.  **Veri ve Entegrasyonlar:** Gerekli veri modelleri veya dış sistem entegrasyonları hakkında bilgi var mı?
-            7.  **Kısıtlar ve Bağımlılıklar:** Projeyi etkileyebilecek teknik veya iş kısıtları biliniyor mu?
-            8.  **Başarı Metrikleri:** Projenin başarısının nasıl ölçüleceği tanımlanmış mı?
-
-            **ÇIKTI KURALLARI:**
-            - Cevabını **SADECE** ve **SADECE** sağlanan JSON şemasına uygun olarak ver.
-            - **summary:** Mevcut durumu (örn: "Başlangıç aşamasında", "Detaylandırılıyor", "Neredeyse hazır") ve en büyük eksikliği vurgulayan 1-2 cümlelik bir özet yaz.
-            - **isSufficient:** Eğer yukarıdaki kriterlerin çoğu (özellikle ilk 4'ü) yeterince detaylıysa \`true\`, aksi halde \`false\` döndür.
-            - **missingTopics:** Yukarıdaki kriterlerden hangilerinin eksik veya zayıf olduğunu listele.
-            - **suggestedQuestions:** Eksik konuları aydınlatmak için, daha önce sorulmamış, spesifik ve bağlamsal 1 ila 3 soru oluştur. Genel sorulardan kaçın.
-
-            **Konuşma Geçmişi:**
-            ${formatHistory(history)}
-        `;
         
-        const modelConfig = {
-            responseMimeType: "application/json",
-            responseSchema: schema,
-        };
+        const basePrompt = promptService.getPrompt('checkAnalysisMaturity');
+        const prompt = `${basePrompt}\n\nKonuşma Geçmişi:\n${formatHistory(history)}`;
+        
+        const modelConfig = { responseMimeType: "application/json", responseSchema: schema };
 
-        const jsonString = await generateContent(prompt, config, modelConfig);
+        const jsonString = await generateContent(prompt, modelConfig);
         try {
             return JSON.parse(jsonString) as MaturityReport;
         } catch (e) {
@@ -113,79 +154,121 @@ export const geminiService = {
         }
     },
 
-    generateAnalysisDocument: async (history: Message[], templatePrompt: string, config: GeminiConfig): Promise<string> => {
-        const prompt = `
-            ${templatePrompt}
-
-            **EK VE EN ÖNEMLİ TALİMAT: İYİLEŞTİRME ODAKLI YAKLAŞIM**
-            Yukarıdaki "GÖREV" ve "DOKÜMAN YAPISI"nı takip ederken, konuşma geçmişindeki eksik, belirsiz veya varsayımsal bilgileri tespit et. Bu zayıf noktaları görmezden gelme. Bunun yerine:
-            1.  Eldeki bilgilerle ilgili bölümü yine de yaz. Eğer bir varsayımda bulunuyorsan, bunu açıkça belirt (örn: "Varsayım: ...").
-            2.  İlgili bölümün hemen sonuna, o konuyu netleştirmek için kullanıcıya yöneltilmesi gereken 1-2 kritik soruyu içeren özel bir "İyileştirme Alanı" bloğu ekle.
-            3.  Bu bloğu aşağıdaki Markdown formatında biçimlendir:
-
-            > **İyileştirme Alanı:**
-            > *Bu bölümdeki bilgiler varsayımlara dayanmaktadır veya eksiktir. Analizi güçlendirmek için lütfen aşağıdaki soruları yanıtlayın:*
-            > - **Soru 1:** ...?
-            > - **Soru 2:** ...?
-
-            - Eğer bir bölümle ilgili konuşmada HİÇBİR bilgi yoksa, o bölümün başlığını yaz ve altına "Bu konuyla ilgili yeterli bilgi bulunmamaktadır." notunu ekle, ardından bir "İyileştirme Alanı" bloğu ile ilgili soruları sor.
-            - Tüm dokümanı tek bir akıcı metin olarak sun.
-
-            **TALİMAT:**
-            Dokümanı yalnızca ve yalnızca aşağıda sağlanan konuşma geçmişine dayanarak oluştur.
-
-            **Konuşma Geçmişi:**
-            ${formatHistory(history)}
-        `;
-        return generateContent(prompt, config);
+    generateAnalysisDocument: async (history: Message[], templateId: string): Promise<string> => {
+        const templatePrompt = promptService.getPrompt(templateId);
+        const prompt = `${templatePrompt}\n\n**TALİMAT:**\nDokümanı yalnızca ve yalnızca aşağıda sağlanan konuşma geçmişine dayanarak oluştur.\n\n**Konuşma Geçmişi:**\n${formatHistory(history)}`;
+        return generateContent(prompt);
     },
 
-    generateTestScenarios: async (analysisDocument: string, templatePrompt: string, config: GeminiConfig): Promise<string> => {
-        const prompt = `
-            ${templatePrompt}
-            
-            **TALİMAT:**
-            Test senaryolarını yalnızca aşağıda sağlanan İş Analizi Dokümanına dayanarak oluştur.
-
-            **İş Analizi Dokümanı:**
-            '${analysisDocument}'
-        `;
-        return generateContent(prompt, config);
+    generateTestScenarios: async (analysisDocument: string, templateId: string): Promise<string> => {
+        const templatePrompt = promptService.getPrompt(templateId);
+        const prompt = `${templatePrompt}\n\n**TALİMAT:**\nTest senaryolarını yalnızca aşağıda sağlanan İş Analizi Dokümanına dayanarak oluştur.\n\n**İş Analizi Dokümanı:**\n'${analysisDocument}'`;
+        return generateContent(prompt);
     },
 
-    generateConversationTitle: async (firstMessage: string, config: GeminiConfig): Promise<string> => {
-        const prompt = `Kullanıcının şu ilk mesajına dayanarak 5 kelimeyi geçmeyen kısa, öz ve açıklayıcı bir sohbet başlığı oluştur: "${firstMessage}"`;
-        const title = await generateContent(prompt, config);
-        // Remove quotes and asterisks that the model might add
+    generateConversationTitle: async (firstMessage: string): Promise<string> => {
+        const basePrompt = promptService.getPrompt('generateConversationTitle');
+        const prompt = `${basePrompt}: "${firstMessage}"`;
+        const title = await generateContent(prompt);
         return title.replace(/["*]/g, '').trim();
     },
 
-    generateVisualization: async (history: Message[], config: GeminiConfig): Promise<string> => {
+    generateVisualization: async (analysisDocument: string, diagramType: string): Promise<string> => {
+        const basePrompt = promptService.getPrompt('generateVisualization');
+        // ... (rest of the function is the same, no changes needed here)
+        const diagramTypeInstruction = {
+            'auto': `
+                **DİYAGRAM TÜRÜ SEÇİMİ:**
+                - Doküman bir süreç veya iş akışı tanımlıyorsa, **akış şeması (flowchart)** kullan (\`graph TD\`).
+                - Doküman, sistemler veya kullanıcılar arasında zaman sıralı bir etkileşim içeriyorsa, **sekans diyagramı (sequenceDiagram)** kullan.
+                - Doküman, merkezi bir konsept etrafındaki fikirleri veya özellikleri araştırıyorsa, **zihin haritası (mindmap)** kullan.
+                - Dokümanın içeriğine göre en uygun diyagram türünü kendin seç. Önceliğin akış şeması olsun.
+            `,
+            'flowchart': `
+                **DİYAGRAM TÜRÜ SEÇİMİ:**
+                - **SADECE** bir **akış şeması (flowchart)** kullanarak (\`graph TD\`) bir diyagram oluştur. Dokümandaki ana iş akışını veya süreci göster.
+            `,
+            'sequenceDiagram': `
+                **DİYAGRAM TÜRÜ SEÇİMİ:**
+                - **SADECE** bir **sekans diyagramı (sequenceDiagram)** kullanarak bir diyagram oluştur. Sistemler veya kullanıcılar arasındaki zaman sıralı etkileşimi göster.
+            `,
+            'mindmap': `
+                **DİYAGRAM TÜRÜ SEÇİMİ:**
+                - **SADECE** bir **zihin haritası (mindmap)** kullanarak bir diyagram oluştur. Merkezi bir konsept etrafındaki fikirleri veya özellikleri göster.
+            `
+        };
         const prompt = `
-            **GÖREV:** Deneyimli bir sistem mimarı olarak, sağlanan konuşma geçmişini analiz et ve ana iş akışını, süreçler arasındaki etkileşimi veya kavramsal hiyerarşiyi en iyi şekilde özetleyen bir **Mermaid.js diyagramı** oluştur.
-
-            **DİYAGRAM TÜRÜ SEÇİMİ:**
-            - Konuşma bir süreç veya iş akışı tanımlıyorsa, **akış şeması (flowchart)** kullan (\`graph TD\`).
-            - Konuşma, sistemler veya kullanıcılar arasında zaman sıralı bir etkileşim içeriyorsa, **sekans diyagramı (sequenceDiagram)** kullan.
-            - Konuşma, merkezi bir konsept etrafındaki fikirleri veya özellikleri araştırıyorsa, **zihin haritası (mindmap)** kullan.
-            - Konuşmanın içeriğine göre en uygun diyagram türünü kendin seç.
-
+            ${basePrompt}
+            ${diagramTypeInstruction[diagramType as keyof typeof diagramTypeInstruction] || diagramTypeInstruction['auto']}
             **KRİTİK KURALLAR:**
             1.  Çıktın **SADECE** ve **SADECE** seçtiğin diyagram türü için geçerli Mermaid.js sözdizimi içermelidir.
             2.  Sözdizimini \`\`\`mermaid ... \`\`\` kod bloğu içine ALMA. Sadece ham sözdizimini döndür.
-            3.  Diyagramı mümkün olduğunca okunabilir ve anlaşılır yap. Karmaşık adımları basitleştir.
-            4.  Eğer konuşma çok kısaysa veya anlamlı bir diyagram çıkarılamıyorsa, temel amacı gösteren basit bir diyagram oluştur (genellikle bir akış şeması en güvenli seçenektir).
-
-            **ÖRNEK ÇIKTI (Akış Şeması):**
-            graph TD
-                A[Kullanıcı Giriş Yapar] --> B{Giriş Başarılı mı?};
-                B -->|Evet| C[Ana Sayfayı Görüntüler];
-                B -->|Hayır| D[Hata Mesajı Gösterilir];
-                C --> E[Rapor Oluşturma Sayfasına Gider];
-
-            **Konuşma Geçmişi:**
-            ${formatHistory(history)}
+            3.  **EN KRİTİK KURAL - OK SÖZDİZİMİ:** Bağlantılar için **ASLA** ikiden fazla tire (\`-\`) art arda kullanma. **SADECE** şu formatlara izin verilir: \`-->\` ve \`-- Metin -->\`. **ÖRNEK YANLIŞ KULLANIM:** \`A --- B\` **KESİNLİKLE YANLIŞTIR**. **ÖRNEK DOĞRU KULLANIM:** \`A --> B\`.
+            4.  **EN ÖNEMLİ KURAL - DÜĞÜM METİNLERİ:** Düğüm (node) metinleri içerisinde parantez \`()\`, köşeli parantez \`[]\` gibi özel karakterler varsa, metni **MUTLAKA** çift tırnak içine almalısın. **ÖRNEK DOĞRU KULLANIM:** \`A["Bu bir (örnek) metindir"]\`. **ÖRNEK YANLIŞ KULLANIM:** \`A[Bu bir (örnek) metindir]\`.
+            **İş Analizi Dokümanı:**
+            \`\`\`
+            ${analysisDocument}
+            \`\`\`
         `;
-         return generateContent(prompt, config);
-    }
+         const rawMermaidCode = await generateContent(prompt);
+         return sanitizeMermaidCode(rawMermaidCode);
+    },
+
+    // FIX: Implement the missing 'analyzeFeedback' function.
+    analyzeFeedback: async (feedbackItems: { comment?: string; rating: 'up' | 'down' | null }[]): Promise<string> => {
+        const basePrompt = promptService.getPrompt('analyzeFeedback');
+        const formattedFeedback = feedbackItems.map(item => {
+            if (!item.rating) return null; // Skip items without a rating
+            const ratingText = item.rating === 'up' ? 'Beğenildi' : 'Beğenilmedi';
+            const commentText = item.comment ? `Yorum: "${item.comment}"` : 'Yorum yok.';
+            return `- Oylama: ${ratingText}, ${commentText}`;
+        }).filter(Boolean).join('\n');
+
+        if (!formattedFeedback) {
+            return "Analiz edilecek geri bildirim bulunmuyor.";
+        }
+
+        const prompt = `${basePrompt}\n\n**Analiz Edilecek Geri Bildirimler:**\n${formattedFeedback}`;
+        return generateContent(prompt);
+    },
+
+    generateTasksFromAnalysis: async (analysisDocument: string): Promise<TaskSuggestion[]> => {
+        const schema = {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    title: { type: Type.STRING, description: 'Görevin kısa, eyleme yönelik başlığı.' },
+                    description: { type: Type.STRING, description: 'Görevin detaylı açıklaması, genellikle ilgili fonksiyonel gereksinimi içerir.' },
+                    priority: { type: Type.STRING, description: "Görevin öncelik seviyesi ('low', 'medium', 'high', 'critical')." }
+                },
+                required: ['title', 'description', 'priority']
+            }
+        };
+
+        const basePrompt = promptService.getPrompt('generateTasksFromAnalysis');
+        const prompt = `${basePrompt}\n\n**İş Analizi Dokümanı:**\n${analysisDocument}`;
+
+        const modelConfig = { responseMimeType: "application/json", responseSchema: schema };
+
+        const jsonString = await generateContent(prompt, modelConfig);
+        try {
+            // The model may return an object with a root key (e.g., { "tasks": [...] }). 
+            // We need to handle this to find the array.
+            const parsed = JSON.parse(jsonString);
+            if (Array.isArray(parsed)) {
+                return parsed as TaskSuggestion[];
+            }
+            if (typeof parsed === 'object' && parsed !== null) {
+                const key = Object.keys(parsed).find(k => Array.isArray(parsed[k]));
+                if (key) {
+                    return parsed[key] as TaskSuggestion[];
+                }
+            }
+            throw new Error("JSON yanıtı beklenen formatta bir dizi içermiyor.");
+        } catch (e) {
+            console.error("Failed to parse task suggestions JSON:", e, "Received string:", jsonString);
+            throw new Error("Görev önerileri ayrıştırılamadı.");
+        }
+    },
 };

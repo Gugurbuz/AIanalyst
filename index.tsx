@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
+// FIX: Correct module imports for App and types.
 import App from './App';
 import { AuthPage } from './components/AuthPage';
 import { authService } from './services/authService';
 import type { User } from './types';
 import type { Session } from '@supabase/supabase-js';
+import { PublicView } from './components/PublicView';
 
 
-const Main = () => {
+const AuthWrapper = () => {
     const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -42,6 +44,32 @@ const Main = () => {
     }
 
     return <App user={session.user as User} onLogout={() => authService.logout()} />;
+};
+
+const Main = () => {
+    const [shareId, setShareId] = useState<string | null>(null);
+    const [isCheckingUrl, setIsCheckingUrl] = useState(true);
+
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const id = urlParams.get('share');
+        if (id) {
+            setShareId(id);
+        }
+        setIsCheckingUrl(false);
+    }, []);
+
+    if (isCheckingUrl) {
+         return (
+            <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900" />
+         );
+    }
+
+    if (shareId) {
+        return <PublicView shareId={shareId} />;
+    }
+
+    return <AuthWrapper />;
 };
 
 

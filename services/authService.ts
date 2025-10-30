@@ -3,9 +3,6 @@ import { supabase } from './supabaseClient';
 import type { User } from '../types';
 import type { Session } from '@supabase/supabase-js';
 
-const TEST_USER_EMAIL = 'test@example.com';
-const TEST_USER_PASSWORD = 'password123';
-
 export const authService = {
     signup: async (email: string, password: string) => {
         const { data, error } = await supabase.auth.signUp({
@@ -46,33 +43,42 @@ export const authService = {
     },
 
     loginWithTestUser: async (): Promise<User> => {
+        const testUserEmail = localStorage.getItem('devTestUserEmail') || 'test.analyst@internal-demo.com';
+        const testUserPassword = localStorage.getItem('devTestUserPassword') || 'password123';
+        
         try {
-            // First, try to log in
-            return await authService.login(TEST_USER_EMAIL, TEST_USER_PASSWORD);
-        } catch (error) {
-            // If login fails (likely because the user doesn't exist), try to sign up
-            console.warn("Test user login failed, attempting to create test user.", error);
+            // First, try to log in. This is the fastest path if the user exists and password is correct.
+            return await authService.login(testUserEmail, testUserPassword);
+        } catch (loginError) {
+            // If login fails, it could be a wrong password or a non-existent user.
+            // We attempt to sign up to create the user if they don't exist.
+            console.warn("Test user login failed, attempting to sign up the user.", loginError);
+            
             try {
-                const { data, error: signupError } = await supabase.auth.signUp({
-                    email: TEST_USER_EMAIL,
-                    password: TEST_USER_PASSWORD,
+                const { error: signupError } = await supabase.auth.signUp({
+                    email: testUserEmail,
+                    password: testUserPassword,
                 });
 
-                if (signupError) throw signupError;
-                
-                if (data.user) {
-                    // Supabase now automatically signs in the user upon successful signup
-                    return data.user as User;
+                if (signupError) {
+                    // If signup fails because the user already exists, it confirms our initial login failed due to a wrong password.
+                    if (signupError.message.includes('User already registered')) {
+                        throw new Error(`Test kullanıcısı girişi başarısız. Geliştirici Panelinde belirtilen şifre yanlış görünüyor. Lütfen şifreyi kontrol edin.`);
+                    }
+                    if (signupError.message.toLowerCase().includes('invalid email')) {
+                         throw new Error(`'${testUserEmail}' e-postası geçersiz. Lütfen Geliştirici Panelinden farklı bir e-posta ayarlayın.`);
+                    }
+                    // For any other signup error, re-throw it.
+                    throw signupError;
                 }
-                
-                throw new Error("Could not log in or create the test user account. Please check your Supabase instance rules.");
 
-            } catch (signupError) {
-                 // If signup fails because user already exists, it means the password was wrong on the first attempt
-                if (signupError instanceof Error && signupError.message.includes('User already registered')) {
-                     throw new Error("Geçersiz e-posta veya şifre.");
-                }
-                throw signupError;
+                // If signup succeeds, we must now log in to get a session.
+                console.log("Test user created successfully. Logging in...");
+                return await authService.login(testUserEmail, testUserPassword);
+
+            } catch (finalError) {
+                // Re-throw the refined error from the inner try-catch block for the UI to display.
+                throw finalError;
             }
         }
     }

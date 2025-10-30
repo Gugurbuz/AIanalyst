@@ -1,44 +1,58 @@
 import React, { useState, useEffect } from 'react';
+import { PromptManager } from './PromptManager';
 
 interface DeveloperPanelProps {
-    apiKey: string;
-    onApiKeyChange: (key: string) => void;
     modelName: string;
     onModelNameChange: (name: string) => void;
     supabaseUrl: string;
     onSupabaseUrlChange: (url: string) => void;
     supabaseAnonKey: string;
     onSupabaseAnonKeyChange: (key: string) => void;
+    testUserEmail: string;
+    onTestUserEmailChange: (email: string) => void;
+    testUserPassword: string;
+    onTestUserPasswordChange: (password: string) => void;
+    isFetchingFeedback: boolean;
+    onToggleFeedbackDashboard: () => void;
     onClose: () => void;
 }
 
 export const DeveloperPanel: React.FC<DeveloperPanelProps> = ({
-    apiKey,
-    onApiKeyChange,
     modelName,
     onModelNameChange,
     supabaseUrl,
     onSupabaseUrlChange,
     supabaseAnonKey,
     onSupabaseAnonKeyChange,
+    testUserEmail,
+    onTestUserEmailChange,
+    testUserPassword,
+    onTestUserPasswordChange,
+    isFetchingFeedback,
+    onToggleFeedbackDashboard,
     onClose
 }) => {
-    const [localApiKey, setLocalApiKey] = useState(apiKey);
     const [localModelName, setLocalModelName] = useState(modelName);
     const [localSupabaseUrl, setLocalSupabaseUrl] = useState(supabaseUrl);
     const [localSupabaseAnonKey, setLocalSupabaseAnonKey] = useState(supabaseAnonKey);
+    const [localTestUserEmail, setLocalTestUserEmail] = useState(testUserEmail);
+    const [localTestUserPassword, setLocalTestUserPassword] = useState(testUserPassword);
     const [savedMessage, setSavedMessage] = useState('');
+    const [isPromptManagerOpen, setIsPromptManagerOpen] = useState(false);
 
-    useEffect(() => { setLocalApiKey(apiKey); }, [apiKey]);
     useEffect(() => { setLocalModelName(modelName); }, [modelName]);
     useEffect(() => { setLocalSupabaseUrl(supabaseUrl); }, [supabaseUrl]);
     useEffect(() => { setLocalSupabaseAnonKey(supabaseAnonKey); }, [supabaseAnonKey]);
+    useEffect(() => { setLocalTestUserEmail(testUserEmail); }, [testUserEmail]);
+    useEffect(() => { setLocalTestUserPassword(testUserPassword); }, [testUserPassword]);
+
 
     const handleSave = () => {
-        onApiKeyChange(localApiKey);
         onModelNameChange(localModelName);
         onSupabaseUrlChange(localSupabaseUrl);
         onSupabaseAnonKeyChange(localSupabaseAnonKey);
+        onTestUserEmailChange(localTestUserEmail);
+        onTestUserPasswordChange(localTestUserPassword);
 
         setSavedMessage('Ayarlar kaydedildi. Uygulama yeniden başlatılıyor...');
         setTimeout(() => {
@@ -55,19 +69,11 @@ export const DeveloperPanel: React.FC<DeveloperPanelProps> = ({
                 </button>
             </div>
             
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
                 <div>
-                    <label htmlFor="api-key" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        Gemini API Anahtarı
-                    </label>
-                    <input
-                        type="password"
-                        id="api-key"
-                        value={localApiKey}
-                        onChange={(e) => setLocalApiKey(e.target.value)}
-                        className="w-full p-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-sky-500 focus:outline-none bg-slate-100 dark:bg-slate-700"
-                        placeholder="API Anahtarını buraya girin"
-                    />
+                    <p className="text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 p-2 rounded-md">
+                        <strong>Not:</strong> Gemini API Anahtarı, güvenlik nedeniyle artık sadece ortam değişkenlerinden (`process.env.API_KEY`) okunmaktadır.
+                    </p>
                 </div>
                 <div>
                     <label htmlFor="model-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
@@ -109,6 +115,50 @@ export const DeveloperPanel: React.FC<DeveloperPanelProps> = ({
                         placeholder="Supabase Proje Anon Key"
                     />
                 </div>
+                 <hr className="border-slate-300 dark:border-slate-600"/>
+                 <div>
+                    <label htmlFor="test-user-email" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Test Kullanıcısı E-posta
+                    </label>
+                    <input
+                        type="email"
+                        id="test-user-email"
+                        value={localTestUserEmail}
+                        onChange={(e) => setLocalTestUserEmail(e.target.value)}
+                        className="w-full p-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-sky-500 focus:outline-none bg-slate-100 dark:bg-slate-700"
+                        placeholder="test@ornek.com"
+                    />
+                </div>
+                 <div>
+                    <label htmlFor="test-user-password" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Test Kullanıcısı Şifresi
+                    </label>
+                    <input
+                        type="text"
+                        id="test-user-password"
+                        value={localTestUserPassword}
+                        onChange={(e) => setLocalTestUserPassword(e.target.value)}
+                        className="w-full p-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-sky-500 focus:outline-none bg-slate-100 dark:bg-slate-700"
+                        placeholder="Güçlü bir test şifresi"
+                    />
+                </div>
+                 <hr className="border-slate-300 dark:border-slate-600"/>
+                 <div>
+                     <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Gelişmiş Araçlar</h4>
+                     <button
+                        onClick={() => setIsPromptManagerOpen(true)}
+                        className="w-full flex justify-center items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 rounded-md shadow-sm hover:bg-slate-200 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 mb-2"
+                    >
+                        Prompt Yöneticisi
+                    </button>
+                     <button
+                        onClick={onToggleFeedbackDashboard}
+                        disabled={isFetchingFeedback}
+                        className="w-full flex justify-center items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-700 rounded-md shadow-sm hover:bg-slate-200 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 disabled:opacity-50"
+                    >
+                        {isFetchingFeedback ? 'Yükleniyor...' : 'Geri Bildirim Panelini Aç'}
+                    </button>
+                </div>
             </div>
 
             <div className="mt-6 flex justify-between items-center">
@@ -124,6 +174,13 @@ export const DeveloperPanel: React.FC<DeveloperPanelProps> = ({
                     Kaydet ve Yeniden Başlat
                 </button>
             </div>
+            
+            {isPromptManagerOpen && (
+                <PromptManager
+                    isOpen={isPromptManagerOpen}
+                    onClose={() => setIsPromptManagerOpen(false)}
+                />
+            )}
         </div>
     );
 };

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-
-export type Theme = 'light' | 'dark' | 'system';
+// FIX: Import the 'Theme' type from the central types file.
+import type { Theme } from '../types';
 
 interface ThemeSwitcherProps {
     theme: Theme;
