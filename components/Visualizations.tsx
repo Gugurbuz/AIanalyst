@@ -2,33 +2,50 @@
 import React, { useEffect, useRef, useState, useCallback, useId } from 'react';
 import mermaid from 'mermaid';
 import { TransformWrapper, TransformComponent, useControls } from 'react-zoom-pan-pinch';
-import { ZoomIn, ZoomOut, RotateCcw, AlertTriangle, LoaderCircle, Sparkles } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, AlertTriangle, LoaderCircle, Sparkles, GanttChartSquare } from 'lucide-react';
 import { BPMNViewer } from './BPMNViewer';
-import type { Conversation } from '../types';
 
 interface VisualizationsProps {
-    conversation: Conversation;
+    content: string;
     onModifyDiagram: (prompt: string) => Promise<void>;
-    isGenerating: boolean;
-    generatingDocType: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | null;
+    onGenerateDiagram: () => void;
+    isLoading: boolean;
+    error: string | null;
     diagramType: 'mermaid' | 'bpmn';
+    isAnalysisDocReady: boolean;
 }
 
-const MermaidSpinner: React.FC = () => (
+const VizSpinner: React.FC<{text?: string}> = ({text}) => (
      <div className="p-6 flex flex-col justify-center items-center text-center h-full">
         <LoaderCircle className="animate-spin h-8 w-8 text-indigo-500" />
-        <p className="mt-4 text-sm font-semibold text-slate-600 dark:text-slate-300">Diyagram oluşturuluyor...</p>
+        <p className="mt-4 text-sm font-semibold text-slate-600 dark:text-slate-300">{text || 'Diyagram oluşturuluyor...'}</p>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Bu işlem birkaç saniye sürebilir.</p>
     </div>
 );
 
-const MermaidError: React.FC<{ message: string; onRetry: () => void }> = ({ message, onRetry }) => (
+const VizError: React.FC<{ message: string; onRetry: () => void }> = ({ message, onRetry }) => (
     <div className="p-6 flex flex-col justify-center items-center text-center h-full bg-red-50 dark:bg-red-900/50 rounded-b-lg">
         <AlertTriangle className="h-10 w-10 text-red-500" />
         <h3 className="mt-2 text-md font-bold text-red-800 dark:text-red-200">Diyagram Hatası</h3>
-        <p className="mt-1 text-sm text-red-700 dark:text-red-300 max-w-md">{message}</p>
+        <p className="mt-1 text-sm text-red-700 dark:text-red-300 max-w-md">{message || "Beklenmedik bir hata oluştu."}</p>
         <button onClick={onRetry} className="mt-4 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition">
             Tekrar Dene
+        </button>
+    </div>
+);
+
+const EmptyState: React.FC<{ onGenerate: () => void; disabled: boolean }> = ({ onGenerate, disabled }) => (
+    <div className="text-center text-slate-500 dark:text-slate-400 p-6 flex flex-col items-center justify-center h-full">
+        <GanttChartSquare className="h-12 w-12 text-slate-400 mb-2" strokeWidth={1} />
+        <h3 className="text-md font-semibold text-slate-700 dark:text-slate-300">Henüz Bir Diyagram Oluşturulmadı</h3>
+        <p className="text-xs mt-1 max-w-xs">İş analizi dokümanınızdaki süreçleri görselleştirmek için aşağıdaki butonu kullanın.</p>
+        <button
+            onClick={onGenerate}
+            disabled={disabled}
+            title={disabled ? "Diyagram oluşturmak için önce geçerli bir analiz dokümanı gereklidir." : "AI ile diyagram oluştur"}
+            className="mt-4 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+            Diyagram Oluştur
         </button>
     </div>
 );
@@ -46,31 +63,33 @@ const MermaidControls = () => {
 
 const MermaidDiagram: React.FC<{ content: string }> = ({ content }) => {
     const [diagramSvg, setDiagramSvg] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [isRendering, setIsRendering] = useState(false);
+    const [renderError, setRenderError] = useState<string | null>(null);
     const diagramId = `mermaid-diagram-${useId()}`;
 
     const renderDiagram = useCallback(async (code: string) => {
         if (!code.trim()) {
             setDiagramSvg('');
-            setError(null);
+            setRenderError(null);
             return;
         }
         
-        setIsLoading(true);
-        setError(null);
+        setIsRendering(true);
+        setRenderError(null);
 
         try {
+            // This is a safety check. Mermaid sometimes fails on valid but complex syntax.
+            // A simple parse before render can catch blatant errors.
             await mermaid.parse(code);
             const { svg } = await mermaid.render(diagramId, code);
             setDiagramSvg(svg);
         } catch (e: any) {
             console.error("Mermaid.js hatası:", e);
             const errorMessage = e.message || "Geçersiz diyagram sözdizimi. Lütfen kodu kontrol edin.";
-            setError(errorMessage);
+            setRenderError(errorMessage);
             setDiagramSvg('');
         } finally {
-            setIsLoading(false);
+            setIsRendering(false);
         }
     }, [diagramId]);
 
@@ -89,8 +108,8 @@ const MermaidDiagram: React.FC<{ content: string }> = ({ content }) => {
         renderDiagram(content);
     }, [content, renderDiagram]);
 
-    if (isLoading) return <MermaidSpinner />;
-    if (error) return <MermaidError message={error} onRetry={() => renderDiagram(content)} />;
+    if (isRendering) return <VizSpinner text="Diyagram işleniyor..."/>;
+    if (renderError) return <VizError message={renderError} onRetry={() => renderDiagram(content)} />;
     
     return (
         <TransformWrapper>
@@ -103,50 +122,58 @@ const MermaidDiagram: React.FC<{ content: string }> = ({ content }) => {
 };
 
 
-export const Visualizations: React.FC<VisualizationsProps> = ({ conversation, onModifyDiagram, isGenerating, generatingDocType, diagramType }) => {
+export const Visualizations: React.FC<VisualizationsProps> = ({ 
+    content, 
+    onModifyDiagram, 
+    onGenerateDiagram,
+    isLoading,
+    error,
+    diagramType,
+    isAnalysisDocReady,
+}) => {
     const [modificationPrompt, setModificationPrompt] = useState('');
-    const { visualization: content } = conversation.generatedDocs;
 
     const handleModificationSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!modificationPrompt.trim() || isGenerating) return;
+        if (!modificationPrompt.trim() || isLoading) return;
         
         await onModifyDiagram(modificationPrompt);
         setModificationPrompt('');
     };
+    
+    const renderContent = () => {
+        if (isLoading) return <VizSpinner />;
+        if (error) return <VizError message={error} onRetry={onGenerateDiagram} />;
+        if (!content) return <EmptyState onGenerate={onGenerateDiagram} disabled={!isAnalysisDocReady} />;
 
-    const isProcessingModification = isGenerating && generatingDocType === 'viz';
+        return diagramType === 'bpmn' ? (
+            <BPMNViewer xml={content} />
+        ) : (
+            <MermaidDiagram content={content} />
+        );
+    }
 
     return (
         <div className="relative p-4 md:p-6 overflow-hidden bg-slate-50 dark:bg-slate-900 rounded-b-lg min-h-[300px] w-full h-full flex flex-col">
              <div className="relative flex-1 w-full h-full flex items-center justify-center border border-slate-200 dark:border-slate-700 rounded-md">
-                 {!content ? (
-                    <div className="text-center text-slate-500 dark:text-slate-400">
-                        <p>Görselleştirilecek bir diyagram bulunmuyor.</p>
-                        <p className="text-xs mt-1">AI'dan bir görselleştirme oluşturmasını isteyin.</p>
-                    </div>
-                  ) : diagramType === 'bpmn' ? (
-                     <BPMNViewer xml={content} />
-                  ) : (
-                     <MermaidDiagram content={content} />
-                  )}
+                {renderContent()}
             </div>
-            {content && (
+            {content && !isLoading && !error && (
                 <form onSubmit={handleModificationSubmit} className="mt-4 flex items-center gap-2 flex-shrink-0">
                     <input
                         type="text"
                         value={modificationPrompt}
                         onChange={(e) => setModificationPrompt(e.target.value)}
                         placeholder="Diyagramı nasıl değiştirmek istersiniz? (Örn: 'Onay adımından sonra bir e-posta gönderimi ekle')"
-                        disabled={isProcessingModification}
+                        disabled={isLoading}
                         className="w-full p-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-800 disabled:opacity-50"
                     />
                     <button
                         type="submit"
-                        disabled={isProcessingModification || !modificationPrompt.trim()}
+                        disabled={isLoading || !modificationPrompt.trim()}
                         className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 flex items-center justify-center w-32"
                     >
-                        {isProcessingModification ? (
+                        {isLoading ? (
                             <LoaderCircle className="animate-spin h-5 w-5" />
                         ) : (
                             <>

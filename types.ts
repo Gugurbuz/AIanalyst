@@ -6,7 +6,7 @@ export type User = SupabaseUser;
 
 export type Theme = 'light' | 'dark' | 'system';
 
-export type AppMode = 'analyst' | 'board';
+export type AppMode = 'analyst' | 'backlog';
 
 export type GeminiModel = 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.5-flash-lite';
 
@@ -15,28 +15,69 @@ export interface Feedback {
     comment?: string;
 }
 
+export interface ExpertStep {
+    id: 'analysis' | 'viz' | 'test' | 'traceability';
+    name: string;
+    status: 'pending' | 'in_progress' | 'completed' | 'error';
+    details?: string;
+}
+
 export interface Message {
-    id: string;
+    id:string;
     role: 'user' | 'assistant' | 'system';
     content: string;
     timestamp: string; // ISO 8601 date string
     feedback?: Feedback;
+    expertRunChecklist?: ExpertStep[];
 }
+
+export type MaturityLevel = 'Zayıf' | 'Gelişime Açık' | 'İyi' | 'Mükemmel';
 
 export interface MaturityReport {
     isSufficient: boolean;
     summary: string;
     missingTopics: string[];
     suggestedQuestions: string[];
+    // Replaced single score with a detailed breakdown
+    scores: {
+        scope: number;          // Kapsam
+        technical: number;      // Teknik Detay
+        userFlow: number;       // Kullanıcı Akışı
+        nonFunctional: number;  // Fonksiyonel Olmayan Gereksinimler
+    };
+    overallScore: number; // The average/weighted score for a quick glance
+    justification: string; // Puanın kısa açıklaması
+    maturity_level: MaturityLevel; // Kalitatif değerlendirme
+}
+
+export interface AnalysisVersion {
+    id: string;
+    content: string;
+    templateId: string;
+    createdAt: string;
+}
+
+export interface VizData {
+    code: string;
+    sourceHash: string;
 }
 
 export interface GeneratedDocs {
     analysisDoc: string;
+    analysisDocHistory?: AnalysisVersion[];
     testScenarios: string;
-    visualization: string; // Can be Mermaid code or BPMN XML
-    visualizationType?: 'mermaid' | 'bpmn'; // Type of the visualization
+    visualization: string; // Legacy, for backward compatibility
+    visualizationType?: 'mermaid' | 'bpmn'; // Legacy
+    mermaidViz?: VizData;
+    bpmnViz?: VizData;
     traceabilityMatrix: string;
     maturityReport?: MaturityReport | null;
+    backlogSuggestions?: BacklogSuggestion[];
+    // --- New flags for impact analysis ---
+    isVizStale?: boolean;
+    isTestStale?: boolean;
+    isTraceabilityStale?: boolean;
+    isBacklogStale?: boolean;
 }
 
 export interface Conversation {
@@ -53,23 +94,33 @@ export interface Conversation {
 // --- Project Board Types ---
 export type TaskStatus = 'todo' | 'inprogress' | 'done';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
+export type TaskType = 'epic' | 'story' | 'test_case' | 'task';
+
 
 export interface Task {
     id: string;
     user_id: string;
     conversation_id: string | null;
+    parent_id: string | null;
+    task_key: string;
     title: string;
     description: string | null;
     status: TaskStatus;
     priority: TaskPriority;
+    type: TaskType;
     assignee: string | null;
     created_at: string;
+    // Client-side property for rendering hierarchy
+    children?: Task[];
 }
 
-export interface TaskSuggestion {
+export interface BacklogSuggestion {
+    id: string; // Temporary ID for UI key
+    type: 'epic' | 'story' | 'test_case';
     title: string;
     description: string;
     priority: TaskPriority;
+    children: BacklogSuggestion[];
 }
 
 

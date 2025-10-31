@@ -1,16 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { StreamingIndicator } from './StreamingIndicator';
 import { Pencil, Bot, LoaderCircle } from 'lucide-react';
 
 // A simple hook to get the previous value of a prop or state.
-// FIX: Add a trailing comma to the generic type parameter `<T>` to resolve a TSX parsing ambiguity.
-const usePrevious = <T,>(value: T): T | undefined => {
-    const ref = useRef<T>();
+// FIX: Rewrote as a standard function declaration to resolve a potential TSX parsing ambiguity.
+function usePrevious<T>(value: T): T | undefined {
+    // FIX: A generic `useRef<T>()` call without an argument can cause overload resolution
+    // issues in TSX files. Providing `undefined` as an explicit initial value fixes this.
+    const ref = useRef<T | undefined>(undefined);
     useEffect(() => {
         ref.current = value;
     }, [value]);
     return ref.current;
-};
+}
 
 
 interface GeneratedDocumentProps {
@@ -20,6 +23,7 @@ interface GeneratedDocumentProps {
     onModifySelection: (selectedText: string, userPrompt: string, docKey: 'analysisDoc' | 'testScenarios') => void;
     inlineModificationState: { docKey: 'analysisDoc' | 'testScenarios'; originalText: string } | null;
     isGenerating: boolean;
+    isStreaming?: boolean;
     placeholder?: string;
 }
 
@@ -82,7 +86,7 @@ const MagicAssistantPopover: React.FC<{
     );
 };
 
-export const GeneratedDocument: React.FC<GeneratedDocumentProps> = ({ content, onContentChange, docKey, onModifySelection, inlineModificationState, isGenerating, placeholder }) => {
+export const GeneratedDocument: React.FC<GeneratedDocumentProps> = ({ content, onContentChange, docKey, onModifySelection, inlineModificationState, isGenerating, isStreaming = false, placeholder }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [localContent, setLocalContent] = useState(content);
     const [selectionState, setSelectionState] = useState<{ text: string, position: { top: number, left: number } } | null>(null);
@@ -96,7 +100,7 @@ export const GeneratedDocument: React.FC<GeneratedDocumentProps> = ({ content, o
 
     // --- Diffing and Highlighting Logic ---
     useEffect(() => {
-        if (prevContent && content !== prevContent) {
+        if (prevContent && content !== prevContent && !isStreaming) {
             const oldLines = prevContent.split('\n');
             const newLines = content.split('\n');
             const changedLineNumbers: number[] = [];
@@ -127,17 +131,19 @@ export const GeneratedDocument: React.FC<GeneratedDocumentProps> = ({ content, o
                 return () => clearTimeout(timer);
             }
         }
-    }, [content, prevContent]);
+    }, [content, prevContent, isStreaming]);
 
 
     // When the parent content changes, update local state and switch back to view mode.
     useEffect(() => {
         setLocalContent(content);
-        setIsEditing(false);
+        if (!isStreaming) {
+             setIsEditing(false);
+        }
         // Clear selection when content from parent changes to avoid stale highlights
         setSelectionState(null);
         setIsAssistantPopoverOpen(false);
-    }, [content]);
+    }, [content, isStreaming]);
     
     const resizeTextarea = useCallback(() => {
         const textarea = textareaRef.current;
@@ -252,18 +258,21 @@ export const GeneratedDocument: React.FC<GeneratedDocumentProps> = ({ content, o
     return (
         <div className="relative group" ref={containerRef}>
             <div onMouseUp={handleMouseUp} className="p-4 md:p-6">
-                {(!content && placeholder) ? (
+                {(!content && placeholder && !isStreaming) ? (
                     <p className="text-slate-400 dark:text-slate-500 italic">{placeholder}</p>
                 ) : (
-                    <MarkdownRenderer 
-                        content={content} 
-                        highlightedLines={highlightedLines}
-                        rephrasingText={rephrasingTextForRenderer}
-                        highlightedUserSelectionText={selectionState?.text ?? null}
-                    />
+                    <>
+                        <MarkdownRenderer 
+                            content={content} 
+                            highlightedLines={highlightedLines}
+                            rephrasingText={rephrasingTextForRenderer}
+                            highlightedUserSelectionText={selectionState?.text ?? null}
+                        />
+                        {isStreaming && <StreamingIndicator />}
+                    </>
                 )}
             </div>
-            {content && (
+            {content && !isStreaming && (
                  <button 
                     onClick={() => setIsEditing(true)}
                     disabled={isGenerating || !!inlineModificationState}

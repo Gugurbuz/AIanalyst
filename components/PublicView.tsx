@@ -104,6 +104,13 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
     }
     
     const { title, messages, generatedDocs } = conversation;
+    
+    const diagramType = generatedDocs.visualizationType || 'mermaid';
+
+    const vizContent = diagramType === 'bpmn'
+        ? generatedDocs.bpmnViz?.code ?? (generatedDocs.visualizationType === 'bpmn' ? generatedDocs.visualization : '')
+        : generatedDocs.mermaidViz?.code ?? (generatedDocs.visualizationType !== 'bpmn' ? generatedDocs.visualization : '');
+
 
     // A dummy function for read-only components
     const noOp = async () => {};
@@ -130,6 +137,9 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                 chatHistory={messages} 
                                 isLoading={false}
                                 onFeedbackUpdate={() => {}} // No feedback in public view
+// FIX: The `ChatMessageHistory` component requires the `onEditLastUserMessage` prop.
+// Since this is a read-only view, a no-op function is provided to satisfy the type requirement.
+                                onEditLastUserMessage={() => {}}
                             />
                         </div>
                     </div>
@@ -144,17 +154,20 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                 </div>
                             )}
 
-                             {generatedDocs.visualization && (
+                             {vizContent && (
                                 <div className="max-w-4xl mx-auto w-full bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700">
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-md font-bold">Süreç Akış Diyagramı</h3>
                                     </div>
+                                    {/* FIX: Corrected prop `isGenerating` to `isLoading` and added other required props (`onGenerateDiagram`, `error`, `isAnalysisDocReady`) to satisfy the Visualizations component's interface. */}
                                     <Visualizations 
-                                        conversation={conversation} 
-                                        onModifyDiagram={noOp} 
-                                        isGenerating={false} 
-                                        generatingDocType={null} 
-                                        diagramType={generatedDocs.visualizationType || 'mermaid'}
+                                        content={vizContent}
+                                        onModifyDiagram={noOp}
+                                        onGenerateDiagram={noOp}
+                                        isLoading={false}
+                                        error={null}
+                                        diagramType={diagramType}
+                                        isAnalysisDocReady={!!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini")}
                                     />
                                 </div>
                              )}

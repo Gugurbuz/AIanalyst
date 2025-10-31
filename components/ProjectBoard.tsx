@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { User, Task, TaskStatus } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { TaskCard } from './TaskCard';
 import { TaskDetailModal } from './TaskDetailModal';
+import { ClipboardList } from 'lucide-react';
 
 interface ProjectBoardProps {
     user: User;
@@ -18,6 +19,27 @@ const columnNames: Record<TaskStatus, string> = {
     todo: 'Yapılacaklar',
     inprogress: 'Devam Ediyor',
     done: 'Tamamlandı'
+};
+
+// New recursive component to render tasks and their children
+const TaskGroup: React.FC<{
+    task: Task;
+    level: number;
+    onDragStart: (e: React.DragEvent<HTMLDivElement>, taskId: string) => void;
+    onClick: (task: Task) => void;
+}> = ({ task, level, onDragStart, onClick }) => {
+    return (
+        <div style={{ marginLeft: `${level * 16}px` }}>
+            <TaskCard task={task} onDragStart={onDragStart} onClick={() => onClick(task)} />
+            {task.children && task.children.length > 0 && (
+                <div className="mt-2 space-y-2">
+                    {task.children.map(child => (
+                        <TaskGroup key={child.id} task={child} level={level + 1} onDragStart={onDragStart} onClick={onClick} />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
 };
 
 export const ProjectBoard: React.FC<ProjectBoardProps> = ({ user }) => {
@@ -59,14 +81,43 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({ user }) => {
     };
 
     const handleSaveTask = async (taskToSave: Partial<Task>) => {
+        // Add a 'type' for new generic tasks if not specified
+        const taskWithType = {
+            ...taskToSave,
+            type: taskToSave.type || 'task'
+        };
+
         if (taskToSave.id) { // Update existing task
-            const { data, error } = await supabase.from('tasks').update(taskToSave).eq('id', taskToSave.id).select().single();
+            const { data, error } = await supabase.from('tasks').update(taskWithType).eq('id', taskToSave.id).select().single();
             if (error) { setError(error.message); } 
             else if (data) {
                 setTasks(prev => prev.map(t => t.id === data.id ? data as Task : t));
             }
         } else { // Create new task
-            const { data, error } = await supabase.from('tasks').insert({ ...taskToSave, user_id: user.id }).select().single();
+            const { data: existingTasks, error: fetchError } = await supabase
+                .from('tasks')
+                .select('task_key')
+                .eq('user_id', user.id);
+
+            if (fetchError) {
+                setError(fetchError.message);
+                return;
+            }
+
+            let maxKeyNum = 0;
+            if (existingTasks) {
+                for (const task of existingTasks) {
+                    if (task.task_key && typeof task.task_key === 'string' && task.task_key.startsWith('TASK-')) {
+                        const numPart = parseInt(task.task_key.split('-')[1], 10);
+                        if (!isNaN(numPart) && numPart > maxKeyNum) {
+                            maxKeyNum = numPart;
+                        }
+                    }
+                }
+            }
+            const taskKey = `TASK-${maxKeyNum + 1}`;
+            
+            const { data, error } = await supabase.from('tasks').insert({ ...taskWithType, task_key: taskKey, user_id: user.id }).select().single();
             if (error) { setError(error.message); }
             else if (data) {
                 setTasks(prev => [...prev, data as Task]);
@@ -74,6 +125,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({ user }) => {
         }
         handleCloseModal();
     };
+
 
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>, taskId: string) => {
         e.dataTransfer.setData('taskId', taskId);
@@ -99,8 +151,33 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({ user }) => {
         }
     };
 
+    const buildTaskTree = (taskList: Task[]): Task[] => {
+        const taskMap = new Map<string, Task>();
+        const rootTasks: Task[] = [];
+
+        taskList.forEach(task => {
+            taskMap.set(task.id, { ...task, children: [] });
+        });
+
+        taskList.forEach(task => {
+            const currentTask = taskMap.get(task.id);
+            if (currentTask) {
+                if (task.parent_id && taskMap.has(task.parent_id)) {
+                    const parentTask = taskMap.get(task.parent_id);
+                    parentTask?.children?.push(currentTask);
+                } else {
+                    rootTasks.push(currentTask);
+                }
+            }
+        });
+
+        return rootTasks;
+    };
+
+
     const renderColumn = (status: TaskStatus) => {
         const columnTasks = tasks.filter(task => task.status === status);
+        const taskTree = buildTaskTree(columnTasks);
         const { bg, text } = columnStyles[status];
         
         return (
@@ -113,8 +190,8 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({ user }) => {
             >
                 <h2 className={`font-bold text-lg mb-4 px-2 ${text}`}>{columnNames[status]} ({columnTasks.length})</h2>
                 <div className="flex-1 space-y-3 overflow-y-auto pr-1">
-                    {columnTasks.map(task => (
-                        <TaskCard key={task.id} task={task} onDragStart={handleDragStart} onClick={() => handleOpenModal(task)} />
+                    {taskTree.map(task => (
+                        <TaskGroup key={task.id} task={task} level={0} onDragStart={handleDragStart} onClick={handleOpenModal} />
                     ))}
                 </div>
                 {status === 'todo' && (
@@ -127,11 +204,30 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({ user }) => {
     };
 
     if (isLoading) {
-        return <div className="p-6 text-center">Yükleniyor...</div>;
+        return (
+            <div className="flex items-center justify-center h-full">
+                <div className="flex flex-col items-center">
+                    <svg className="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <p className="mt-4 text-slate-600 dark:text-slate-400">Backlog yükleniyor...</p>
+                </div>
+            </div>
+        );
     }
     
     if (error) {
         return <div className="p-6 text-center text-red-500">Hata: {error}</div>;
+    }
+
+    if (tasks.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full text-center text-slate-500 dark:text-slate-400 p-4">
+                <ClipboardList className="w-16 h-16 text-slate-400 mb-4" strokeWidth={1} />
+                <h3 className="text-xl font-semibold text-slate-700 dark:text-slate-300">Backlog'unuz Henüz Boş</h3>
+                <p className="mt-2 max-w-lg">
+                    'Analist' görünümüne geçip bir sohbet başlattıktan sonra, AI'dan iş analizi dokümanınıza göre proje görevleri oluşturmasını isteyerek backlog'unuzu doldurabilirsiniz.
+                </p>
+            </div>
+        );
     }
 
     return (
@@ -143,6 +239,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({ user }) => {
                     onClose={handleCloseModal}
                     onSave={handleSaveTask}
                     task={selectedTask}
+                    allTasks={tasks}
                 />
             )}
         </div>

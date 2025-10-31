@@ -1,7 +1,7 @@
 import React from 'react';
-import type { User, Theme, AppMode, Conversation } from '../types';
+import type { User, Theme, AppMode } from '../types';
 import { ThemeSwitcher } from './ThemeSwitcher';
-import { Menu, Share2 } from 'lucide-react';
+import { Menu, Share2, PanelRightOpen, PanelRightClose, LoaderCircle, CheckCircle, AlertCircle, TrendingUp } from 'lucide-react';
 
 interface HeaderProps {
     user: User;
@@ -12,8 +12,11 @@ interface HeaderProps {
     onAppModeChange: (mode: AppMode) => void;
     isSidebarOpen: boolean;
     onToggleSidebar: () => void;
-    activeConversation: Conversation | null;
     onOpenShareModal: () => void;
+    isWorkspaceVisible: boolean;
+    onToggleWorkspace: () => void;
+    saveStatus: 'idle' | 'saving' | 'saved' | 'error';
+    maturityScore: { score: number; justification: string } | null;
     isProcessing: boolean;
 }
 
@@ -33,6 +36,37 @@ const Logo = () => (
     </div>
 );
 
+const SaveStatusIndicator: React.FC<{ status: 'idle' | 'saving' | 'saved' | 'error' }> = ({ status }) => {
+    if (status === 'idle') return null;
+
+    const statusConfig = {
+        saving: { icon: <LoaderCircle className="h-4 w-4 animate-spin" />, text: 'Kaydediliyor...', color: 'text-slate-500 dark:text-slate-400' },
+        saved: { icon: <CheckCircle className="h-4 w-4" />, text: 'Kaydedildi', color: 'text-emerald-500 dark:text-emerald-400' },
+        error: { icon: <AlertCircle className="h-4 w-4" />, text: 'Kaydetme hatası', color: 'text-red-500 dark:text-red-400' }
+    };
+    
+    const { icon, text, color } = statusConfig[status];
+
+    return (
+        <div className={`flex items-center gap-2 text-xs font-medium ${color} transition-opacity duration-300`}>
+            {icon}
+            <span>{text}</span>
+        </div>
+    );
+};
+
+const MaturityScoreIndicator: React.FC<{ score: number; justification: string }> = ({ score, justification }) => {
+    return (
+        <div 
+            title={justification}
+            className="flex items-center gap-2 text-xs font-medium text-sky-600 dark:text-sky-400 animate-fade-in-up"
+        >
+            <TrendingUp className="h-4 w-4" />
+            <span>Olgunluk Puanı Güncellendi: <strong>{score}/100</strong></span>
+        </div>
+    );
+};
+
 
 export const Header: React.FC<HeaderProps> = ({
     user,
@@ -43,8 +77,11 @@ export const Header: React.FC<HeaderProps> = ({
     onAppModeChange,
     isSidebarOpen,
     onToggleSidebar,
-    activeConversation,
     onOpenShareModal,
+    isWorkspaceVisible,
+    onToggleWorkspace,
+    saveStatus,
+    maturityScore,
     isProcessing
 }) => {
     const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
@@ -52,7 +89,6 @@ export const Header: React.FC<HeaderProps> = ({
 
      React.useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            // FIX: Corrected a typo in the variable name from `userMenu-ref` to `userMenuRef`.
             if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
                 setIsUserMenuOpen(false);
             }
@@ -67,43 +103,56 @@ export const Header: React.FC<HeaderProps> = ({
                 <button onClick={onToggleSidebar} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700">
                    <Menu className="h-6 w-6 text-slate-600 dark:text-slate-400" />
                 </button>
+                {appMode === 'analyst' && (
+                    <button 
+                        onClick={onToggleWorkspace} 
+                        title="Çalışma Alanını Göster/Gizle"
+                        className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 transition-colors"
+                    >
+                        {isWorkspaceVisible ? <PanelRightClose className="h-5 w-5" /> : <PanelRightOpen className="h-5 w-5" />}
+                    </button>
+                )}
                  <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
                     <Logo />
                 </div>
             </div>
 
             <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+                 {maturityScore ? (
+                    <MaturityScoreIndicator score={maturityScore.score} justification={maturityScore.justification} />
+                ) : (
+                    <SaveStatusIndicator status={saveStatus} />
+                )}
                  <div className="flex items-center gap-2 sm:gap-4">
                     <div className="flex items-center p-1 bg-slate-200 dark:bg-slate-700 rounded-lg">
                         <button onClick={() => onAppModeChange('analyst')} className={`px-2 py-1 text-xs sm:px-3 sm:py-1 sm:text-sm font-semibold rounded-md transition-colors ${appMode === 'analyst' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>
                             Analist
                         </button>
-                        <button onClick={() => onAppModeChange('board')} className={`px-2 py-1 text-xs sm:px-3 sm:py-1 sm:text-sm font-semibold rounded-md transition-colors ${appMode === 'board' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>
-                            Pano
+                        <button onClick={() => onAppModeChange('backlog')} className={`px-2 py-1 text-xs sm:px-3 sm:py-1 sm:text-sm font-semibold rounded-md transition-colors ${appMode === 'backlog' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>
+                            Backlog
                         </button>
                     </div>
                 </div>
+
                 
                 <ThemeSwitcher theme={theme} onThemeChange={onThemeChange} />
 
                 <div className="relative" ref={userMenuRef}>
                     <button onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} className="w-8 h-8 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center justify-center font-bold text-slate-600 dark:text-slate-300">
-                        {user.email?.[0].toUpperCase()}
+                        {user.email?.[0]?.toUpperCase()}
                     </button>
                     {isUserMenuOpen && (
                         <div className="origin-top-right absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-30">
                             <div className="px-4 py-2 text-sm text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
                                 <p className="font-semibold truncate">{user.email}</p>
                             </div>
-                            {activeConversation && appMode === 'analyst' && (
-                                <button
-                                    onClick={() => { onOpenShareModal(); setIsUserMenuOpen(false); }}
-                                    className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
-                                >
-                                    <Share2 className="h-4 w-4" />
-                                    Paylaş
-                                </button>
-                            )}
+                            <button
+                                onClick={() => { onOpenShareModal(); setIsUserMenuOpen(false); }}
+                                className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                            >
+                                <Share2 className="h-4 w-4" />
+                                Paylaş
+                            </button>
                             <button
                                 onClick={onLogout}
                                 className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"

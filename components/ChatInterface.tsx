@@ -52,12 +52,16 @@ declare global {
 }
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Paperclip, Mic, X, Send } from 'lucide-react';
+import { Paperclip, Mic, X, Send, StopCircle, Bot } from 'lucide-react';
 
 interface ChatInterfaceProps {
     isLoading: boolean;
     onSendMessage: (reply: string) => void;
     activeConversationId: string | null;
+    onStopGeneration: () => void;
+    initialText?: string | null;
+    isExpertMode: boolean;
+    onExpertModeChange: (isOn: boolean) => void;
 }
 
 // Helper to read file content as a promise
@@ -70,9 +74,10 @@ const readFileAsText = (file: File): Promise<string> => {
     });
 };
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendMessage, activeConversationId }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendMessage, activeConversationId, onStopGeneration, initialText, isExpertMode, onExpertModeChange }) => {
     const [input, setInput] = useState('');
     const [attachedFile, setAttachedFile] = useState<File | null>(null);
+    const [isModeSelectorOpen, setIsModeSelectorOpen] = useState(false);
     
     // --- Speech Recognition State ---
     const [isListening, setIsListening] = useState(false);
@@ -81,6 +86,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const modeSelectorRef = useRef<HTMLDivElement>(null);
+
+    // Effect for closing mode selector on outside click
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (modeSelectorRef.current && !modeSelectorRef.current.contains(event.target as Node)) {
+                setIsModeSelectorOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     // Effect for initializing and managing Speech Recognition
     useEffect(() => {
@@ -126,11 +143,26 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
         };
     }, []);
     
-    // Clear input and file when conversation changes
+    // Effect to handle editing a message
     useEffect(() => {
-        setInput('');
-        setAttachedFile(null);
-    }, [activeConversationId]);
+        if (initialText) {
+            setInput(initialText);
+            textareaRef.current?.focus();
+            // Move cursor to the end
+            setTimeout(() => {
+                textareaRef.current?.setSelectionRange(initialText.length, initialText.length);
+            }, 0);
+        }
+    }, [initialText]);
+
+    // Clear input and file when conversation changes, but not if there's an initial text for editing
+    useEffect(() => {
+        if (!initialText) {
+            setInput('');
+            setAttachedFile(null);
+        }
+    }, [activeConversationId, initialText]);
+
 
     // Auto-resize textarea
     useEffect(() => {
@@ -197,6 +229,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
             handleSubmit(e as any);
         }
     }
+    
+    const handleModeChange = (isExpert: boolean) => {
+        onExpertModeChange(isExpert);
+        setIsModeSelectorOpen(false);
+    }
 
     return (
         <div className="w-full bg-white dark:bg-slate-800 rounded-lg p-2 space-y-2">
@@ -219,15 +256,38 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
                     accept=".txt,.md"
                  />
                  <div className="relative flex-1 flex items-end">
-                    <button 
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        title="Dosya Ekle"
-                        disabled={isLoading}
-                        className="absolute left-3 bottom-3 p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
-                    >
-                         <Paperclip className="h-5 w-5" />
-                    </button>
+                    <div className="absolute left-3 bottom-3 flex items-center gap-2">
+                         <button 
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            title="Dosya Ekle"
+                            disabled={isLoading}
+                            className="p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
+                        >
+                             <Paperclip className="h-5 w-5" />
+                        </button>
+                         <div ref={modeSelectorRef} className="relative">
+                              <button 
+                                type="button"
+                                onClick={() => setIsModeSelectorOpen(!isModeSelectorOpen)}
+                                title="Modu Değiştir"
+                                disabled={isLoading}
+                                className={`p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors ${isExpertMode ? 'text-indigo-500' : 'text-slate-500 dark:text-slate-400'}`}
+                            >
+                                 <Bot className="h-5 w-5" />
+                            </button>
+                            {isModeSelectorOpen && (
+                                <div className="origin-bottom-left absolute bottom-full left-0 mb-2 w-48 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-30 animate-fade-in-up" style={{animationDuration: '0.1s'}}>
+                                    <button onClick={() => handleModeChange(false)} className={`w-full text-left flex items-center px-3 py-2 text-sm ${!isExpertMode ? 'bg-indigo-50 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-200' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+                                        Analist Modu
+                                    </button>
+                                     <button onClick={() => handleModeChange(true)} className={`w-full text-left flex items-center px-3 py-2 text-sm ${isExpertMode ? 'bg-indigo-50 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-200' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+                                        Exper Modu
+                                    </button>
+                                </div>
+                            )}
+                         </div>
+                    </div>
                     <textarea
                         ref={textareaRef}
                         value={input}
@@ -235,7 +295,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
                         onKeyDown={handleKeyDown}
                         placeholder="Bir iş analisti gibi sorun, Asisty yanıtlasın..."
                         disabled={isLoading}
-                        className="w-full p-3 pl-12 pr-12 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-slate-100 dark:bg-slate-700 disabled:opacity-50 transition-colors resize-none overflow-y-auto"
+                        className="w-full p-3 pl-20 pr-12 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-slate-100 dark:bg-slate-700 disabled:opacity-50 transition-colors resize-none overflow-y-auto"
                         rows={2}
                         style={{ lineHeight: '1.5rem', maxHeight: '180px' }}
                     />
@@ -249,14 +309,25 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
                         <Mic className="h-5 w-5" />
                     </button>
                  </div>
-                <button
-                    type="submit"
-                    disabled={isLoading || (!input.trim() && !attachedFile)}
-                    className="self-end p-3 bg-indigo-600 text-white font-semibold rounded-xl shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-75 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200 flex-shrink-0"
-                    aria-label="Mesajı Gönder"
-                >
-                     <Send className="h-6 w-6" />
-                </button>
+                 {isLoading ? (
+                     <button
+                        type="button"
+                        onClick={onStopGeneration}
+                        className="self-end p-3 bg-red-600 text-white font-semibold rounded-xl shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-75 transition duration-200 flex-shrink-0"
+                        aria-label="Üretmeyi Durdur"
+                    >
+                         <StopCircle className="h-6 w-6" />
+                    </button>
+                 ) : (
+                    <button
+                        type="submit"
+                        disabled={isLoading || (!input.trim() && !attachedFile)}
+                        className="self-end p-3 bg-indigo-600 text-white font-semibold rounded-xl shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-75 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200 flex-shrink-0"
+                        aria-label="Mesajı Gönder"
+                    >
+                         <Send className="h-6 w-6" />
+                    </button>
+                 )}
             </form>
         </div>
     );

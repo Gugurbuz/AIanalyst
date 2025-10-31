@@ -50,8 +50,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeConversat
         if (!searchTerm.trim()) {
             return conversations;
         }
+        // Add a check for `conv` to prevent crashes on malformed data
         return conversations.filter(conv =>
-            (conv.title || '').toLowerCase().includes(searchTerm.toLowerCase())
+            conv && (conv.title || '').toLowerCase().includes(searchTerm.toLowerCase())
         );
     }, [conversations, searchTerm]);
 
@@ -98,7 +99,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeConversat
             {isOpen && (
                 <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setIsOpen(false)} aria-hidden="true"></div>
             )}
-            <aside ref={sidebarRef} className={`fixed inset-y-0 left-0 z-50 w-72 bg-slate-50 dark:bg-slate-800 border-r dark:border-slate-700 flex flex-col flex-shrink-0 h-screen transition-transform duration-300 ease-in-out
+            <aside ref={sidebarRef} className={`absolute inset-y-0 left-0 z-40 w-72 bg-slate-50 dark:bg-slate-800 border-r dark:border-slate-700 flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out
                 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                 <div className="flex flex-col flex-1 overflow-hidden">
                     <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700 h-16 flex-shrink-0">

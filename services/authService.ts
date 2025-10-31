@@ -61,10 +61,10 @@ export const authService = {
 
                 if (signupError) {
                     // If signup fails because the user already exists, it confirms our initial login failed due to a wrong password.
-                    if (signupError.message.includes('User already registered')) {
+                    if (signupError.message && signupError.message.includes('User already registered')) {
                         throw new Error(`Test kullanıcısı girişi başarısız. Geliştirici Panelinde belirtilen şifre yanlış görünüyor. Lütfen şifreyi kontrol edin.`);
                     }
-                    if (signupError.message.toLowerCase().includes('invalid email')) {
+                    if (signupError.message && signupError.message.toLowerCase().includes('invalid email')) {
                          throw new Error(`'${testUserEmail}' e-postası geçersiz. Lütfen Geliştirici Panelinden farklı bir e-posta ayarlayın.`);
                     }
                     // For any other signup error, re-throw it.

@@ -5,18 +5,13 @@ interface ShareModalProps {
     isOpen: boolean;
     onClose: () => void;
     conversation: Conversation | null;
-    onUpdateShareSettings: (conversationId: string, updates: { is_shared: boolean }) => Promise<void>;
+    onUpdateShareSettings: (conversationId: string, updates: { is_shared: boolean }) => void;
 }
 
 export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, conversation, onUpdateShareSettings }) => {
-    const [isShared, setIsShared] = useState(conversation?.is_shared || false);
     const [isLoading, setIsLoading] = useState(false);
     const [copySuccess, setCopySuccess] = useState('');
 
-    useEffect(() => {
-        setIsShared(conversation?.is_shared || false);
-    }, [conversation?.is_shared]);
-    
     useEffect(() => {
         if (copySuccess) {
             const timer = setTimeout(() => setCopySuccess(''), 2000);
@@ -27,13 +22,14 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, convers
     if (!isOpen || !conversation) return null;
     
     const shareLink = `${window.location.origin}${window.location.pathname}?share=${conversation.share_id}`;
+    const isShared = conversation.is_shared;
 
-    const handleToggleSharing = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleToggleSharing = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newIsShared = e.target.checked;
         setIsLoading(true);
-        await onUpdateShareSettings(conversation.id, { is_shared: newIsShared });
-        // The parent component will update the prop, which will trigger the useEffect
-        setIsShared(newIsShared);
+        // This now just updates the parent's state. The auto-save feature will handle persistence.
+        onUpdateShareSettings(conversation.id, { is_shared: newIsShared });
+        // The loading state is minimal as the UI update is now optimistic.
         setIsLoading(false);
     };
 

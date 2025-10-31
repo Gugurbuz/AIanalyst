@@ -29,7 +29,7 @@ const parseMarkdown = (text: string, highlightedLines: number[], rephrasingText:
     
     const processInline = (line: string) => {
         let processed = line
-            .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-slate-900 dark:text-slate-100">$1</strong>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/<br\s*\/?>/gi, '<br>');
         
         // This handles the loading pulse while waiting for the AI
@@ -61,7 +61,7 @@ const parseMarkdown = (text: string, highlightedLines: number[], rephrasingText:
             if (inTable) html += '</tbody></table></div>'; 
             
             const headers = line.split('|').slice(1, -1).map(h => h.trim());
-            html += `${startTag}<div class="overflow-x-auto my-5"><table class="w-full text-sm border-collapse border border-slate-300 dark:border-slate-600">
+            html += `${startTag}<div class="overflow-x-auto my-5"><table class="w-full text-sm border-collapse border border-slate-300 dark:border-slate-600 table-fixed">
                         <thead class="bg-slate-100 dark:bg-slate-800">
                             <tr>${headers.map(h => `<th class="p-3 font-semibold text-left border border-slate-300 dark:border-slate-600">${h}</th>`).join('')}</tr>
                         </thead>
@@ -74,7 +74,7 @@ const parseMarkdown = (text: string, highlightedLines: number[], rephrasingText:
         if (inTable) {
             if (isTableLine) {
                 const cells = line.split('|').slice(1, -1).map(c => c.trim());
-                 html += `${startTag}<tr class="border-t border-slate-200 dark:border-slate-700 even:bg-slate-50 dark:even:bg-slate-800/50">${cells.map(c => `<td class="p-3 border border-slate-300 dark:border-slate-600">${processInline(c)}</td>`).join('')}</tr>${endTag}`;
+                 html += `${startTag}<tr class="border-t border-slate-200 dark:border-slate-700 even:bg-slate-50 dark:even:bg-slate-800/50">${cells.map(c => `<td class="p-3 border border-slate-300 dark:border-slate-600 break-words">${processInline(c)}</td>`).join('')}</tr>${endTag}`;
                 continue;
             } else {
                 html += '</tbody></table></div>';
@@ -112,14 +112,14 @@ const parseMarkdown = (text: string, highlightedLines: number[], rephrasingText:
 
         if (line.startsWith('- ') || line.startsWith('* ')) {
             if (inOrderedList) closeLists();
-            if (!inUnorderedList) { html += '<ul class="list-disc space-y-1 pl-6">'; inUnorderedList = true; }
+            if (!inUnorderedList) { html += '<ul>'; inUnorderedList = true; }
             html += `${startTag}<li>${processInline(line.substring(2))}</li>${endTag}`;
             continue;
         }
 
         if (/^\d+\.\s/.test(line)) {
             if (inUnorderedList) closeLists();
-            if (!inOrderedList) { html += '<ol class="list-decimal space-y-1 pl-6">'; inOrderedList = true; }
+            if (!inOrderedList) { html += '<ol>'; inOrderedList = true; }
             html += `${startTag}<li>${processInline(line.replace(/^\d+\.\s/, ''))}</li>${endTag}`;
             continue;
         }
@@ -127,7 +127,7 @@ const parseMarkdown = (text: string, highlightedLines: number[], rephrasingText:
         closeLists();
 
         if (line.trim() === '---') {
-            html += `${startTag}<hr class="my-6 border-slate-200 dark:border-slate-700"/>${endTag}`;
+            html += `${startTag}<hr/>${endTag}`;
             continue;
         }
         
@@ -150,7 +150,14 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, hig
 
     return (
         <div
-            className="prose prose-slate dark:prose-invert max-w-none prose-h2:mt-6 prose-h2:mb-3 prose-h2:pb-2 prose-h2:border-b prose-h2:border-slate-200 dark:prose-h2:border-slate-700 prose-h3:mt-5 prose-h3:mb-2 prose-p:leading-relaxed prose-ul:my-2 prose-ol:my-2"
+            className="prose prose-slate dark:prose-invert max-w-none 
+                       prose-headings:font-bold prose-headings:tracking-tight 
+                       prose-h2:text-3xl prose-h2:font-extrabold prose-h2:pb-3 prose-h2:mt-10 prose-h2:mb-5 prose-h2:border-b prose-h2:border-slate-200 dark:prose-h2:border-slate-700 
+                       prose-h3:text-xl prose-h3:font-bold prose-h3:mt-8 prose-h3:mb-3
+                       prose-p:leading-relaxed prose-p:mb-5
+                       prose-ul:my-5 prose-ol:my-5 prose-li:my-2
+                       prose-strong:font-semibold prose-strong:text-slate-800 dark:prose-strong:text-slate-200 
+                       prose-hr:my-8 prose-hr:border-slate-200 dark:prose-hr:border-slate-700"
             dangerouslySetInnerHTML={{ __html: htmlContent }}
         />
     );
