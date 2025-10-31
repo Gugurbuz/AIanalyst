@@ -52,6 +52,7 @@ declare global {
 }
 
 import React, { useState, useEffect, useRef } from 'react';
+import { Paperclip, Mic, X, Send } from 'lucide-react';
 
 interface ChatInterfaceProps {
     isLoading: boolean;
@@ -137,8 +138,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
         if (textarea) {
             textarea.style.height = 'auto';
             const scrollHeight = textarea.scrollHeight;
-            // Max height for 5 rows, adjust as needed
-            const maxHeight = 5 * 24; // Assuming line height of 24px
+            // Max height increased to 180px
+            const maxHeight = 180;
             textarea.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
         }
     }, [input]);
@@ -198,14 +199,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
     }
 
     return (
-        <div className="w-full bg-white dark:bg-slate-800 rounded-lg shadow-md p-2 space-y-2">
+        <div className="w-full bg-white dark:bg-slate-800 rounded-lg p-2 space-y-2">
             {attachedFile && (
                 <div className="px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-md flex items-center justify-between text-sm">
                     <span className="font-medium text-slate-700 dark:text-slate-200 truncate pr-2">
                         Ekli: {attachedFile.name}
                     </span>
                     <button onClick={handleRemoveFile} className="p-1 rounded-full hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-400">
-                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                         <X className="h-4 w-4" />
                     </button>
                 </div>
             )}
@@ -225,20 +226,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
                         disabled={isLoading}
                         className="absolute left-3 bottom-3 p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
                     >
-                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M8 4a3 3 0 00-3 3v4a3 3 0 106 0V7a1 1 0 112 0v4a5 5 0 11-10 0V7a5 5 0 0110 0v4a1 1 0 11-2 0V7a3 3 0 00-3-3z" clipRule="evenodd" />
-                        </svg>
+                         <Paperclip className="h-5 w-5" />
                     </button>
                     <textarea
                         ref={textareaRef}
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder="Mesajınızı buraya yazın veya mikrofonu kullanın..."
+                        placeholder="Bir iş analisti gibi sorun, Asisty yanıtlasın..."
                         disabled={isLoading}
                         className="w-full p-3 pl-12 pr-12 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-slate-100 dark:bg-slate-700 disabled:opacity-50 transition-colors resize-none overflow-y-auto"
-                        rows={1}
-                        style={{ lineHeight: '1.5rem', maxHeight: '120px' }}
+                        rows={2}
+                        style={{ lineHeight: '1.5rem', maxHeight: '180px' }}
                     />
                      <button
                         type="button"
@@ -247,20 +246,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
                         disabled={isLoading || !isSpeechSupported}
                         className={`absolute right-3 bottom-3 p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors ${isListening ? 'text-red-500 animate-pulse' : ''}`}
                     >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                           <path d="M7 4a3 3 0 016 0v6a3 3 0 11-6 0V4z" />
-                           <path fillRule="evenodd" d="M10 18a4 4 0 004-4H6a4 4 0 004 4z" clipRule="evenodd" />
-                        </svg>
+                        <Mic className="h-5 w-5" />
                     </button>
                  </div>
                 <button
                     type="submit"
                     disabled={isLoading || (!input.trim() && !attachedFile)}
-                    className="self-end px-4 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-75 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200 flex-shrink-0"
+                    className="self-end p-3 bg-indigo-600 text-white font-semibold rounded-xl shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-75 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200 flex-shrink-0"
+                    aria-label="Mesajı Gönder"
                 >
-                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-                    </svg>
+                     <Send className="h-6 w-6" />
                 </button>
             </form>
         </div>

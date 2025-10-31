@@ -9,6 +9,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <!-- BPMN.io stylesheets -->
+    <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.0.2/dist/assets/diagram-js.css">
+    <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.0.2/dist/assets/bpmn-js.css">
+    <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.0.2/dist/assets/bpmn-font/css/bpmn.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       /* Custom selection color for better UX */
@@ -66,7 +70,47 @@
         0%, 100% { background-color: rgba(129, 140, 248, 0.25); }
         50% { background-color: rgba(129, 140, 248, 0.5); }
       }
+      
+      /* Hide BPMN.io logo */
+      .bjs-powered-by {
+        display: none !important;
+      }
 
+      /* --- Custom BPMN.io Theme Styling --- */
+
+      /* Context Pad (Action Menu on element select) */
+      .djs-context-pad {
+        background-color: #f8fafc; /* slate-50 */
+        border-radius: 8px;
+        border: 1px solid #e2e8f0; /* slate-200 */
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        padding: 4px;
+      }
+      .dark .djs-context-pad {
+        background-color: #1e293b; /* slate-800 */
+        border-color: #334155; /* slate-700 */
+      }
+
+      .djs-context-pad .entry {
+        background-color: #ffffff; /* white */
+        border-radius: 6px;
+        border: 1px solid transparent;
+        color: #475569; /* slate-600 */
+        transition: background-color 0.2s, border-color 0.2s;
+      }
+      .dark .djs-context-pad .entry {
+        background-color: #334155; /* slate-700 */
+        color: #cbd5e1; /* slate-300 */
+      }
+
+      .djs-context-pad .entry:hover {
+        background-color: #f1f5f9; /* slate-100 */
+        border-color: #cbd5e1; /* slate-300 */
+      }
+      .dark .djs-context-pad .entry:hover {
+        background-color: #475569; /* slate-600 */
+        border-color: #64748b; /* slate-500 */
+      }
     </style>
     <script>
       tailwind.config = {
@@ -132,7 +176,9 @@
     "react-zoom-pan-pinch": "https://aistudiocdn.com/react-zoom-pan-pinch@^3.6.0",
     "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.44.4",
     "react-simple-code-editor": "https://aistudiocdn.com/react-simple-code-editor@^0.13.1",
-    "uuid": "https://aistudiocdn.com/uuid@^13.0.0"
+    "uuid": "https://aistudiocdn.com/uuid@^13.0.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.418.0",
+    "docx": "https://aistudiocdn.com/docx@^8.5.0"
   }
 }
 </script>
@@ -140,6 +186,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-mermaid.min.js"></script>
+<!-- BPMN.io Modeler -->
+<script src="https://unpkg.com/bpmn-js@17.0.2/dist/bpmn-modeler.development.js"></script>
 </head>
   <body class="bg-slate-100 dark:bg-slate-900">
     <div id="root"></div>

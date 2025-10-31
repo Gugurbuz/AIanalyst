@@ -17,6 +17,7 @@ import { DocumentsModal } from './components/DocumentsModal';
 import { NewAnalysisModal } from './components/NewAnalysisModal'; // New
 import { SAMPLE_ANALYSIS_DOCUMENT, ANALYSIS_TEMPLATES, TEST_SCENARIO_TEMPLATES } from './templates';
 import type { User, Conversation, Message, Theme, AppMode, GeminiModel, GeneratedDocs, FeedbackItem } from './types';
+import { FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles } from 'lucide-react';
 
 interface AppProps {
   user: User;
@@ -25,18 +26,18 @@ interface AppProps {
 
 // --- Icons for the new smart button ---
 const NextActionIcons = {
-    DEEPEN: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" /></svg>,
-    CREATE_ANALYSIS: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.414L14.586 5A2 2 0 0115 5.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" /></svg>,
-    CREATE_VIZ: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" /><path d="M10 9a1 1 0 00-1 1v1a1 1 0 102 0v-1a1 1 0 00-1-1z" /><path d="M3 11a1 1 0 011-1h2a1 1 0 110 2H4a1 1 0 01-1-1z" /><path d="M13 11a1 1 0 011-1h2a1 1 0 110 2h-2a1 1 0 01-1-1z" /></svg>,
-    CREATE_TESTS: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>,
-    CREATE_TASKS: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" /></svg>,
-    EVALUATE_DOC: <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" /></svg>,
+    DEEPEN: <Sparkles className="h-5 w-5" />,
+    CREATE_ANALYSIS: <FileText className="h-5 w-5" />,
+    CREATE_VIZ: <GanttChartSquare className="h-5 w-5" />,
+    CREATE_TESTS: <Beaker className="h-5 w-5" />,
+    CREATE_TASKS: <PlusSquare className="h-5 w-5" />,
+    EVALUATE_DOC: <Search className="h-5 w-5" />,
 };
 
 
 const useNextBestAction = (
     conversation: Conversation | null,
-    onGenerateDoc: (type: 'analysis' | 'test' | 'viz') => void,
+    onGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => void,
     onGenerateTasks: () => void,
     onSendMessage: (content: string, isSystemMessage?: boolean) => void,
     onEvaluateDocument: () => void
@@ -136,6 +137,7 @@ const useNextBestAction = (
 };
 
 interface AnalystViewProps {
+    user: User;
     isLoadingConversations: boolean;
     activeConversation: Conversation | null;
     isProcessing: boolean;
@@ -150,15 +152,22 @@ interface AnalystViewProps {
     nextAction: {
         label: string;
         action: () => void;
-        // FIX: Replaced `JSX.Element` with `React.ReactElement` to resolve the 'Cannot find namespace JSX' TypeScript error.
         icon: React.ReactElement;
         disabled: boolean;
         tooltip?: string;
     };
 }
 
+const WelcomeLogoIcon = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className={className} aria-hidden="true">
+      <path className="fill-slate-400 dark:fill-slate-600" d="M50 5L0 95h25l25-50 25 50h25L50 5z"/>
+      <circle className="fill-slate-300 dark:fill-slate-500" cx="50" cy="58" r="10"/>
+    </svg>
+);
+
 
 const AnalystView: React.FC<AnalystViewProps> = ({
+    user,
     isLoadingConversations,
     activeConversation,
     isProcessing,
@@ -179,10 +188,7 @@ const AnalystView: React.FC<AnalystViewProps> = ({
     if (!activeConversation) {
         return (
             <div className="h-full flex flex-col items-center justify-center p-4 text-center">
-                <svg width="64" height="64" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="text-slate-400 dark:text-slate-600 mb-4">
-                    <path fill="currentColor" className="text-indigo-600/50 dark:text-indigo-500/50" d="M50 5L0 95h25l25-50 25 50h25L50 5z"/>
-                    <circle fill="currentColor" className="text-indigo-300/50 dark:text-indigo-400/50" cx="50" cy="58" r="10"/>
-                </svg>
+                <WelcomeLogoIcon className="w-16 h-16 mb-4" />
                 <h2 className="text-2xl font-bold text-slate-700 dark:text-slate-300">Asisty.ai'ye Hoş Geldiniz</h2>
                 <p className="mt-2 max-w-lg text-slate-500 dark:text-slate-400">
                     Yeni bir analiz başlatmak için kenar çubuğundaki butonu kullanın veya mevcut bir sohbeti seçin.
@@ -211,6 +217,7 @@ const AnalystView: React.FC<AnalystViewProps> = ({
                            <PromptSuggestions onSelectPrompt={(p) => onSendMessage(p)} />
                         ) : (
                            <ChatMessageHistory
+                                user={user}
                                 chatHistory={activeConversation.messages}
                                 isLoading={isProcessing && !generatingDocType}
                                 onFeedbackUpdate={(messageId, feedbackData) => {
@@ -247,9 +254,9 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     
     // Model & Config State
     const [geminiModel, setGeminiModel] = useState<GeminiModel>(() => (localStorage.getItem('geminiModel') as GeminiModel) || 'gemini-2.5-flash');
-    const [isThinkingMode, setIsThinkingMode] = useState(false);
     const [selectedTemplates, setSelectedTemplates] = useState({ analysis: 'default-analysis', test: 'default-test' });
     const [activeDocTab, setActiveDocTab] = useState<'analysis' | 'viz' | 'test' | 'maturity' | 'traceability'>('analysis');
+    const [diagramType, setDiagramType] = useState<'mermaid' | 'bpmn'>('mermaid');
 
     // Modal States
     const [isNewAnalysisModalOpen, setIsNewAnalysisModalOpen] = useState(false); // New
@@ -345,9 +352,9 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 user_id: user.id, 
                 title: 'Yeni Analiz',
                 messages: [
-                    { id: `msg-${Date.now()}`, role: 'assistant', content: "Harika, başlayalım! Bu projenin ana hedefini veya çözmek istediğiniz sorunu kısaca anlatır mısınız?" }
+                    { id: `msg-${Date.now()}`, role: 'assistant', content: "Harika, başlayalım! Bu projenin ana hedefini veya çözmek istediğiniz sorunu kısaca anlatır mısınız?", timestamp: new Date().toISOString() }
                 ],
-                generatedDocs: { analysisDoc: SAMPLE_ANALYSIS_DOCUMENT, testScenarios: '', visualization: '', traceabilityMatrix: '', maturityReport: null }
+                generatedDocs: { analysisDoc: SAMPLE_ANALYSIS_DOCUMENT, testScenarios: '', visualization: '', visualizationType: 'mermaid', traceabilityMatrix: '', maturityReport: null }
             })
             .select()
             .single();
@@ -374,6 +381,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                     analysisDoc: documentContent, 
                     testScenarios: '', 
                     visualization: '',
+                    visualizationType: 'mermaid',
                     traceabilityMatrix: '',
                     maturityReport: null 
                 }
@@ -419,7 +427,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
      const handleSendMessage = async (content: string, isSystemMessage: boolean = false) => {
         if (!activeConversation) return;
         
-        const newUserMessage: Message = { id: `msg-${Date.now()}`, role: 'user', content };
+        const newUserMessage: Message = { id: `msg-${Date.now()}`, role: 'user', content, timestamp: new Date().toISOString() };
         const updatedMessages = isSystemMessage ? activeConversation.messages : [...activeConversation.messages, newUserMessage];
         
         // Don't show system messages in history, but send them to AI
@@ -430,13 +438,10 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         setIsProcessing(true);
         setError(null);
         
-        // FIX: Create a temporary message list for the API call to handle system messages
-        // that don't appear in the UI, preventing an empty `contents` error.
         const messagesForApi = isSystemMessage
-            ? [...activeConversation.messages, { id: `sys-${Date.now()}`, role: 'user' as const, content }]
+            ? [...activeConversation.messages, { id: `sys-${Date.now()}`, role: 'user' as const, content, timestamp: new Date().toISOString() }]
             : updatedMessages;
         
-        // Defensive check to ensure we don't send an empty request
         if (messagesForApi.filter(msg => msg.role === 'user' || msg.role === 'assistant').length === 0) {
             setError("API'ye gönderilecek geçerli bir mesaj bulunamadı.");
             setIsProcessing(false);
@@ -450,18 +455,18 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 handleUpdateConversation(activeConversation.id, { title: newTitle });
             }
             
-            const modelToUse = isThinkingMode ? 'gemini-2.5-pro' : geminiModel;
-            const modelConfig = isThinkingMode ? { thinkingConfig: { thinkingBudget: 32768 } } : undefined;
+            const modelToUse = geminiModel;
+            const modelConfig = undefined;
             const templates = { analysis: selectedTemplates.analysis, test: selectedTemplates.test };
             const result = await geminiService.processAnalystMessage(messagesForApi, activeConversation.generatedDocs, templates, modelToUse, modelConfig);
 
             if (result.type === 'chat') {
-                const newAssistantMessage: Message = { id: `msg-${Date.now() + 1}`, role: 'assistant', content: result.content };
+                const newAssistantMessage: Message = { id: `msg-${Date.now() + 1}`, role: 'assistant', content: result.content, timestamp: new Date().toISOString() };
                 handleUpdateConversation(activeConversation.id, { messages: [...updatedMessages, newAssistantMessage] });
             } else if (result.type === 'doc_update') {
                 const { docKey, content: newContent, confirmation } = result;
                 const newDocs: Partial<GeneratedDocs> = { ...activeConversation.generatedDocs, [docKey]: newContent };
-                const newAssistantMessage: Message = { id: `msg-${Date.now() + 1}`, role: 'assistant', content: confirmation };
+                const newAssistantMessage: Message = { id: `msg-${Date.now() + 1}`, role: 'assistant', content: confirmation, timestamp: new Date().toISOString() };
                 await handleUpdateConversation(activeConversation.id, { messages: [...updatedMessages, newAssistantMessage], generatedDocs: newDocs as GeneratedDocs });
                 
                 const tabMap: { [key in keyof GeneratedDocs]?: 'analysis' | 'viz' | 'test' } = {
@@ -477,7 +482,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         } catch (e) {
             const err = e instanceof Error ? e.message : 'Bir hata oluştu.';
             setError(err);
-            const errorMessage: Message = { id: `err-${Date.now()}`, role: 'system', content: `Hata: ${err}` };
+            const errorMessage: Message = { id: `err-${Date.now()}`, role: 'system', content: `Hata: ${err}`, timestamp: new Date().toISOString() };
             handleUpdateConversation(activeConversation.id, { messages: [...updatedMessages, errorMessage] });
         } finally {
             setIsProcessing(false);
@@ -491,7 +496,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         setGeneratingDocType('maturity');
         setError(null);
         try {
-             const modelToUse = isThinkingMode ? 'gemini-2.5-pro' : geminiModel;
+             const modelToUse = geminiModel;
              const report = await geminiService.checkAnalysisMaturity(activeConversation.messages, modelToUse);
              const newDocs = { ...activeConversation.generatedDocs, maturityReport: report };
              await handleUpdateConversation(activeConversation.id, { generatedDocs: newDocs });
@@ -511,29 +516,31 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         await handleSendMessage(systemMessage, true);
     };
 
-    const handleGenerateDoc = async (type: 'analysis' | 'test' | 'viz' | 'traceability') => {
+    const handleGenerateDoc = async (type: 'analysis' | 'test' | 'viz' | 'traceability', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => {
         if (!activeConversation) return;
         setIsProcessing(true);
         setGeneratingDocType(type);
         setError(null);
         
         try {
-            let newContent = '';
-            const modelToUse = isThinkingMode ? 'gemini-2.5-pro' : geminiModel;
-            const modelConfig = isThinkingMode ? { thinkingConfig: { thinkingBudget: 32768 } } : undefined;
+            const modelToUse = geminiModel;
+            const modelConfig = undefined;
             const currentDocs = activeConversation.generatedDocs;
 
             if (type === 'analysis') {
-                newContent = await geminiService.generateAnalysisDocument(activeConversation.messages, selectedTemplates.analysis, modelToUse, modelConfig);
+                const templateToUse = newTemplateId || selectedTemplates.analysis;
+                const newContent = await geminiService.generateAnalysisDocument(activeConversation.messages, templateToUse, modelToUse, modelConfig);
                 await handleUpdateConversation(activeConversation.id, { generatedDocs: { ...currentDocs, analysisDoc: newContent } });
             } else if (type === 'test') {
-                newContent = await geminiService.generateTestScenarios(currentDocs.analysisDoc, selectedTemplates.test, modelToUse, modelConfig);
+                const templateToUse = newTemplateId || selectedTemplates.test;
+                const newContent = await geminiService.generateTestScenarios(currentDocs.analysisDoc, templateToUse, modelToUse, modelConfig);
                 await handleUpdateConversation(activeConversation.id, { generatedDocs: { ...currentDocs, testScenarios: newContent } });
             } else if (type === 'viz') {
-                 newContent = await geminiService.generateVisualization(currentDocs.analysisDoc, modelToUse, modelConfig);
-                 await handleUpdateConversation(activeConversation.id, { generatedDocs: { ...currentDocs, visualization: newContent } });
+                 const typeToGenerate = newDiagramType || diagramType;
+                 const newContent = await geminiService.generateDiagram(currentDocs.analysisDoc, typeToGenerate, modelToUse, modelConfig);
+                 await handleUpdateConversation(activeConversation.id, { generatedDocs: { ...currentDocs, visualization: newContent, visualizationType: typeToGenerate } });
             } else if (type === 'traceability') {
-                 newContent = await geminiService.generateTraceabilityMatrix(currentDocs.analysisDoc, currentDocs.testScenarios, modelToUse, modelConfig);
+                 const newContent = await geminiService.generateTraceabilityMatrix(currentDocs.analysisDoc, currentDocs.testScenarios, modelToUse, modelConfig);
                  await handleUpdateConversation(activeConversation.id, { generatedDocs: { ...currentDocs, traceabilityMatrix: newContent } });
             }
              const newTab = type === 'analysis' ? 'analysis' : type === 'viz' ? 'viz' : type === 'test' ? 'test' : 'traceability';
@@ -565,6 +572,28 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             setInlineModificationState(null);
         }
     };
+    
+    const handleModifyDiagram = async (userPrompt: string) => {
+        if (!activeConversation) return;
+        setIsProcessing(true);
+        setGeneratingDocType('viz');
+        setError(null);
+        try {
+            const currentCode = activeConversation.generatedDocs.visualization;
+            const currentType = activeConversation.generatedDocs.visualizationType || 'mermaid';
+            const newCode = await geminiService.modifyDiagram(currentCode, userPrompt, geminiModel, currentType);
+            const currentDocs = activeConversation.generatedDocs;
+            handleUpdateConversation(activeConversation.id, {
+                generatedDocs: { ...currentDocs, visualization: newCode }
+            });
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Diyagram düzenlenemedi.');
+        } finally {
+            setIsProcessing(false);
+            setGeneratingDocType(null);
+        }
+    };
+
 
     const handleSuggestNextFeature = async () => {
         if (!activeConversation || !activeConversation.generatedDocs.analysisDoc) return;
@@ -572,8 +601,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         setIsProcessing(true);
         setError(null);
         try {
-            const modelToUse = isThinkingMode ? 'gemini-2.5-pro' : geminiModel;
-            const modelConfig = isThinkingMode ? { thinkingConfig: { thinkingBudget: 32768 } } : undefined;
+            const modelToUse = geminiModel;
+            const modelConfig = undefined;
 
             const suggestion = await geminiService.suggestNextFeature(
                 activeConversation.generatedDocs.analysisDoc,
@@ -588,7 +617,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         } catch (e) {
             const err = e instanceof Error ? e.message : 'Bir hata oluştu.';
             setError(err);
-            const errorMessage: Message = { id: `err-${Date.now()}`, role: 'system', content: `Hata: ${err}` };
+            const errorMessage: Message = { id: `err-${Date.now()}`, role: 'system', content: `Hata: ${err}`, timestamp: new Date().toISOString() };
             handleUpdateConversation(activeConversation.id, { messages: [...activeConversation.messages, errorMessage] });
             setIsProcessing(false); // Ensure processing is stopped on error
         }
@@ -629,6 +658,23 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         }
     };
 
+    const handleTemplateChange = {
+        analysis: (e: React.ChangeEvent<HTMLSelectElement>) => {
+            const newTemplateId = e.target.value;
+            setSelectedTemplates(prev => ({ ...prev, analysis: newTemplateId }));
+            if (activeConversation?.messages.length) {
+                handleGenerateDoc('analysis', newTemplateId);
+            }
+        },
+        test: (e: React.ChangeEvent<HTMLSelectElement>) => {
+            const newTemplateId = e.target.value;
+            setSelectedTemplates(prev => ({ ...prev, test: newTemplateId }));
+            if (activeConversation?.generatedDocs.analysisDoc) {
+                handleGenerateDoc('test', newTemplateId);
+            }
+        },
+    };
+
 
     const nextBestAction = useNextBestAction(
         activeConversation,
@@ -663,13 +709,12 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                     onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
                     activeConversation={activeConversation}
                     onOpenShareModal={() => setIsShareModalOpen(true)}
-                    isThinkingMode={isThinkingMode}
-                    onThinkingModeChange={setIsThinkingMode}
                     isProcessing={isProcessing || !!inlineModificationState}
                 />
                 <main className="flex-1 overflow-hidden">
                     {appMode === 'analyst' ? (
                         <AnalystView
+                            user={user}
                             isLoadingConversations={isLoadingConversations}
                             activeConversation={activeConversation}
                             isProcessing={isProcessing}
@@ -728,7 +773,6 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                     isGenerating={isProcessing}
                     setIsGenerating={setIsProcessing}
                     model={geminiModel}
-                    isThinkingMode={isThinkingMode}
                 />
             )}
             {isDocumentsModalOpen && activeConversation && (
@@ -740,22 +784,23 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                     generatingDocType={generatingDocType}
                     onUpdateConversation={handleUpdateConversation}
                     onModifySelection={handleModifySelection}
+                    onModifyDiagram={handleModifyDiagram}
                     inlineModificationState={inlineModificationState}
                     onGenerateDoc={handleGenerateDoc}
                     templates={{ analysis: ANALYSIS_TEMPLATES, test: TEST_SCENARIO_TEMPLATES }}
                     selectedTemplates={selectedTemplates}
-                    onTemplateChange={{
-                        analysis: (e) => setSelectedTemplates(prev => ({ ...prev, analysis: e.target.value })),
-                        test: (e) => setSelectedTemplates(prev => ({ ...prev, test: e.target.value })),
-                    }}
+                    onTemplateChange={handleTemplateChange}
                     activeDocTab={activeDocTab}
                     setActiveDocTab={setActiveDocTab}
                     onSelectMaturityQuestion={(q) => { handleSendMessage(q); setIsDocumentsModalOpen(false); }}
                     onRecheckMaturity={handleCheckMaturity}
+                    diagramType={diagramType}
+                    setDiagramType={setDiagramType}
                  />
             )}
             {isLiveSessionModalOpen && activeConversation && (
                 <LiveCoPilotModal
+                    user={user}
                     isOpen={isLiveSessionModalOpen}
                     onClose={() => setIsLiveSessionModalOpen(false)}
                     conversation={activeConversation}
@@ -768,14 +813,14 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                     onSendMessage={handleSendMessage}
                     onUpdateConversation={handleUpdateConversation}
                     onModifySelection={handleModifySelection}
+                    onModifyDiagram={handleModifyDiagram}
                     onGenerateDoc={handleGenerateDoc}
                     templates={{ analysis: ANALYSIS_TEMPLATES, test: TEST_SCENARIO_TEMPLATES }}
-                    onTemplateChange={{
-                        analysis: (e) => setSelectedTemplates(prev => ({ ...prev, analysis: e.target.value })),
-                        test: (e) => setSelectedTemplates(prev => ({ ...prev, test: e.target.value })),
-                    }}
+                    onTemplateChange={handleTemplateChange}
                     onSelectMaturityQuestion={(q) => { handleSendMessage(q); setIsLiveSessionModalOpen(false); }}
                     onRecheckMaturity={handleCheckMaturity}
+                    diagramType={diagramType}
+                    setDiagramType={setDiagramType}
                 />
             )}
         </div>

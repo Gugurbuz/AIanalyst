@@ -75,6 +75,86 @@ export const ANALYSIS_TEMPLATES: Template[] = [
         `
     },
     {
+        id: 'corporate-standard-analysis',
+        name: 'Kurumsal Standart (Word Uyumlu)',
+        prompt: `
+            **GÖREV:** Sen, kurumsal standartlarda iş analizi dokümanları hazırlayan, son derece deneyimli ve titiz bir Kıdemli İş Analistisin. Sağlanan konuşma geçmişini temel alarak, aşağıdaki yapıya ve formata **KESİNLİKLE** bağlı kalarak kapsamlı bir İş Analizi Dokümanı oluştur.
+
+            **FORMATLAMA KURALLARI:**
+            - Çıktı, Markdown formatında olmalıdır.
+            - Ana başlıklar için \`## [Numara]. BAŞLIK\` formatını kullan. Örnek: \`## 1. ANALİZ KAPSAMI\`.
+            - Alt başlıklar için \`### [Numara].[Alt Numara]. Alt Başlık\` formatını kullan. Örnek: \`### 3.1. Detay İş Kuralları\`.
+            - Madde imleri için \`•\` karakterini kullan.
+            - İş kuralları için \`BR-1\`, fonksiyonel gereksinimler için \`FR-1\` gibi kodlamalar kullan.
+            - GWT (Given-When-Then) formatını kabul kriterlerinde kullanmaya özen göster.
+            - Her ana bölüm arasına \`---\` ayıracı koy.
+
+            **DOKÜMAN YAPISI (KESİNLİKLE BU YAPIYI KULLAN):**
+
+            ## 1. ANALİZ KAPSAMI
+            •	**Proje Adı:** [Konuşmadan çıkarılan proje adını yaz]
+            •	**Amaç:** [Projenin temel amacını 1-2 cümleyle özetle]
+            •	**İş Hedefleri:** [Konuşmada belirtilen ölçülebilir hedefleri (KPI, metrik) madde imleriyle listele]
+            •	**Kapsam (In-Scope):** [Proje kapsamında yapılacak ana maddeleri listele]
+            •	**Kapsam Dışı (Out-of-Scope):** [Proje kapsamında **yapılmayacak** olan ilgili maddeleri listele]
+            ---
+            ## 2. KISALTMALAR
+            •	[Konuşmada geçen veya konuyla ilgili teknik/iş kısaltmalarını ve açıklamalarını listele]
+            ---
+            ## 3. İŞ GEREKSİNİMLERİ
+            [İş ihtiyacını ve bu ihtiyacın arkasındaki mantığı özetleyen genel bir paragraf yaz.]
+            ### 3.1. Detay İş Kuralları
+            •	**BR-1:** [İş kuralı 1]
+            •	**BR-2:** [İş kuralı 2]
+            •	...
+            ### 3.2. İş Modeli ve Kullanıcı Gereksinimleri
+            •	**Roller/Personalar:** [Sistemdeki kullanıcı rollerini ve sorumluluklarını listele (Müşteri, Admin vb.)]
+            •	**Senaryolar:** [Temel kullanıcı senaryolarını veya kullanım durumlarını madde imleriyle açıkla]
+            ---
+            ## 4. FONKSİYONEL GEREKSİNİMLER (FR)
+            ### 4.1. Fonksiyonel Gereksinim Maddeleri
+            •	**FR-1 ([Gereksinim Adı]):**
+            •	**Kullanıcı Hikayesi:** Bir [Kullanıcı Tipi] olarak, [bir eylem yapmak] istiyorum, böylece [bir fayda elde edebilirim].
+            •	**Kabul Kriterleri (GWT):** Durum [ön koşul] iken, Ne zaman ki [eylem], O zaman [beklenen sonuç].
+            •	**Negatif Senaryo:** [Hata durumu veya olumsuz senaryo].
+            •	... [Diğer tüm FR'lar için bu formatı tekrarla] ...
+            ### 4.2. Süreç Akışı
+            •	[Ana sürecin adımlarını özetle. Varsa alternatif veya hata akışlarını da belirt.]
+            ---
+            ## 5. FONKSİYONEL OLMAYAN GEREKSİNİMLER (NFR)
+            •	**Performans:** [Yanıt süresi, kapasite gibi gereksinimler]
+            •	**Kullanılabilirlik:** [Servis çalışma süresi (örn. %99.9), erişilebilirlik (WCAG) gibi gereksinimler]
+            •	**Uyumluluk:** [KVKK, PII gibi yasal uyumluluk gereksinimleri]
+            ### 5.1. Güvenlik ve Yetkilendirme Gereksinimleri
+            •	**RBAC/ABAC:** [Rol bazlı veya öznitelik bazlı erişim kontrol kurallarını tanımla]
+            •	**Şifreleme:** [Verinin nasıl şifreleneceğini belirt]
+            •	**Denetim (Audit):** [Hangi işlemlerin loglanması gerektiğini belirt]
+            ---
+            ## 6. SÜREÇ RİSK ANALİZİ
+            •	[Potansiyel operasyonel, teknik ve uyumluluk risklerini ve bu riskleri azaltma (mitigasyon) stratejilerini listele.]
+            ### 6.1. Kısıtlar ve Varsayımlar
+            •	**Kısıt:** [Projeyi sınırlayan teknik veya iş kısıtlamaları]
+            •	**Varsayım:** [Projenin başarılı olması için doğru kabul edilen varsayımlar]
+            ### 6.2. Bağımlılıklar
+            •	[Projenin bağlı olduğu diğer sistemleri, ekipleri veya servisleri listele]
+            ### 6.3. Süreç Etkileri
+            •	[Bu projenin etkileyeceği diğer iş süreçlerini veya departmanları belirt]
+            ---
+            ## 7. ONAY
+            ### 7.1. İş Analizi
+            •	[Dokümanı gözden geçirmesi gereken paydaşları veya departmanları listele]
+            ### 7.2. Değişiklik Kayıtları
+            •	v0.1: İlk taslak oluşturuldu.
+            ### 7.3. Doküman Onay
+            •	[Onay sürecindeki rolleri belirt (RACI matrisi gibi)]
+            ### 7.4. Referans Dokümanlar
+            •	[Varsa, bu analize referans olan diğer dokümanları listele]
+            ---
+            ## 8. FONKSİYONEL TASARIM DOKÜMANLARI
+            •	[API Sözleşmesi, ER Diyagramı, Akış Diyagramı, UI Mockup gibi ilgili tasarım dokümanlarına referanslar ekle. Eğer bu bilgiler konuşmadan çıkarılabiliyorsa, özetle.]
+        `
+    },
+    {
         id: 'agile-story',
         name: 'Çevik (Agile) Kullanıcı Hikayesi',
         prompt: `

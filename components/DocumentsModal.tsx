@@ -11,7 +11,8 @@ interface DocumentsModalProps {
     generatingDocType: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | null;
     onUpdateConversation: (id: string, updates: Partial<Conversation>) => Promise<void>;
     onModifySelection: (selectedText: string, userPrompt: string, docKey: 'analysisDoc' | 'testScenarios') => Promise<void>;
-    onGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability') => void;
+    onModifyDiagram: (userPrompt: string) => Promise<void>;
+    onGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => void;
     inlineModificationState: { docKey: 'analysisDoc' | 'testScenarios'; originalText: string } | null;
     templates: {
         analysis: Template[];
@@ -29,6 +30,8 @@ interface DocumentsModalProps {
     setActiveDocTab: (tab: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability') => void;
     onSelectMaturityQuestion: (question: string) => void;
     onRecheckMaturity: () => void;
+    diagramType: 'mermaid' | 'bpmn';
+    setDiagramType: (type: 'mermaid' | 'bpmn') => void;
 }
 
 export const DocumentsModal: React.FC<DocumentsModalProps> = (props) => {

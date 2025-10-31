@@ -1,5 +1,6 @@
 // components/NewAnalysisModal.tsx
 import React, { useState } from 'react';
+import { MessageSquare, FilePlus, ArrowLeft } from 'lucide-react';
 
 interface NewAnalysisModalProps {
     isOpen: boolean;
@@ -44,7 +45,7 @@ export const NewAnalysisModal: React.FC<NewAnalysisModalProps> = ({
                 >
                     <div className="flex items-center gap-3">
                         <div className="bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300 p-2 rounded-lg">
-                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+                           <MessageSquare className="h-6 w-6" />
                         </div>
                          <div>
                             <h3 className="font-semibold">Sıfırdan Başla</h3>
@@ -59,7 +60,7 @@ export const NewAnalysisModal: React.FC<NewAnalysisModalProps> = ({
                 >
                      <div className="flex items-center gap-3">
                         <div className="bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300 p-2 rounded-lg">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                            <FilePlus className="h-6 w-6" />
                         </div>
                          <div>
                             <h3 className="font-semibold">Mevcut Analizi İyileştir</h3>
@@ -75,7 +76,7 @@ export const NewAnalysisModal: React.FC<NewAnalysisModalProps> = ({
         <div className="flex flex-col h-full">
             <div className="flex items-center gap-2 mb-4">
                  <button onClick={handleBack} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+                    <ArrowLeft className="h-5 w-5" />
                  </button>
                  <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">Mevcut Analizi Yapıştırın</h2>
             </div>

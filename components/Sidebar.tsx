@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import type { Conversation } from '../types';
+import { X, Pencil, MoreVertical, Trash2, Plus } from 'lucide-react';
 
 interface SidebarProps {
     conversations: Conversation[];
@@ -102,15 +103,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeConversat
                 <div className="flex flex-col flex-1 overflow-hidden">
                     <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700 h-16 flex-shrink-0">
                         <div className="flex items-center gap-2">
-                            <svg width="24" height="24" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
-                                <path fill="currentColor" className="text-indigo-600 dark:text-indigo-500" d="M50 5L0 95h25l25-50 25 50h25L50 5z"/>
-                                <circle fill="currentColor" className="text-indigo-300 dark:text-indigo-400" cx="50" cy="58" r="10"/>
+                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className="h-6 w-6" aria-hidden="true">
+                              <path className="fill-indigo-600 dark:fill-indigo-500" d="M50 5L0 95h25l25-50 25 50h25L50 5z"/>
+                              <circle className="fill-indigo-300 dark:fill-indigo-400" cx="50" cy="58" r="10"/>
                             </svg>
                             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200 truncate">Sohbetler</h2>
                         </div>
                         {/* Close button for mobile sidebar */}
                         <button onClick={() => setIsOpen(false)} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none md:hidden" aria-label="Kenar çubuğunu kapat">
-                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-600 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                           <X className="h-6 w-6 text-slate-600 dark:text-slate-400" />
                         </button>
                     </div>
 
@@ -167,10 +168,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeConversat
                                                 title="Başlığı düzenle"
                                                 aria-label={`Başlığı düzenle: ${conv.title}`}
                                             >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
-                                                    <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
-                                                </svg>
+                                                <Pencil className="h-4 w-4" />
                                             </button>
                                              <button 
                                                 onClick={(e) => { e.stopPropagation(); setMenuOpenForId(conv.id === menuOpenForId ? null : conv.id); }}
@@ -179,13 +177,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeConversat
                                                 aria-haspopup="true"
                                                 aria-expanded={menuOpenForId === conv.id}
                                             >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" /></svg>
+                                                <MoreVertical className="h-4 w-4" />
                                             </button>
                                         </div>
                                         {menuOpenForId === conv.id && (
                                             <div ref={menuRef} className="absolute right-2 top-10 w-40 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-30 animate-fade-in-up" style={{animationDuration: '0.1s'}}>
                                                 <button onClick={(e) => handleDelete(e, conv.id)} className="w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/50 flex items-center gap-2" role="menuitem">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+                                                    <Trash2 className="h-4 w-4" />
                                                     <span>Sil</span>
                                                 </button>
                                             </div>
@@ -198,9 +196,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeConversat
 
                     <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
                         <button onClick={onNewConversation} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-                            </svg>
+                            <Plus className="h-5 w-5" />
                             Yeni Analiz Başlat
                         </button>
                     </div>

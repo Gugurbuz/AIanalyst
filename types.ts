@@ -19,6 +19,7 @@ export interface Message {
     id: string;
     role: 'user' | 'assistant' | 'system';
     content: string;
+    timestamp: string; // ISO 8601 date string
     feedback?: Feedback;
 }
 
@@ -32,7 +33,8 @@ export interface MaturityReport {
 export interface GeneratedDocs {
     analysisDoc: string;
     testScenarios: string;
-    visualization: string;
+    visualization: string; // Can be Mermaid code or BPMN XML
+    visualizationType?: 'mermaid' | 'bpmn'; // Type of the visualization
     traceabilityMatrix: string;
     maturityReport?: MaturityReport | null;
 }

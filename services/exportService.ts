@@ -2,6 +2,8 @@ import { jsPDF } from 'jspdf';
 // FIX: Use the functional `autoTable` import instead of a side-effect import.
 // This resolves a module augmentation error with 'jspdf' by using a more direct and explicit approach.
 import autoTable from 'jspdf-autotable';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle, AlignmentType, convertInchesToTwip } from 'docx';
+
 
 const exportAsMarkdown = (content: string, filename: string): void => {
   const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
@@ -170,4 +172,103 @@ const exportAsPdf = (content: string, filename: string, isTable: boolean): void 
   doc.save(`${filename}.pdf`);
 };
 
-export const exportService = { exportAsMarkdown, exportAsPdf, exportAsMermaid, exportAsSvg };
+// New function to export as .docx
+const exportAsDocx = (content: string, filename: string): void => {
+    const lines = content.split('\n');
+    const children: (Paragraph | Table)[] = [];
+    let inTable = false;
+    let tableRows: TableRow[] = [];
+
+    const createParagraph = (line: string) => {
+        const runs: TextRun[] = [];
+        const parts = line.split(/(\*\*.*?\*\*)/g); // Split by bold tags
+        parts.forEach(part => {
+            if (part.startsWith('**') && part.endsWith('**')) {
+                runs.push(new TextRun({ text: part.slice(2, -2), bold: true }));
+            } else if (part) {
+                runs.push(new TextRun(part.replace(/<br\s*\/?>/gi, '\n')));
+            }
+        });
+        return new Paragraph({ children: runs });
+    };
+
+    lines.forEach(line => {
+        const trimmedLine = line.trim();
+        
+        const isTableLine = trimmedLine.startsWith('|') && trimmedLine.endsWith('|');
+
+        if (inTable && !isTableLine) {
+            // End of table
+            if (tableRows.length > 0) {
+                 children.push(new Table({
+                    rows: tableRows,
+                    width: { size: 100, type: WidthType.PERCENTAGE },
+                 }));
+            }
+            inTable = false;
+            tableRows = [];
+        }
+
+        if (isTableLine) {
+            const cells = trimmedLine.split('|').slice(1, -1).map(cell => new TableCell({
+                children: [createParagraph(cell.trim())],
+                borders: {
+                    top: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" },
+                    bottom: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" },
+                    left: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" },
+                    right: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" },
+                },
+            }));
+            
+            if (!inTable) { // This is the header row
+                inTable = true;
+                tableRows.push(new TableRow({ children: cells, isHeader: true }));
+            } else if (!trimmedLine.includes('---')) { // This is a body row
+                tableRows.push(new TableRow({ children: cells }));
+            }
+            // Skip the separator line
+            return;
+        }
+
+        if (trimmedLine.startsWith('## ')) {
+            children.push(new Paragraph({ text: trimmedLine.substring(3), heading: HeadingLevel.HEADING_1, spacing: { before: 200, after: 100 } }));
+        } else if (trimmedLine.startsWith('### ')) {
+            children.push(new Paragraph({ text: trimmedLine.substring(4), heading: HeadingLevel.HEADING_2, spacing: { before: 150, after: 80 } }));
+        } else if (trimmedLine.startsWith('• ')) {
+            children.push(new Paragraph({ text: trimmedLine.substring(2), bullet: { level: 0 } }));
+        } else if (trimmedLine === '---') {
+             children.push(new Paragraph({ text: '', border: { bottom: { color: "auto", space: 1, style: "single", size: 6 } }, spacing: { after: 200, before: 200 } }));
+        }
+         else if (trimmedLine) {
+            children.push(createParagraph(trimmedLine));
+        } else {
+            children.push(new Paragraph('')); // Empty line
+        }
+    });
+
+    // Add any remaining table
+    if (inTable && tableRows.length > 0) {
+        children.push(new Table({ rows: tableRows, width: { size: 100, type: WidthType.PERCENTAGE } }));
+    }
+
+    const doc = new Document({
+        sections: [{
+            properties: {},
+            children: children,
+        }],
+    });
+
+    Packer.toBlob(doc).then(blob => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${filename}.docx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    });
+};
+
+
+export const exportService = { exportAsMarkdown, exportAsPdf, exportAsMermaid, exportAsSvg, exportAsDocx };

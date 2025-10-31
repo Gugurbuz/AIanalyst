@@ -1,6 +1,7 @@
 // components/MaturityCheckReport.tsx
 import React from 'react';
 import type { MaturityReport } from '../types';
+import { ClipboardCheck, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface MaturityCheckReportProps {
     report: MaturityReport | null;
@@ -14,7 +15,7 @@ export const MaturityCheckReport: React.FC<MaturityCheckReportProps> = ({ report
     if (!report) {
          return (
             <div className="p-6 text-center text-slate-500 dark:text-slate-400">
-                <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-12 w-12 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                <ClipboardCheck className="mx-auto h-12 w-12 text-slate-400" strokeWidth={1} />
                 <h3 className="mt-2 text-lg font-medium text-slate-800 dark:text-slate-200">Olgunluk Raporu</h3>
                 <p className="mt-1 text-sm">Analizinizin doküman oluşturmaya hazır olup olmadığını kontrol etmek için "Olgunluk Kontrolü" butonunu kullanın.</p>
             </div>
@@ -32,15 +33,15 @@ export const MaturityCheckReport: React.FC<MaturityCheckReportProps> = ({ report
                     disabled={isLoading}
                     className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-lg shadow-sm transition-opacity duration-200 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50"
                  >
-                     <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 110 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" /></svg>
+                     <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                     {isLoading ? 'Kontrol Ediliyor...' : 'Yeniden Kontrol Et'}
                 </button>
             </div>
             <div className={`flex items-start gap-4 p-4 rounded-lg ${isSufficient ? 'bg-emerald-50 dark:bg-emerald-900/50' : 'bg-amber-50 dark:bg-amber-900/50'}`}>
                 {isSufficient ? (
-                     <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-emerald-500 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                     <CheckCircle2 className="h-8 w-8 text-emerald-500 flex-shrink-0" />
                 ) : (
-                     <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-amber-500 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.21 3.03-1.742 3.03H4.42c-1.532 0-2.492-1.696-1.742-3.03l5.58-9.92zM10 13a1 1 0 110-2 1 1 0 010 2zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+                     <AlertTriangle className="h-8 w-8 text-amber-500 flex-shrink-0" />
                 )}
                 <div>
                     <h3 className={`text-lg font-bold ${isSufficient ? 'text-emerald-800 dark:text-emerald-200' : 'text-amber-800 dark:text-amber-200'}`}>

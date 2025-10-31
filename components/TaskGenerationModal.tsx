@@ -10,7 +10,6 @@ interface TaskGenerationModalProps {
     isGenerating: boolean;
     setIsGenerating: (isGenerating: boolean) => void;
     model: GeminiModel;
-    isThinkingMode: boolean;
 }
 
 const priorityStyles = {
@@ -20,7 +19,7 @@ const priorityStyles = {
     critical: 'bg-red-200 dark:bg-red-800 text-red-800 dark:text-red-100',
 };
 
-export const TaskGenerationModal: React.FC<TaskGenerationModalProps> = ({ isOpen, onClose, conversation, isGenerating, setIsGenerating, model, isThinkingMode }) => {
+export const TaskGenerationModal: React.FC<TaskGenerationModalProps> = ({ isOpen, onClose, conversation, isGenerating, setIsGenerating, model }) => {
     const [suggestions, setSuggestions] = useState<TaskSuggestion[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -31,8 +30,8 @@ export const TaskGenerationModal: React.FC<TaskGenerationModalProps> = ({ isOpen
                 setError(null);
                 setSuggestions([]);
                 try {
-                    const modelToUse = isThinkingMode ? 'gemini-2.5-pro' : model;
-                    const modelConfig = isThinkingMode ? { thinkingConfig: { thinkingBudget: 32768 } } : undefined;
+                    const modelToUse = model;
+                    const modelConfig = undefined;
                     const result = await geminiService.generateTasksFromAnalysis(conversation.generatedDocs.analysisDoc, modelToUse, modelConfig);
                     setSuggestions(result);
                 } catch (err) {
@@ -43,7 +42,7 @@ export const TaskGenerationModal: React.FC<TaskGenerationModalProps> = ({ isOpen
             };
             generate();
         }
-    }, [isOpen, conversation.generatedDocs.analysisDoc, model, isThinkingMode]);
+    }, [isOpen, conversation.generatedDocs.analysisDoc, model, setIsGenerating]);
 
     const handleAddTask = async () => {
         setIsSaving(true);

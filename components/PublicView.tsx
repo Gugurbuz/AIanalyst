@@ -1,6 +1,6 @@
 // components/PublicView.tsx
 import React, { useState, useEffect } from 'react';
-import type { Conversation, Theme } from '../types';
+import type { Conversation, Theme, User } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { ChatMessageHistory } from './ChatMessageHistory';
 import { GeneratedDocument } from './GeneratedDocument';
@@ -81,6 +81,15 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
 
         fetchSharedConversation();
     }, [shareId]);
+    
+    // Create a mock user object for the ChatMessageHistory component
+    const mockUser: User = {
+      id: 'public-user',
+      app_metadata: {},
+      user_metadata: {},
+      aud: 'authenticated',
+      created_at: new Date().toISOString(),
+    };
 
     if (isLoading) {
         return <LoadingScreen />;
@@ -95,6 +104,9 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
     }
     
     const { title, messages, generatedDocs } = conversation;
+
+    // A dummy function for read-only components
+    const noOp = async () => {};
 
     return (
         <div className="font-sans bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 min-h-screen">
@@ -113,7 +125,8 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                 <div className="flex-1 overflow-y-auto">
                     <div className="p-4 md:p-6">
                         <div className="max-w-4xl mx-auto w-full">
-                             <ChatMessageHistory 
+                             <ChatMessageHistory
+                                user={mockUser}
                                 chatHistory={messages} 
                                 isLoading={false}
                                 onFeedbackUpdate={() => {}} // No feedback in public view
@@ -127,7 +140,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-md font-bold">Analiz Dokümanı</h3>
                                     </div>
-                                    <GeneratedDocument content={generatedDocs.analysisDoc} onContentChange={() => {}} docKey='analysisDoc' onRephraseSelection={() => {}} rephrasingState={null} isGenerating={false}/>
+                                    <GeneratedDocument content={generatedDocs.analysisDoc} onContentChange={() => {}} docKey='analysisDoc' onModifySelection={() => {}} inlineModificationState={null} isGenerating={false}/>
                                 </div>
                             )}
 
@@ -136,7 +149,12 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-md font-bold">Süreç Akış Diyagramı</h3>
                                     </div>
-                                    <Visualizations content={generatedDocs.visualization} onContentChange={() => {}} />
+                                    <Visualizations 
+                                        conversation={conversation} 
+                                        onModifyDiagram={noOp} 
+                                        isGenerating={false} 
+                                        generatingDocType={null} 
+                                    />
                                 </div>
                              )}
 
@@ -145,7 +163,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-md font-bold">Test Senaryoları</h3>
                                     </div>
-                                    <GeneratedDocument content={generatedDocs.testScenarios} onContentChange={() => {}} docKey='testScenarios' onRephraseSelection={() => {}} rephrasingState={null} isGenerating={false}/>
+                                    <GeneratedDocument content={generatedDocs.testScenarios} onContentChange={() => {}} docKey='testScenarios' onModifySelection={() => {}} inlineModificationState={null} isGenerating={false}/>
                                 </div>
                             )}
 
@@ -158,8 +176,8 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                         content={generatedDocs.traceabilityMatrix} 
                                         onContentChange={() => {}} 
                                         docKey='analysisDoc' // Dummy key for type compliance
-                                        onRephraseSelection={() => {}} 
-                                        rephrasingState={null}
+                                        onModifySelection={() => {}} 
+                                        inlineModificationState={null}
                                         isGenerating={false}
                                     />
                                 </div>

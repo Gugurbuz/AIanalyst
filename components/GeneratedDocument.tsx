@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { Pencil, Bot, LoaderCircle } from 'lucide-react';
 
 // A simple hook to get the previous value of a prop or state.
 const usePrevious = <T,>(value: T): T | undefined => {
@@ -72,10 +73,7 @@ const MagicAssistantPopover: React.FC<{
                     className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none disabled:opacity-50 flex items-center justify-center w-24"
                 >
                     {isLoading ? (
-                         <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
+                         <LoaderCircle className="animate-spin h-4 w-4 text-white" />
                     ) : 'Uygula'}
                 </button>
             </div>
@@ -270,10 +268,7 @@ export const GeneratedDocument: React.FC<GeneratedDocumentProps> = ({ content, o
                     disabled={isGenerating || !!inlineModificationState}
                     className="absolute top-2 right-2 flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity duration-200 hover:bg-slate-200/70 dark:hover:bg-slate-700/70 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
-                        <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="odd" />
-                    </svg>
+                     <Pencil className="h-4 w-4" />
                     Düzenle
                 </button>
             )}
@@ -292,10 +287,7 @@ export const GeneratedDocument: React.FC<GeneratedDocumentProps> = ({ content, o
                     }}
                     title="AI ile Düzenle"
                 >
-                    <svg width="16" height="16" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                        <path fill="currentColor" d="M50 5L0 95h25l25-50 25 50h25L50 5z" opacity="0.7"/>
-                        <circle fill="currentColor" cx="50" cy="58" r="10"/>
-                    </svg>
+                    <Bot className="h-4 w-4" />
                 </button>
             )}
             {isAssistantPopoverOpen && selectionState && (

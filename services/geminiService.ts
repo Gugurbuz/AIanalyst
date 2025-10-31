@@ -173,26 +173,71 @@ export const geminiService = {
         return title.replace(/["*]/g, '').trim();
     },
 
-    generateVisualization: async (analysisDocument: string, model: GeminiModel, modelConfig?: object): Promise<string> => {
-         if (!analysisDocument || analysisDocument.includes("Bu bölüme projenin temel hedefini")) {
-            throw new Error("Lütfen önce geçerli bir analiz dokümanı oluşturun.");
-        }
-        const basePrompt = promptService.getPrompt('generateVisualization');
-        
-        const prompt = `
-            ${basePrompt}
-            
-            ---
-            **İş Analizi Dokümanı:**
-            \`\`\`
-            ${analysisDocument}
-            \`\`\`
-        `;
-        const result = await generateContent(prompt, model, modelConfig);
-        // Extract content from markdown code block
-        const mermaidMatch = result.match(/```mermaid\n([\s\S]*?)\n```/);
-        return mermaidMatch ? mermaidMatch[1].trim() : result.trim();
-    },
+    generateDiagram: async (analysisDocument: string, diagramType: 'mermaid' | 'bpmn', model: GeminiModel, modelConfig?: object): Promise<string> => {
+        if (!analysisDocument || analysisDocument.includes("Bu bölüme projenin temel hedefini")) {
+           throw new Error("Lütfen önce geçerli bir analiz dokümanı oluşturun.");
+       }
+       
+       const promptId = diagramType === 'bpmn' ? 'generateBPMN' : 'generateVisualization';
+       const basePrompt = promptService.getPrompt(promptId);
+       
+       const prompt = `
+           ${basePrompt}
+           ---
+           **İş Analizi Dokümanı:**
+           \`\`\`
+           ${analysisDocument}
+           \`\`\`
+       `;
+       const result = await generateContent(prompt, model, modelConfig);
+       
+       if (diagramType === 'mermaid') {
+           const mermaidMatch = result.match(/```mermaid\n([\s\S]*?)\n```/);
+           return mermaidMatch ? mermaidMatch[1].trim() : result.trim();
+       } else { // BPMN
+           const xmlMatch = result.match(/```xml\n([\s\S]*?)\n```/);
+           return xmlMatch ? xmlMatch[1].trim() : result.trim();
+       }
+   },
+
+   modifyDiagram: async (currentCode: string, userPrompt: string, model: GeminiModel, diagramType: 'mermaid' | 'bpmn', modelConfig?: object): Promise<string> => {
+    const promptId = diagramType === 'bpmn' ? 'modifyBPMN' : 'modifyVisualization';
+    const systemPrompt = promptService.getPrompt(promptId);
+    
+    const codeBlockType = diagramType === 'bpmn' ? 'xml' : 'mermaid';
+    const fullPrompt = `
+        **Mevcut ${diagramType.toUpperCase()} Kodu:**
+        \`\`\`${codeBlockType}
+        ${currentCode}
+        \`\`\`
+
+        ---
+        **Kullanıcı Talimatı:**
+        "${userPrompt}"
+    `;
+
+    if (!process.env.API_KEY) {
+        throw new Error("API Anahtarı bulunamadı.");
+    }
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const response = await ai.models.generateContent({
+            model,
+            contents: fullPrompt,
+            config: {
+                systemInstruction: systemPrompt,
+                ...modelConfig,
+            }
+        });
+        const result = response.text;
+
+        const codeMatch = result.match(new RegExp("```" + codeBlockType + "\\n([\\s\\S]*?)\\n```"));
+        return codeMatch ? codeMatch[1].trim() : result.trim();
+    } catch (error) {
+        handleGeminiError(error);
+    }
+},
+
 
     rephraseText: async (textToRephrase: string): Promise<string> => {
         const prompt = promptService.getPrompt('rephraseText');
@@ -344,8 +389,9 @@ export const geminiService = {
                         break;
                     case 'generateVisualization':
                         docKey = 'visualization';
-                        newContent = await geminiService.generateVisualization(currentDocs.analysisDoc, model, modelConfig);
-                        confirmation = "İsteğiniz üzerine, süreç akışını 'Görselleştirme' sekmesinde güncelledim.";
+                        const diagramType = currentDocs.visualizationType || 'mermaid';
+                        newContent = await geminiService.generateDiagram(currentDocs.analysisDoc, diagramType, model, modelConfig);
+                        confirmation = `İsteğiniz üzerine, süreç akışını '${diagramType === 'bpmn' ? 'BPMN' : 'Mermaid'}' formatında 'Görselleştirme' sekmesinde güncelledim.`;
                         break;
                     default:
                         // If an unknown tool is called, just provide a default chat response.

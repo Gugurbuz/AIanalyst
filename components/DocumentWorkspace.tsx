@@ -6,6 +6,8 @@ import { Visualizations } from './Visualizations';
 import { MaturityCheckReport } from './MaturityCheckReport';
 import { TemplateSelector } from './TemplateSelector';
 import { ExportDropdown } from './ExportDropdown';
+import { RegeneratingOverlay } from './RegeneratingOverlay';
+import { GanttChartSquare, Projector } from 'lucide-react';
 
 interface DocumentWorkspaceProps {
     conversation: Conversation;
@@ -13,7 +15,8 @@ interface DocumentWorkspaceProps {
     generatingDocType: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | null;
     onUpdateConversation: (id: string, updates: Partial<Conversation>) => Promise<void>;
     onModifySelection: (selectedText: string, userPrompt: string, docKey: 'analysisDoc' | 'testScenarios') => Promise<void>;
-    onGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability') => void;
+    onModifyDiagram: (userPrompt: string) => Promise<void>;
+    onGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => void;
     inlineModificationState: { docKey: 'analysisDoc' | 'testScenarios'; originalText: string } | null;
     templates: {
         analysis: Template[];
@@ -31,18 +34,9 @@ interface DocumentWorkspaceProps {
     setActiveDocTab: (tab: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability') => void;
     onSelectMaturityQuestion: (question: string) => void;
     onRecheckMaturity: () => void;
+    diagramType: 'mermaid' | 'bpmn';
+    setDiagramType: (type: 'mermaid' | 'bpmn') => void;
 }
-
-const DocLoadingSpinner: React.FC = () => (
-    <div className="absolute inset-0 bg-white/70 dark:bg-slate-800/70 flex flex-col items-center justify-center z-10 backdrop-blur-sm">
-        <svg className="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        <p className="mt-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Doküman güncelleniyor...</p>
-    </div>
-);
-
 
 export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     conversation,
@@ -50,6 +44,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     generatingDocType,
     onUpdateConversation,
     onModifySelection,
+    onModifyDiagram,
     onGenerateDoc,
     inlineModificationState,
     templates,
@@ -59,6 +54,8 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     setActiveDocTab,
     onSelectMaturityQuestion,
     onRecheckMaturity,
+    diagramType,
+    setDiagramType,
 }) => {
     
     const docTabs = [
@@ -70,6 +67,21 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     ];
 
     const { generatedDocs } = conversation;
+    const { visualization, visualizationType } = generatedDocs;
+
+    const handleDiagramTypeChange = (newType: 'mermaid' | 'bpmn') => {
+        if (newType === diagramType) return;
+        setDiagramType(newType);
+        if (generatedDocs.visualization) {
+            onGenerateDoc('viz', undefined, newType);
+        }
+    };
+
+    const handleGenerateViz = () => {
+        onGenerateDoc('viz', undefined, diagramType);
+    };
+
+    const isVisualizing = isGenerating && generatingDocType === 'viz';
 
     return (
         <div className="flex flex-col h-full w-full">
@@ -96,7 +108,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             <div className="flex-1 overflow-y-auto custom-scrollbar relative">
                 {activeDocTab === 'analysis' && (
                     <div className="relative h-full">
-                        {isGenerating && generatingDocType === 'analysis' && <DocLoadingSpinner />}
+                        {isGenerating && generatingDocType === 'analysis' && <RegeneratingOverlay />}
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
                              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">İş Analizi Dokümanı</h3>
                             <div className="flex items-center gap-2">
@@ -116,18 +128,46 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                     </div>
                 )}
                  {activeDocTab === 'viz' && (
-                    <div className="relative h-full">
-                        {isGenerating && generatingDocType === 'viz' && <DocLoadingSpinner />}
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
-                            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Süreç Görselleştirmesi</h3>
-                            <ExportDropdown content={generatedDocs.visualization} filename={`${conversation.title}-gorsellestirme`} isVisualization={true} />
+                    <div className="relative h-full flex flex-col">
+                        {isVisualizing && <RegeneratingOverlay text="Diyagram türü değiştirildi. Görsel yeniden oluşturuluyor..." />}
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+                            <div className="flex items-center gap-4">
+                                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Süreç Görselleştirmesi</h3>
+                                <div className="flex items-center p-1 bg-slate-200 dark:bg-slate-700 rounded-lg">
+                                    <button onClick={() => handleDiagramTypeChange('mermaid')} disabled={isVisualizing} className={`px-2 py-1 text-xs flex items-center gap-1.5 sm:px-3 sm:py-1 sm:text-sm font-semibold rounded-md transition-colors disabled:cursor-not-allowed ${diagramType === 'mermaid' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>
+                                        <GanttChartSquare className="h-4 w-4" /> Mermaid
+                                    </button>
+                                    <button onClick={() => handleDiagramTypeChange('bpmn')} disabled={isVisualizing} className={`px-2 py-1 text-xs flex items-center gap-1.5 sm:px-3 sm:py-1 sm:text-sm font-semibold rounded-md transition-colors disabled:cursor-not-allowed ${diagramType === 'bpmn' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>
+                                        <Projector className="h-4 w-4" /> BPMN
+                                    </button>
+                                </div>
+                            </div>
+                           <div className="flex items-center gap-2">
+                               {!visualization && (
+                                   <button 
+                                        onClick={handleGenerateViz} 
+                                        disabled={isGenerating || !generatedDocs.analysisDoc}
+                                        title={!generatedDocs.analysisDoc ? "Diyagram oluşturmak için önce analiz dokümanı gereklidir." : `AI ile ${diagramType.toUpperCase()} diyagramı oluştur`}
+                                        className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                                    >
+                                        Diyagram Oluştur
+                                    </button>
+                               )}
+                               <ExportDropdown content={visualization} filename={`${conversation.title}-gorsellestirme`} visualizationType={visualizationType} />
+                           </div>
                         </div>
-                        <Visualizations content={generatedDocs.visualization} onContentChange={(newContent) => onUpdateConversation(conversation.id, { generatedDocs: { ...generatedDocs, visualization: newContent } })} />
+                        <Visualizations 
+                            conversation={conversation}
+                            onModifyDiagram={onModifyDiagram}
+                            isGenerating={isGenerating}
+                            generatingDocType={generatingDocType}
+                            diagramType={diagramType}
+                        />
                     </div>
                 )}
                 {activeDocTab === 'test' && (
                     <div className="relative h-full">
-                        {isGenerating && generatingDocType === 'test' && <DocLoadingSpinner />}
+                        {isGenerating && generatingDocType === 'test' && <RegeneratingOverlay />}
                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
                             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Test Senaryoları</h3>
                             <div className="flex items-center gap-2">
@@ -148,7 +188,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                 )}
                  {activeDocTab === 'traceability' && (
                     <div className="relative h-full">
-                        {isGenerating && generatingDocType === 'traceability' && <DocLoadingSpinner />}
+                        {isGenerating && generatingDocType === 'traceability' && <RegeneratingOverlay />}
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
                             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">İzlenebilirlik Matrisi</h3>
                             <ExportDropdown content={generatedDocs.traceabilityMatrix} filename={`${conversation.title}-izlenebilirlik`} isTable={true} />
@@ -179,7 +219,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                 )}
                  {activeDocTab === 'maturity' && (
                     <div className="relative h-full">
-                        {isGenerating && generatingDocType === 'maturity' && <DocLoadingSpinner />}
+                        {isGenerating && generatingDocType === 'maturity' && <RegeneratingOverlay />}
                         <MaturityCheckReport 
                             report={generatedDocs.maturityReport || null}
                             onSelectQuestion={onSelectMaturityQuestion}

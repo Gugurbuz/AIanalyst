@@ -1,15 +1,17 @@
 // components/LiveCoPilotModal.tsx
 import React from 'react';
-import type { Conversation, GeneratedDocs, Message, Template } from '../types';
+import type { Conversation, Template, User } from '../types';
 import { ChatInterface } from './ChatInterface';
 import { ChatMessageHistory } from './ChatMessageHistory';
 import { DocumentWorkspace } from './DocumentWorkspace';
 import { PromptSuggestions } from './PromptSuggestions';
+import { X } from 'lucide-react';
 
 interface LiveCoPilotModalProps {
     isOpen: boolean;
     onClose: () => void;
     conversation: Conversation;
+    user: User; // Added user prop
     isProcessing: boolean;
     generatingDocType: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | null;
     inlineModificationState: { docKey: 'analysisDoc' | 'testScenarios'; originalText: string } | null;
@@ -19,24 +21,27 @@ interface LiveCoPilotModalProps {
     onSendMessage: (content: string) => Promise<void>;
     onUpdateConversation: (id: string, updates: Partial<Conversation>) => Promise<void>;
     onModifySelection: (selectedText: string, userPrompt: string, docKey: 'analysisDoc' | 'testScenarios') => Promise<void>;
-    onGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability') => void;
+    onModifyDiagram: (userPrompt: string) => Promise<void>;
+    onGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => void;
     onTemplateChange: {
         analysis: (event: React.ChangeEvent<HTMLSelectElement>) => void;
         test: (event: React.ChangeEvent<HTMLSelectElement>) => void;
     };
     onSelectMaturityQuestion: (question: string) => void;
     onRecheckMaturity: () => void;
-    // FIX: Add templates prop to be passed to the DocumentWorkspace
     templates: {
         analysis: Template[];
         test: Template[];
     };
+    diagramType: 'mermaid' | 'bpmn';
+    setDiagramType: (type: 'mermaid' | 'bpmn') => void;
 }
 
 export const LiveCoPilotModal: React.FC<LiveCoPilotModalProps> = ({
     isOpen,
     onClose,
     conversation,
+    user,
     isProcessing,
     generatingDocType,
     inlineModificationState,
@@ -46,11 +51,14 @@ export const LiveCoPilotModal: React.FC<LiveCoPilotModalProps> = ({
     onSendMessage,
     onUpdateConversation,
     onModifySelection,
+    onModifyDiagram,
     onGenerateDoc,
     onTemplateChange,
     onSelectMaturityQuestion,
     onRecheckMaturity,
-    templates, // FIX: Destructure templates prop
+    templates,
+    diagramType,
+    setDiagramType,
 }) => {
     if (!isOpen) return null;
 
@@ -60,7 +68,7 @@ export const LiveCoPilotModal: React.FC<LiveCoPilotModalProps> = ({
                 <header className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0 bg-white dark:bg-slate-800 rounded-t-lg">
                     <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">Canlı Oturum</h2>
                     <button onClick={onClose} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-600 dark:text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        <X className="h-6 w-6 text-slate-600 dark:text-slate-400" />
                     </button>
                 </header>
                 <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 min-h-0">
@@ -71,6 +79,7 @@ export const LiveCoPilotModal: React.FC<LiveCoPilotModalProps> = ({
                                <PromptSuggestions onSelectPrompt={(p) => onSendMessage(p)} />
                             ) : (
                                <ChatMessageHistory
+                                    user={user}
                                     chatHistory={conversation.messages}
                                     isLoading={isProcessing && !generatingDocType}
                                     onFeedbackUpdate={(messageId, feedbackData) => {
@@ -96,9 +105,9 @@ export const LiveCoPilotModal: React.FC<LiveCoPilotModalProps> = ({
                             generatingDocType={generatingDocType}
                             onUpdateConversation={onUpdateConversation}
                             onModifySelection={onModifySelection}
+                            onModifyDiagram={onModifyDiagram}
                             inlineModificationState={inlineModificationState}
                             onGenerateDoc={onGenerateDoc}
-                            // FIX: Pass templates prop instead of an empty object.
                             templates={templates}
                             selectedTemplates={selectedTemplates}
                             onTemplateChange={onTemplateChange}
@@ -106,6 +115,8 @@ export const LiveCoPilotModal: React.FC<LiveCoPilotModalProps> = ({
                             setActiveDocTab={setActiveDocTab}
                             onSelectMaturityQuestion={onSelectMaturityQuestion}
                             onRecheckMaturity={onRecheckMaturity}
+                            diagramType={diagramType}
+                            setDiagramType={setDiagramType}
                          />
                     </div>
                 </div>

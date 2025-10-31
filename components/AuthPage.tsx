@@ -2,12 +2,16 @@ import React, { useState } from 'react';
 import { LoginPage } from './LoginPage';
 import { SignupPage } from './SignupPage';
 
+const LogoIcon = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className={className} aria-hidden="true">
+      <path className="fill-indigo-600 dark:fill-indigo-500" d="M50 5L0 95h25l25-50 25 50h25L50 5z"/>
+      <circle className="fill-indigo-300 dark:fill-indigo-400" cx="50" cy="58" r="10"/>
+    </svg>
+);
+
 const Logo = () => (
     <div className="flex items-center justify-center gap-3">
-         <svg width="36" height="36" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-            <path fill="currentColor" className="text-indigo-600 dark:text-indigo-500" d="M50 5L0 95h25l25-50 25 50h25L50 5z"/>
-            <circle fill="currentColor" className="text-indigo-300 dark:text-indigo-400" cx="50" cy="58" r="10"/>
-        </svg>
+         <LogoIcon className="h-9 w-9" />
         <span className="text-3xl font-bold text-slate-800 dark:text-slate-200">Asisty.ai</span>
     </div>
 );
