@@ -63,9 +63,9 @@ function createMockClient(): SupabaseClient {
 }
 
 
-// Use localStorage values first, but fall back to provided defaults to prevent crashing.
-const supabaseUrl = localStorage.getItem('supabaseUrl') || 'https://mjrshqlpomrezudlpmoj.supabase.co';
-const supabaseAnonKey = localStorage.getItem('supabaseAnonKey') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qcnNocWxwb21yZXp1ZGxwbW9qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzY1MDcsImV4cCI6MjA3NzM1MjUwN30.CY46g7Qnua63CrsWteAAFvMHeU75hwfZzeLfjOKCKNI';
+// Prioritize environment variables, fall back to localStorage, then to hardcoded defaults.
+const supabaseUrl = process.env.SUPABASE_URL || localStorage.getItem('supabaseUrl') || 'https://mjrshqlpomrezudlpmoj.supabase.co';
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || localStorage.getItem('supabaseAnonKey') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qcnNocWxwb21yZXp1ZGxwbW9qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzY1MDcsImV4cCI6MjA3NzM1MjUwN30.CY46g7Qnua63CrsWteAAFvMHeU75hwfZzeLfjOKCKNI';
 
 
 let supabase: SupabaseClient;

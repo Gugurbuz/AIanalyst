@@ -154,6 +154,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                         onModifyDiagram={noOp} 
                                         isGenerating={false} 
                                         generatingDocType={null} 
+                                        diagramType={generatedDocs.visualizationType || 'mermaid'}
                                     />
                                 </div>
                              )}

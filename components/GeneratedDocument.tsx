@@ -3,6 +3,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { Pencil, Bot, LoaderCircle } from 'lucide-react';
 
 // A simple hook to get the previous value of a prop or state.
+// FIX: Re-added a trailing comma to the generic type parameter `<T>` to resolve a TSX parsing ambiguity.
 const usePrevious = <T,>(value: T): T | undefined => {
     const ref = useRef<T>();
     useEffect(() => {
