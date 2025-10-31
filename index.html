@@ -111,6 +111,16 @@
         background-color: #475569; /* slate-600 */
         border-color: #64748b; /* slate-500 */
       }
+
+      /* Animation for the new error banner */
+      .error-banner-enter {
+        animation: error-banner-fade-in 0.3s ease-out forwards;
+      }
+
+      @keyframes error-banner-fade-in {
+        0% { opacity: 0; transform: translateY(-100%); }
+        100% { opacity: 1; transform: translateY(0); }
+      }
     </style>
     <script>
       tailwind.config = {

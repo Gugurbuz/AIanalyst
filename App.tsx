@@ -17,7 +17,7 @@ import { DocumentsModal } from './components/DocumentsModal';
 import { NewAnalysisModal } from './components/NewAnalysisModal'; // New
 import { SAMPLE_ANALYSIS_DOCUMENT, ANALYSIS_TEMPLATES, TEST_SCENARIO_TEMPLATES } from './templates';
 import type { User, Conversation, Message, Theme, AppMode, GeminiModel, GeneratedDocs, FeedbackItem } from './types';
-import { FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles } from 'lucide-react';
+import { FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, X, AlertTriangle } from 'lucide-react';
 
 interface AppProps {
   user: User;
@@ -239,6 +239,21 @@ const AnalystView: React.FC<AnalystViewProps> = ({
         </div>
     );
 };
+
+const ErrorDisplay: React.FC<{ message: string; onClose: () => void }> = ({ message, onClose }) => (
+    <div className="absolute top-16 left-0 right-0 z-30 error-banner-enter">
+        <div className="bg-red-100 dark:bg-red-900/50 border-b-2 border-red-500 p-3 shadow-lg flex items-center justify-between mx-auto">
+            <div className="flex items-center">
+                <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400 mr-3 flex-shrink-0" />
+                <p className="text-sm font-medium text-red-800 dark:text-red-200">{message}</p>
+            </div>
+            <button onClick={onClose} className="p-1 rounded-full hover:bg-red-200 dark:hover:bg-red-800 text-red-600 dark:text-red-300">
+                <X className="h-5 w-5" />
+            </button>
+        </div>
+    </div>
+);
+
 
 export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -482,8 +497,6 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         } catch (e) {
             const err = e instanceof Error ? e.message : 'Bir hata oluştu.';
             setError(err);
-            const errorMessage: Message = { id: `err-${Date.now()}`, role: 'system', content: `Hata: ${err}`, timestamp: new Date().toISOString() };
-            handleUpdateConversation(activeConversation.id, { messages: [...updatedMessages, errorMessage] });
         } finally {
             setIsProcessing(false);
         }
@@ -617,8 +630,6 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         } catch (e) {
             const err = e instanceof Error ? e.message : 'Bir hata oluştu.';
             setError(err);
-            const errorMessage: Message = { id: `err-${Date.now()}`, role: 'system', content: `Hata: ${err}`, timestamp: new Date().toISOString() };
-            handleUpdateConversation(activeConversation.id, { messages: [...activeConversation.messages, errorMessage] });
             setIsProcessing(false); // Ensure processing is stopped on error
         }
     };
@@ -711,7 +722,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                     onOpenShareModal={() => setIsShareModalOpen(true)}
                     isProcessing={isProcessing || !!inlineModificationState}
                 />
-                <main className="flex-1 overflow-hidden">
+                <main className="flex-1 overflow-hidden relative">
+                    {error && <ErrorDisplay message={error} onClose={() => setError(null)} />}
                     {appMode === 'analyst' ? (
                         <AnalystView
                             user={user}

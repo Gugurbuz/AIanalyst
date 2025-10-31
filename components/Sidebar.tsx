@@ -51,7 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeConversat
             return conversations;
         }
         return conversations.filter(conv =>
-            conv.title.toLowerCase().includes(searchTerm.toLowerCase())
+            (conv.title || '').toLowerCase().includes(searchTerm.toLowerCase())
         );
     }, [conversations, searchTerm]);
 
