@@ -10,7 +10,13 @@ import { promptService } from './promptService'; // Import the new prompt servic
  * @throws An error if no API key is found.
  */
 const getApiKey = (): string => {
-    const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+    // Also consider Vite-style vars exposed to the client
+    const viteEnv: any = (typeof import.meta !== 'undefined' && (import.meta as any).env) ? (import.meta as any).env : {};
+    const apiKey =
+        process.env.API_KEY ||
+        process.env.GEMINI_API_KEY ||
+        viteEnv.VITE_GEMINI_API_KEY ||
+        viteEnv.VITE_API_KEY;
     if (!apiKey) {
         throw new Error("Gemini API Anahtarı ayarlanmamış. Lütfen `.env` dosyanıza `API_KEY` veya `GEMINI_API_KEY` ekleyin.");
     }
