@@ -29,7 +29,7 @@ function handleGeminiError(error: any): never {
 
 const generateContent = async (prompt: string, model: GeminiModel, modelConfig?: object): Promise<string> => {
     if (!process.env.API_KEY) {
-        throw new Error("Gemini API Anahtarı yapılandırılmamış. Lütfen ortam değişkenlerini (process.env.API_KEY) kontrol edin.");
+        throw new Error("Gemini API Anahtarı ayarlanmamış. Uygulamanın düzgün çalışabilmesi için `API_KEY` ortam değişkeninin ayarlanması gerekiyor.");
     }
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -96,7 +96,7 @@ const tools: FunctionDeclaration[] = [
 export const geminiService = {
     continueConversation: async (history: Message[], model: GeminiModel): Promise<string> => {
         if (!process.env.API_KEY) {
-            throw new Error("Gemini API Anahtarı yapılandırılmamış. Lütfen ortam değişkenlerini (process.env.API_KEY) kontrol edin.");
+            throw new Error("Gemini API Anahtarı ayarlanmamış. Uygulamanın düzgün çalışabilmesi için `API_KEY` ortam değişkeninin ayarlanması gerekiyor.");
         }
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -217,7 +217,7 @@ export const geminiService = {
     `;
 
     if (!process.env.API_KEY) {
-        throw new Error("Gemini API Anahtarı yapılandırılmamış. Lütfen ortam değişkenlerini (process.env.API_KEY) kontrol edin.");
+        throw new Error("Gemini API Anahtarı ayarlanmamış. Uygulamanın düzgün çalışabilmesi için `API_KEY` ortam değişkeninin ayarlanması gerekiyor.");
     }
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -251,7 +251,7 @@ export const geminiService = {
         const fullPrompt = `**Orijinal Metin:**\n\`\`\`\n${originalText}\n\`\`\`\n\n**Talimat:**\n${userPrompt}`;
         
         if (!process.env.API_KEY) {
-            throw new Error("Gemini API Anahtarı yapılandırılmamış. Lütfen ortam değişkenlerini (process.env.API_KEY) kontrol edin.");
+            throw new Error("Gemini API Anahtarı ayarlanmamış. Uygulamanın düzgün çalışabilmesi için `API_KEY` ortam değişkeninin ayarlanması gerekiyor.");
         }
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -353,7 +353,7 @@ export const geminiService = {
         modelConfig?: object
     ): Promise<{ type: 'chat'; content: string } | { type: 'doc_update'; docKey: 'analysisDoc' | 'testScenarios' | 'visualization'; content: string; confirmation: string }> => {
         if (!process.env.API_KEY) {
-            throw new Error("Gemini API Anahtarı yapılandırılmamış. Lütfen ortam değişkenlerini (process.env.API_KEY) kontrol edin.");
+            throw new Error("Gemini API Anahtarı ayarlanmamış. Uygulamanın düzgün çalışabilmesi için `API_KEY` ortam değişkeninin ayarlanması gerekiyor.");
         }
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });

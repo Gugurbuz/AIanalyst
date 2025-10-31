@@ -293,6 +293,14 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     const activeConversation = useMemo(() => {
         return conversations.find(c => c.id === activeConversationId) || null;
     }, [conversations, activeConversationId]);
+    
+    // Check for API key on startup
+    useEffect(() => {
+        if (!process.env.API_KEY) {
+            setError("Gemini API Anahtarı ayarlanmamış. Uygulamanın çalışması için bu anahtarın ortam değişkeni olarak ayarlanması gerekmektedir.");
+        }
+    }, []);
+
 
     // --- Core Data Fetching & Management ---
     const fetchConversations = useCallback(async () => {
