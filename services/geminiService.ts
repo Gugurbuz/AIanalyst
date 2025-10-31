@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
  * @throws An error if no aPI key is found.
  */
 const getApiKey = (): string => {
-    const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+    const apiKey = env.API_KEY || env.GEMINI_API_KEY;
     if (!apiKey) {
         throw new Error("Gemini API Anahtarı ayarlanmamış. Lütfen `.env` dosyanıza `API_KEY` veya `GEMINI_API_KEY` ekleyin.");
     }
