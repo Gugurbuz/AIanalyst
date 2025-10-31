@@ -193,6 +193,15 @@
         }
       }
     </script>
+    <script>
+      // This simulates the Node.js 'process.env' object for the browser environment.
+      // Replace 'YOUR_GEMINI_API_KEY' with your actual Gemini API key.
+      window.process = {
+        env: {
+          API_KEY: 'YOUR_GEMINI_API_KEY'
+        }
+      };
+    </script>
   <script type="importmap">
 {
   "imports": {

@@ -276,7 +276,6 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     const [generatingDocType, setGeneratingDocType] = useState<'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | null>(null);
     const [appMode, setAppMode] = useState<AppMode>('analyst');
     const [geminiModel, setGeminiModel] = useState<GeminiModel>(() => (localStorage.getItem('geminiModel') as GeminiModel) || 'gemini-2.5-flash');
-    const [apiKeyError, setApiKeyError] = useState<string | null>(null);
 
     // --- Expert Mode State ---
     const [isExpertMode, setIsExpertMode] = useState(false);
@@ -373,14 +372,6 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         };
     }, [conversations, activeConversationId, isLoadingConversations]);
 
-
-    // API Key Check on Load
-    useEffect(() => {
-        const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-            setApiKeyError("Uygulamanın çalışması için Gemini API anahtarı gereklidir. Lütfen projenizin kök dizininde bir `.env` dosyası oluşturun ve içine `API_KEY=YOUR_API_KEY` veya `GEMINI_API_KEY=YOUR_API_KEY` satırını ekleyin.");
-        }
-    }, []);
 
     // Theme Management
     useEffect(() => {
@@ -987,12 +978,6 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 maturityScore={maturityScore}
                 isProcessing={isProcessing}
             />
-            {apiKeyError && (
-                <div className="bg-red-100 dark:bg-red-900/50 border-b-2 border-red-500 text-red-800 dark:text-red-200 p-3 text-sm font-semibold text-center flex items-center justify-center gap-2 error-banner-enter">
-                    <AlertTriangle className="h-5 w-5" />
-                    {apiKeyError}
-                </div>
-            )}
             <div className="flex-1 flex min-h-0 relative">
                 <Sidebar
                     conversations={conversations}
