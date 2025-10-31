@@ -5,6 +5,20 @@ import type { Message, MaturityReport, TaskSuggestion, GeminiModel, FeedbackItem
 import { promptService } from './promptService'; // Import the new prompt service
 
 /**
+ * Gets the effective API key from environment variables.
+ * @returns The API key.
+ * @throws An error if no API key is found.
+ */
+const getApiKey = (): string => {
+    const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        throw new Error("Gemini API Anahtarı ayarlanmamış. Lütfen `.env` dosyanıza `API_KEY` veya `GEMINI_API_KEY` ekleyin.");
+    }
+    return apiKey;
+};
+
+
+/**
  * Parses Gemini API errors and throws a user-friendly error message.
  * @param error The original error caught from the API call.
  */
@@ -28,11 +42,9 @@ function handleGeminiError(error: any): never {
 
 
 const generateContent = async (prompt: string, model: GeminiModel, modelConfig?: object): Promise<string> => {
-    if (!process.env.API_KEY) {
-        throw new Error("Gemini API Anahtarı ayarlanmamış. Uygulamanın düzgün çalışabilmesi için `API_KEY` ortam değişkeninin ayarlanması gerekiyor.");
-    }
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const apiKey = getApiKey();
+        const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
             model: model,
             contents: prompt,
@@ -95,11 +107,9 @@ const tools: FunctionDeclaration[] = [
 
 export const geminiService = {
     continueConversation: async (history: Message[], model: GeminiModel): Promise<string> => {
-        if (!process.env.API_KEY) {
-            throw new Error("Gemini API Anahtarı ayarlanmamış. Uygulamanın düzgün çalışabilmesi için `API_KEY` ortam değişkeninin ayarlanması gerekiyor.");
-        }
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const apiKey = getApiKey();
+            const ai = new GoogleGenAI({ apiKey });
             const systemInstruction = promptService.getPrompt('continueConversation');
             const geminiHistory = convertMessagesToGeminiFormat(history);
 
@@ -216,11 +226,9 @@ export const geminiService = {
         "${userPrompt}"
     `;
 
-    if (!process.env.API_KEY) {
-        throw new Error("Gemini API Anahtarı ayarlanmamış. Uygulamanın düzgün çalışabilmesi için `API_KEY` ortam değişkeninin ayarlanması gerekiyor.");
-    }
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const apiKey = getApiKey();
+        const ai = new GoogleGenAI({ apiKey });
         const response = await ai.models.generateContent({
             model,
             contents: fullPrompt,
@@ -250,11 +258,9 @@ export const geminiService = {
         const systemPrompt = promptService.getPrompt('modifySelectedText');
         const fullPrompt = `**Orijinal Metin:**\n\`\`\`\n${originalText}\n\`\`\`\n\n**Talimat:**\n${userPrompt}`;
         
-        if (!process.env.API_KEY) {
-            throw new Error("Gemini API Anahtarı ayarlanmamış. Uygulamanın düzgün çalışabilmesi için `API_KEY` ortam değişkeninin ayarlanması gerekiyor.");
-        }
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const apiKey = getApiKey();
+            const ai = new GoogleGenAI({ apiKey });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: fullPrompt,
@@ -352,11 +358,9 @@ export const geminiService = {
         model: GeminiModel,
         modelConfig?: object
     ): Promise<{ type: 'chat'; content: string } | { type: 'doc_update'; docKey: 'analysisDoc' | 'testScenarios' | 'visualization'; content: string; confirmation: string }> => {
-        if (!process.env.API_KEY) {
-            throw new Error("Gemini API Anahtarı ayarlanmamış. Uygulamanın düzgün çalışabilmesi için `API_KEY` ortam değişkeninin ayarlanması gerekiyor.");
-        }
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const apiKey = getApiKey();
+            const ai = new GoogleGenAI({ apiKey });
             const systemInstruction = promptService.getPrompt('continueConversation');
             const geminiHistory = convertMessagesToGeminiFormat(history);
 

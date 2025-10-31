@@ -167,8 +167,9 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
 
     // API Key Check on Load
     useEffect(() => {
-        if (!process.env.API_KEY) {
-            setApiKeyError("Uygulamanın çalışması için Gemini API anahtarı gereklidir. Lütfen bu geliştirme ortamının 'Secrets' (Sırlar) bölümünde `API_KEY` adıyla anahtarınızı tanımlayın.");
+        const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+            setApiKeyError("Uygulamanın çalışması için Gemini API anahtarı gereklidir. Lütfen projenizin kök dizininde bir `.env` dosyası oluşturun ve içine `API_KEY=YOUR_API_KEY` veya `GEMINI_API_KEY=YOUR_API_KEY` satırını ekleyin.");
         }
     }, []);
 
@@ -210,7 +211,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         if (error) console.error('Error updating conversation:', error);
     }, []);
     
-    const handleNewConversation = useCallback(async (initialDoc?: { content: string, title?: string }) => {
+    const handleNewConversation = useCallback(async (initialDoc?: { content?: string, title?: string }) => {
         setIsProcessing(true);
         setIsNewAnalysisModalOpen(false);
 
