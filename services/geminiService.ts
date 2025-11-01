@@ -519,7 +519,7 @@ export const geminiService = {
     generateConversationTitle: async (firstMessage: string): Promise<{ title: string, tokens: number }> => {
         const basePrompt = promptService.getPrompt('generateConversationTitle');
         const prompt = `${basePrompt}: "${firstMessage}"`;
-        const { text: title, tokens } = await generateContent(prompt, 'gemini-2.5-flash-lite');
+        const { text: title, tokens } = await generateContent(prompt, 'gemini-2.5-flash-lite', { maxOutputTokens: 15 });
         return { title: title.replace(/["*]/g, '').trim(), tokens };
     },
 
@@ -612,7 +612,7 @@ export const geminiService = {
         }
     },
 
-    summarizeDocumentChange: async (oldDoc: string, newDoc: string, model: GeminiModel = 'gemini-2.5-flash'): Promise<{ summary: string, tokens: number }> => {
+    summarizeDocumentChange: async (oldDoc: string, newDoc: string, model: GeminiModel = 'gemini-2.5-flash-lite'): Promise<{ summary: string, tokens: number }> => {
         if (oldDoc === newDoc) {
             return { summary: "Değişiklik yapılmadı.", tokens: 0 };
         }

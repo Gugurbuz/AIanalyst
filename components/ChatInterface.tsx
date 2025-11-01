@@ -60,8 +60,8 @@ interface ChatInterfaceProps {
     activeConversationId: string | null;
     onStopGeneration: () => void;
     initialText?: string | null;
-    isExpertMode: boolean;
-    onExpertModeChange: (isOn: boolean) => void;
+    isDeepAnalysisMode: boolean;
+    onDeepAnalysisModeChange: (isOn: boolean) => void;
 }
 
 // Helper to read file content as a promise
@@ -74,7 +74,7 @@ const readFileAsText = (file: File): Promise<string> => {
     });
 };
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendMessage, activeConversationId, onStopGeneration, initialText, isExpertMode, onExpertModeChange }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendMessage, activeConversationId, onStopGeneration, initialText, isDeepAnalysisMode, onDeepAnalysisModeChange }) => {
     const [input, setInput] = useState('');
     const [attachedFile, setAttachedFile] = useState<File | null>(null);
     const [isModeSelectorOpen, setIsModeSelectorOpen] = useState(false);
@@ -228,8 +228,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
         }
     }
     
-    const handleModeChange = (isExpert: boolean) => {
-        onExpertModeChange(isExpert);
+    const handleModeChange = (isDeep: boolean) => {
+        onDeepAnalysisModeChange(isDeep);
         setIsModeSelectorOpen(false);
     }
 
@@ -268,19 +268,21 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
                               <button 
                                 type="button"
                                 onClick={() => setIsModeSelectorOpen(!isModeSelectorOpen)}
-                                title="Modu Değiştir"
+                                title="Analiz Modunu Değiştir"
                                 disabled={isLoading}
-                                className={`p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors ${isExpertMode ? 'text-indigo-500' : 'text-slate-500 dark:text-slate-400'}`}
+                                className={`p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors ${isDeepAnalysisMode ? 'text-indigo-500' : 'text-slate-500 dark:text-slate-400'}`}
                             >
                                  <Bot className="h-5 w-5" />
                             </button>
                             {isModeSelectorOpen && (
-                                <div className="origin-bottom-left absolute bottom-full left-0 mb-2 w-48 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-30 animate-fade-in-up" style={{animationDuration: '0.1s'}}>
-                                    <button onClick={() => handleModeChange(false)} className={`w-full text-left flex items-center px-3 py-2 text-sm ${!isExpertMode ? 'bg-indigo-50 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-200' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
-                                        Analist Modu
+                                <div className="origin-bottom-left absolute bottom-full left-0 mb-2 w-56 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-30 animate-fade-in-up" style={{animationDuration: '0.1s'}}>
+                                    <button onClick={() => handleModeChange(false)} className={`w-full text-left flex flex-col px-3 py-2 text-sm ${!isDeepAnalysisMode ? 'bg-indigo-50 dark:bg-indigo-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+                                        <span className={`font-semibold ${!isDeepAnalysisMode ? 'text-indigo-700 dark:text-indigo-200' : 'text-slate-800 dark:text-slate-200'}`}>Normal Analiz</span>
+                                        <span className="text-xs text-slate-500 dark:text-slate-400">Hızlı ve verimli. (gemini-2.5-flash)</span>
                                     </button>
-                                     <button onClick={() => handleModeChange(true)} className={`w-full text-left flex items-center px-3 py-2 text-sm ${isExpertMode ? 'bg-indigo-50 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-200' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
-                                        Exper Modu
+                                     <button onClick={() => handleModeChange(true)} className={`w-full text-left flex flex-col px-3 py-2 text-sm ${isDeepAnalysisMode ? 'bg-indigo-50 dark:bg-indigo-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+                                        <span className={`font-semibold ${isDeepAnalysisMode ? 'text-indigo-700 dark:text-indigo-200' : 'text-slate-800 dark:text-slate-200'}`}>Derin Analiz</span>
+                                        <span className="text-xs text-slate-500 dark:text-slate-400">Daha kapsamlı, yavaş yanıt. (gemini-2.5-pro)</span>
                                     </button>
                                 </div>
                             )}

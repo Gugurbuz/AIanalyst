@@ -1,5 +1,5 @@
 import React from 'react';
-import type { User, Theme, AppMode } from '../types';
+import type { User, Theme, AppMode, UserProfile } from '../types';
 import { ThemeSwitcher } from './ThemeSwitcher';
 import { Menu, Share2, PanelRightOpen, PanelRightClose, LoaderCircle, CheckCircle, AlertCircle, TrendingUp, Database } from 'lucide-react';
 
@@ -19,7 +19,7 @@ interface HeaderProps {
     maturityScore: { score: number; justification: string } | null;
     isProcessing: boolean;
     onToggleDeveloperPanel: () => void;
-    totalTokensUsed?: number;
+    userProfile: UserProfile | null;
 }
 
 const LogoIcon = ({ className }: { className?: string }) => (
@@ -69,14 +69,27 @@ const MaturityScoreIndicator: React.FC<{ score: number; justification: string }>
     );
 };
 
-const TokenUsageIndicator: React.FC<{ tokens: number }> = ({ tokens }) => {
+const UserTokenIndicator: React.FC<{ profile: UserProfile }> = ({ profile }) => {
+    const { tokens_used, token_limit } = profile;
+    const usagePercentage = token_limit > 0 ? (tokens_used / token_limit) * 100 : 0;
+    const remainingTokens = token_limit - tokens_used;
+
+    let progressBarColor = 'bg-emerald-500';
+    if (usagePercentage > 90) progressBarColor = 'bg-red-500';
+    else if (usagePercentage > 75) progressBarColor = 'bg-amber-500';
+
     return (
         <div
-            title="Bu sohbette kullanılan toplam token sayısı"
-            className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400"
+            title={`Kullanılan: ${tokens_used.toLocaleString('tr-TR')}\nKalan: ${Math.max(0, remainingTokens).toLocaleString('tr-TR')}`}
+            className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400 w-32"
         >
-            <Database className="h-3.5 w-3.5" />
-            <span>{tokens.toLocaleString('tr-TR')}</span>
+            <Database className="h-4 w-4 flex-shrink-0" />
+            <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+                <div 
+                    className={`${progressBarColor} h-2 rounded-full transition-all duration-300`} 
+                    style={{ width: `${Math.min(usagePercentage, 100)}%` }}
+                ></div>
+            </div>
         </div>
     );
 };
@@ -98,7 +111,7 @@ export const Header: React.FC<HeaderProps> = ({
     maturityScore,
     isProcessing,
     onToggleDeveloperPanel,
-    totalTokensUsed,
+    userProfile,
 }) => {
     const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
     const userMenuRef = React.useRef<HTMLDivElement>(null);
@@ -153,10 +166,10 @@ export const Header: React.FC<HeaderProps> = ({
                 ) : (
                     <SaveStatusIndicator status={saveStatus} />
                 )}
-                {totalTokensUsed > 0 && (
+                {userProfile && (
                     <>
                         <div className="h-4 w-px bg-slate-300 dark:bg-slate-600" />
-                        <TokenUsageIndicator tokens={totalTokensUsed} />
+                        <UserTokenIndicator profile={userProfile} />
                     </>
                 )}
                  <div className="flex items-center gap-2 sm:gap-4">

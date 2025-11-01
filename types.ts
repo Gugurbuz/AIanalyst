@@ -10,6 +10,17 @@ export type AppMode = 'analyst' | 'backlog';
 
 export type GeminiModel = 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.5-flash-lite';
 
+export type PlanID = 'free' | 'pro' | 'corporate';
+
+export interface UserProfile {
+    id: string; // Corresponds to auth.users.id
+    plan: PlanID;
+    token_limit: number;
+    tokens_used: number;
+    plan_start_date: string;
+    plan_end_date: string | null;
+}
+
 export interface Feedback {
     rating: 'up' | 'down' | null;
     comment?: string;

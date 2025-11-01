@@ -1,6 +1,6 @@
 // services/authService.ts
 import { supabase } from './supabaseClient';
-import type { User } from '../types';
+import type { User, UserProfile } from '../types';
 import type { Session } from '@supabase/supabase-js';
 
 export const authService = {
@@ -44,6 +44,22 @@ export const authService = {
     
     onAuthStateChange: (callback: (event: string, session: Session | null) => void) => {
         return supabase.auth.onAuthStateChange(callback);
+    },
+
+    getProfile: async (userId: string): Promise<UserProfile | null> => {
+        const { data, error } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('id', userId)
+            .single();
+
+        if (error) {
+            console.error("Error fetching user profile:", error);
+            // This can happen if the trigger hasn't run yet for a new user.
+            // We will handle the null case gracefully in the UI.
+            return null;
+        }
+        return data as UserProfile;
     },
 
     loginWithTestUser: async (): Promise<User> => {

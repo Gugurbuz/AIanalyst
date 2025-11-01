@@ -307,9 +307,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                                     Ücretsiz Başla
                                 </button>
                                 <ul className="mt-8 space-y-3 text-sm text-gray-600 feature-icon-list">
+                                    <li className="flex items-center gap-3"><CheckCircle2 />1,000,000 Token (Tek Seferlik)</li>
                                     <li className="flex items-center gap-3"><CheckCircle2 />5 Doküman Sınırı</li>
                                     <li className="flex items-center gap-3"><CheckCircle2 />Temel AI Özellikleri</li>
-                                    <li className="flex items-center gap-3"><CheckCircle2 />Standart Şablonlar</li>
                                 </ul>
                             </div>
                             <div className="bg-indigo-600 p-8 rounded-3xl shadow-2xl relative flex flex-col">
@@ -319,16 +319,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                                 <h3 className="text-xl font-semibold text-white">Pro</h3>
                                 <p className="mt-4 text-4xl font-bold tracking-tight text-white">
                                     {isAnnual ? '160₺' : '200₺'}
-                                    <span className="text-sm font-medium text-indigo-100">/ay</span>
+                                    <span className="text-sm font-medium text-indigo-100">/kullanıcı/ay</span>
                                 </p>
                                 <p className="mt-3 text-base text-indigo-100">Profesyoneller ve küçük ekipler için.</p>
                                 <button onClick={onSignupClick} className="mt-8 block w-full text-center px-6 py-3 text-base font-medium text-indigo-700 bg-white rounded-lg hover:bg-gray-100 transition-colors">
                                     Pro'yu Başlat
                                 </button>
                                 <ul className="mt-8 space-y-3 text-sm text-indigo-50 feature-icon-list">
+                                    <li className="flex items-center gap-3"><CheckCircle2 />15,000,000 Token/ay</li>
                                     <li className="flex items-center gap-3"><CheckCircle2 />Sınırsız Doküman</li>
                                     <li className="flex items-center gap-3"><CheckCircle2 />Gelişmiş AI Özellikleri</li>
-                                    <li className="flex items-center gap-3"><CheckCircle2 />Tüm Şablonlar</li>
                                     <li className="flex items-center gap-3"><CheckCircle2 />Entegrasyonlar</li>
                                 </ul>
                             </div>
@@ -340,10 +340,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                                     İletişime Geçin
                                 </a>
                                 <ul className="mt-8 space-y-3 text-sm text-gray-600 feature-icon-list">
+                                    <li className="flex items-center gap-3"><CheckCircle2 />Özelleştirilebilir Token Limiti</li>
                                     <li className="flex items-center gap-3"><CheckCircle2 />Pro'daki Her Şey</li>
                                     <li className="flex items-center gap-3"><CheckCircle2 />Özel Güvenlik (SSO)</li>
                                     <li className="flex items-center gap-3"><CheckCircle2 />Öncelikli Destek</li>
-                                    <li className="flex items-center gap-3"><CheckCircle2 />Özel Entegrasyonlar</li>
                                 </ul>
                             </div>
                         </div>

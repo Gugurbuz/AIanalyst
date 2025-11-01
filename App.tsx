@@ -20,8 +20,10 @@ import { FeatureSuggestionsModal } from './components/FeatureSuggestionsModal';
 import { RegenerateConfirmationModal } from './components/RegenerateConfirmationModal';
 import { DeveloperPanel } from './components/DeveloperPanel';
 import { FeedbackDashboard } from './components/FeedbackDashboard';
+import { UpgradeModal } from './components/UpgradeModal';
+import { authService } from './services/authService';
 import { SAMPLE_ANALYSIS_DOCUMENT, ANALYSIS_TEMPLATES, TEST_SCENARIO_TEMPLATES } from './templates';
-import type { User, Conversation, Message, Theme, AppMode, GeminiModel, GeneratedDocs, FeedbackItem, Template, VizData, ExpertStep, GenerativeSuggestion, DocumentVersion, Document, DocumentType } from './types';
+import type { User, Conversation, Message, Theme, AppMode, GeminiModel, GeneratedDocs, FeedbackItem, Template, VizData, ExpertStep, GenerativeSuggestion, DocumentVersion, Document, DocumentType, UserProfile } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, X, AlertTriangle } from 'lucide-react';
 
@@ -166,8 +168,8 @@ interface AnalystViewProps {
     messageToEdit: string | null;
     onSuggestNextFeature: () => void;
     nextBestAction: ReturnType<typeof useNextBestAction>;
-    isExpertMode: boolean;
-    onExpertModeChange: (isOn: boolean) => void;
+    isDeepAnalysisMode: boolean;
+    onDeepAnalysisModeChange: (isOn: boolean) => void;
     onApplySuggestion: (suggestion: GenerativeSuggestion, messageId: string) => void;
 }
 
@@ -183,8 +185,8 @@ const AnalystView: React.FC<AnalystViewProps> = ({
     messageToEdit,
     onSuggestNextFeature,
     nextBestAction,
-    isExpertMode,
-    onExpertModeChange,
+    isDeepAnalysisMode,
+    onDeepAnalysisModeChange,
     onApplySuggestion,
 }) => {
     const scrollContainerRef = useRef<HTMLElement>(null);
@@ -229,8 +231,8 @@ const AnalystView: React.FC<AnalystViewProps> = ({
                         activeConversationId={activeConversation?.id || null}
                         onStopGeneration={onStopGeneration}
                         initialText={messageToEdit}
-                        isExpertMode={isExpertMode}
-                        onExpertModeChange={onExpertModeChange}
+                        isDeepAnalysisMode={isDeepAnalysisMode}
+                        onDeepAnalysisModeChange={onDeepAnalysisModeChange}
                     />
                 </div>
             </footer>
@@ -292,7 +294,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     // --- Core State ---
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+    const [isDataLoading, setIsDataLoading] = useState(true);
     const [isProcessing, setIsProcessing] = useState(false);
     const [generatingDocType, setGeneratingDocType] = useState<'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -306,6 +309,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     const [isWorkspaceVisible, setIsWorkspaceVisible] = useState(true);
     const [isNewAnalysisModalOpen, setIsNewAnalysisModalOpen] = useState(false);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [isFeatureSuggestionsModalOpen, setIsFeatureSuggestionsModalOpen] = useState(false);
     const [featureSuggestions, setFeatureSuggestions] = useState<string[]>([]);
     const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
@@ -325,8 +329,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     const [messageToEdit, setMessageToEdit] = useState<string | null>(null);
     const [inlineModificationState, setInlineModificationState] = useState<{ docKey: 'analysisDoc' | 'testScenarios'; originalText: string } | null>(null);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-    const [geminiModel, setGeminiModel] = useState<GeminiModel>(() => (localStorage.getItem('geminiModel') as GeminiModel) || 'gemini-2.5-flash');
-    const [isExpertMode, setIsExpertMode] = useState(false);
+    const [isDeepAnalysisMode, setIsDeepAnalysisMode] = useState(false);
     const expertModeClarificationAttempts = useRef(0);
     const [diagramType, setDiagramType] = useState<'mermaid' | 'bpmn'>('mermaid');
     const [selectedTemplates, setSelectedTemplates] = useState({
@@ -380,44 +383,53 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     };
 
     // --- Data Fetching ---
-    const fetchConversations = useCallback(async () => {
-        setIsLoading(true);
-        const { data, error } = await supabase
-            .from('conversations')
-            .select('*, conversation_details(*), document_versions(*), documents(*)')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false });
-
-        if (error) {
-            console.error(error);
-            setError("Sohbetler yüklenirken bir hata oluştu.");
-            setConversations([]);
-        } else if (data) {
-            const conversationsWithDetails = data.map((conv: any) => ({
-                ...conv,
-                messages: (conv.conversation_details || []).sort(
-                    (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                ),
-                documentVersions: (conv.document_versions || []).sort(
-                    (a: DocumentVersion, b: DocumentVersion) => a.version_number - b.version_number
-                ),
-                documents: conv.documents || [],
-            }));
-            setConversations(conversationsWithDetails as Conversation[]);
-        }
-        setIsLoading(false);
-    }, [user.id]);
-
     useEffect(() => {
-        fetchConversations();
-    }, [fetchConversations]);
+        const fetchInitialData = async () => {
+            setIsDataLoading(true);
+            
+            // Fetch profile and conversations in parallel
+            const [profileResult, conversationsResult] = await Promise.all([
+                authService.getProfile(user.id),
+                supabase
+                    .from('conversations')
+                    .select('*, conversation_details(*), document_versions(*), documents(*)')
+                    .eq('user_id', user.id)
+                    .order('created_at', { ascending: false })
+            ]);
 
-    // This effect runs after conversations are fetched to set the active one.
-    useEffect(() => {
-        if (!activeConversationId && conversations.length > 0) {
-            setActiveConversationId(conversations[0].id);
-        }
-    }, [conversations, activeConversationId]);
+            // Process profile
+            if (profileResult) {
+                setUserProfile(profileResult);
+            } else {
+                setError("Kullanıcı profili yüklenemedi. Lütfen tekrar giriş yapmayı deneyin.");
+            }
+
+            // Process conversations
+            if (conversationsResult.error) {
+                console.error(conversationsResult.error);
+                setError("Sohbetler yüklenirken bir hata oluştu.");
+                setConversations([]);
+            } else if (conversationsResult.data) {
+                const conversationsWithDetails = conversationsResult.data.map((conv: any) => ({
+                    ...conv,
+                    messages: (conv.conversation_details || []).sort(
+                        (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                    ),
+                    documentVersions: (conv.document_versions || []).sort(
+                        (a: DocumentVersion, b: DocumentVersion) => a.version_number - b.version_number
+                    ),
+                    documents: conv.documents || [],
+                }));
+                setConversations(conversationsWithDetails as Conversation[]);
+                if (!activeConversationId && conversationsWithDetails.length > 0) {
+                    setActiveConversationId(conversationsWithDetails[0].id);
+                }
+            }
+            setIsDataLoading(false);
+        };
+
+        fetchInitialData();
+    }, [user.id, activeConversationId]);
     
     // Reset expert mode attempt counter when switching conversations
     useEffect(() => {
@@ -497,16 +509,16 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         };
     }, []);
 
-    const useDebounce = (callback: (conv: Partial<Conversation> & { id: string }) => void, delay: number) => {
+    const useDebounce = (callback: (...args: any[]) => void, delay: number) => {
         // FIX: Replaced NodeJS.Timeout with ReturnType<typeof setTimeout> for browser compatibility.
         const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     
-        return useCallback((conv: Partial<Conversation> & { id: string }) => {
+        return useCallback((...args: any[]) => {
             if (timeoutRef.current) {
                 clearTimeout(timeoutRef.current);
             }
             timeoutRef.current = setTimeout(() => {
-                callback(conv);
+                callback(...args);
             }, delay);
         }, [callback, delay]);
     };
@@ -526,13 +538,50 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         triggerSave({ id, ...updates });
     }, [triggerSave]);
 
-    const addTokensToActiveConversation = useCallback((tokens: number) => {
-        if (activeConversationId && tokens > 0) {
-            const currentTokens = conversations.find(c => c.id === activeConversationId)?.total_tokens_used || 0;
+    const debouncedProfileSave = useRef<(profile: UserProfile) => void>();
+    useEffect(() => {
+        debouncedProfileSave.current = (profile: UserProfile) => {
+            const save = async () => {
+                const { error } = await supabase
+                    .from('user_profiles')
+                    .update({ tokens_used: profile.tokens_used })
+                    .eq('id', profile.id);
+
+                if (error) {
+                    setError('Kullanıcı profili güncellenemedi: ' + error.message);
+                }
+            };
+            save();
+        };
+    }, []);
+
+    const triggerProfileSave = useDebounce((profile: UserProfile) => {
+        if (debouncedProfileSave.current) {
+            debouncedProfileSave.current(profile);
+        }
+    }, 2000);
+
+    const commitTokenUsage = useCallback((tokens: number) => {
+        if (tokens <= 0) return;
+
+        // Update user profile
+        if (userProfile) {
+            const updatedProfile = {
+                ...userProfile,
+                tokens_used: userProfile.tokens_used + tokens,
+            };
+            setUserProfile(updatedProfile);
+            triggerProfileSave(updatedProfile);
+        }
+
+        // Update conversation tokens (for info)
+        if (activeConversationId) {
+            const currentConv = conversations.find(c => c.id === activeConversationId);
+            const currentTokens = currentConv?.total_tokens_used || 0;
             const newTotal = currentTokens + tokens;
             updateConversation(activeConversationId, { total_tokens_used: newTotal });
         }
-    }, [activeConversationId, conversations, updateConversation]);
+    }, [userProfile, activeConversationId, conversations, updateConversation, triggerProfileSave]);
 
     const saveDocumentVersion = useCallback(async (
         docKey: keyof GeneratedDocs,
@@ -636,6 +685,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         } else {
             title = 'Yeni Analiz';
         }
+        
+        commitTokenUsage(tokensUsed);
 
         const newConversationData: Omit<Conversation, 'id' | 'created_at' | 'messages' | 'documentVersions' | 'documents'> = {
             user_id: user.id,
@@ -685,10 +736,10 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         }
         
         // Refetch to get the fully populated conversation
-        await fetchConversations();
+        // await fetchConversations(); // This is now handled by the main data fetcher.
 
         return newConv;
-    }, [user.id, saveDocumentVersion, fetchConversations]);
+    }, [user.id, saveDocumentVersion, commitTokenUsage]);
     
      const handleNewConversation = useCallback(() => {
         setIsNewAnalysisModalOpen(true);
@@ -726,7 +777,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
 
     const handleStopGeneration = () => {
         if (streamControllerRef.current) {
-            streamControllerRef.current.abort();
+// FIX: Pass an argument to abort() to resolve the "Expected 1 arguments, but got 0" error. The argument is optional in modern browsers, but some TypeScript configurations or older type definitions might require it. Passing undefined maintains the default behavior.
+            streamControllerRef.current.abort(undefined);
             setIsProcessing(false);
             setGeneratingDocType(null);
             console.log("Stream stopped by user.");
@@ -740,8 +792,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         let fullResponse = "";
         let finalMessage = "";
         let finalSuggestion: GenerativeSuggestion | null = null;
-        let totalTokens = 0;
-
+        
         for await (const chunk of stream) {
             if (chunk.type === 'doc_stream_chunk' && activeConversationId) {
                 fullResponse += chunk.chunk;
@@ -765,7 +816,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             } else if (chunk.type === 'generative_suggestion' && activeConversationId) {
                 finalSuggestion = chunk.suggestion;
             } else if (chunk.type === 'usage_update' && activeConversationId) {
-                 totalTokens += chunk.tokens;
+                 commitTokenUsage(chunk.tokens);
             } else if (chunk.type === 'maturity_update' && activeConversationId) {
                  saveDocumentVersion('maturityReport', chunk.report, "AI Olgunluk Değerlendirmesi");
                  if (maturityScoreTimerRef.current) clearTimeout(maturityScoreTimerRef.current);
@@ -795,17 +846,18 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                  break;
             }
         }
-
-        if (totalTokens > 0) {
-            addTokensToActiveConversation(totalTokens);
-        }
         
         return { fullResponse, finalMessage, finalSuggestion };
-    }, [activeConversationId, diagramType, addTokensToActiveConversation, saveDocumentVersion]);
+    }, [activeConversationId, diagramType, commitTokenUsage, saveDocumentVersion]);
 
 
     const sendMessage = useCallback(async (content: string, isSystemMessage: boolean = false) => {
         if (!content.trim()) return;
+
+        if (!userProfile || userProfile.tokens_used >= userProfile.token_limit) {
+            setShowUpgradeModal(true);
+            return;
+        }
         
         setMessageToEdit(null);
     
@@ -890,12 +942,14 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             let finalMessageContent = "";
             let finalSuggestion: GenerativeSuggestion | null = null;
             let newChecklist: ExpertStep[] | undefined;
+
+            const modelForChat: GeminiModel = isDeepAnalysisMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
     
-            if (isExpertMode) {
+            if (false) { // TODO: Re-evaluate expert mode logic
                  const MAX_CLARIFICATION_ATTEMPTS = 2;
                 
-                const { needsClarification, questions, confirmationRequest, checklist, tokens } = await geminiService.clarifyAndConfirmExpertMode(conversationForApi.messages, geminiModel);
-                addTokensToActiveConversation(tokens);
+                const { needsClarification, questions, confirmationRequest, checklist, tokens } = await geminiService.clarifyAndConfirmExpertMode(conversationForApi.messages, 'gemini-2.5-flash');
+                commitTokenUsage(tokens);
     
                 if (needsClarification && questions && expertModeClarificationAttempts.current < MAX_CLARIFICATION_ATTEMPTS) {
                     finalMessageContent = questions;
@@ -917,7 +971,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                     const userConfirmed = await new Promise(resolve => resolve(true)); // Simplified
     
                     if (userConfirmed) {
-                        stream = geminiService.executeExpertRun(messagesForExpertRun, { analysis: selectedTemplates.analysis, test: selectedTemplates.test }, geminiModel);
+                        stream = geminiService.executeExpertRun(messagesForExpertRun, { analysis: selectedTemplates.analysis, test: selectedTemplates.test }, 'gemini-2.5-pro');
                         const { finalMessage } = await processStream(stream, 'expert_run');
                         finalMessageContent = finalMessage;
                     } else {
@@ -925,7 +979,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                     }
                 }
             } else {
-                stream = geminiService.processAnalystMessageStream(conversationForApi.messages, conversationForApi.generatedDocs, { analysis: selectedTemplates.analysis, test: selectedTemplates.test }, geminiModel);
+                stream = geminiService.processAnalystMessageStream(conversationForApi.messages, conversationForApi.generatedDocs, { analysis: selectedTemplates.analysis, test: selectedTemplates.test }, modelForChat);
                 const { finalMessage, finalSuggestion: suggestion } = await processStream(stream, 'chat_response');
                 finalMessageContent = finalMessage;
                 finalSuggestion = suggestion;
@@ -969,7 +1023,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             setGeneratingDocType(null);
             streamControllerRef.current = null;
         }
-    }, [activeConversationId, conversations, createNewConversation, isExpertMode, geminiModel, selectedTemplates, processStream, addTokensToActiveConversation]);
+    }, [activeConversationId, conversations, createNewConversation, isDeepAnalysisMode, selectedTemplates, processStream, userProfile]);
 
 
      const handleGenerateDoc = useCallback(async (
@@ -978,6 +1032,11 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         newDiagramType?: 'mermaid' | 'bpmn'
     ) => {
         if (!activeConversation) return;
+
+        if (!userProfile || userProfile.tokens_used >= userProfile.token_limit) {
+            setShowUpgradeModal(true);
+            return;
+        }
 
         if (type === 'backlog-generation') {
             setActiveDocTab('backlog-generation');
@@ -994,23 +1053,24 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         try {
             let stream: AsyncGenerator<StreamChunk>;
             const docKey = type === 'analysis' ? 'analysisDoc' : type === 'test' ? 'testScenarios' : 'traceabilityMatrix';
+            const modelForGeneration: GeminiModel = type === 'analysis' || type === 'traceability' ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
 
             if (type === 'analysis' || type === 'test' || type === 'traceability') {
                  let rawStream;
                  if (type === 'analysis') {
-                    rawStream = geminiService.generateAnalysisDocument(activeConversation.messages, currentTemplateId, geminiModel);
+                    rawStream = geminiService.generateAnalysisDocument(activeConversation.messages, currentTemplateId, modelForGeneration);
                  } else if (type === 'test') {
-                     rawStream = geminiService.generateTestScenarios(activeConversation.generatedDocs.analysisDoc, currentTemplateId, geminiModel);
+                     rawStream = geminiService.generateTestScenarios(activeConversation.generatedDocs.analysisDoc, currentTemplateId, modelForGeneration);
                  } else { // traceability
-                     rawStream = geminiService.generateTraceabilityMatrix(activeConversation.generatedDocs.analysisDoc, activeConversation.generatedDocs.testScenarios, geminiModel);
+                     rawStream = geminiService.generateTraceabilityMatrix(activeConversation.generatedDocs.analysisDoc, activeConversation.generatedDocs.testScenarios, modelForGeneration);
                  }
                  stream = wrapDocStream(rawStream, docKey as any);
                  const { fullResponse } = await processStream(stream, docKey as any);
                  saveDocumentVersion(docKey as 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix', fullResponse, "AI Tarafından Oluşturuldu");
 
             } else { // 'viz'
-                 const { code, tokens } = await geminiService.generateDiagram(activeConversation.generatedDocs.analysisDoc, currentDiagramType, geminiModel);
-                 addTokensToActiveConversation(tokens);
+                 const { code, tokens } = await geminiService.generateDiagram(activeConversation.generatedDocs.analysisDoc, currentDiagramType, 'gemini-2.5-flash');
+                 commitTokenUsage(tokens);
                  const vizKey = currentDiagramType === 'mermaid' ? 'mermaidViz' : 'bpmnViz';
                  saveDocumentVersion(vizKey, { code, sourceHash: '' }, "AI Tarafından Oluşturuldu");
                  // Exit early as it's not a real stream, handle state reset manually.
@@ -1031,7 +1091,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 setGeneratingDocType(null);
             }
         }
-    }, [activeConversation, geminiModel, processStream, selectedTemplates, diagramType, setActiveDocTab, saveDocumentVersion, addTokensToActiveConversation]);
+    }, [activeConversation, processStream, selectedTemplates, diagramType, setActiveDocTab, saveDocumentVersion, commitTokenUsage, userProfile]);
     
      const handleEvaluateDocument = useCallback(async () => {
         if (!activeConversation || !activeConversation.generatedDocs.analysisDoc) return;
@@ -1125,6 +1185,10 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     
     const handleModifySelection = async (selectedText: string, userPrompt: string, docKey: 'analysisDoc' | 'testScenarios') => {
         if (!activeConversation) return;
+        if (!userProfile || userProfile.tokens_used >= userProfile.token_limit) {
+            setShowUpgradeModal(true);
+            return;
+        }
         
         const originalContent = activeConversation.generatedDocs[docKey];
         setInlineModificationState({ docKey, originalText: selectedText });
@@ -1132,8 +1196,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         try {
             const basePrompt = promptService.getPrompt('modifySelectedText');
             const fullPrompt = `${basePrompt}\n\n**Orijinal Metin:**\n"${selectedText}"\n\n**Talimat:**\n"${userPrompt}"`;
-            const { text: modifiedText, tokens } = await geminiService.continueConversation([{ role: 'user', content: fullPrompt, id: 'temp', timestamp: '', conversation_id: 'temp', created_at: '' }], geminiModel);
-            addTokensToActiveConversation(tokens);
+            const { text: modifiedText, tokens } = await geminiService.continueConversation([{ role: 'user', content: fullPrompt, id: 'temp', timestamp: '', conversation_id: 'temp', created_at: '' }], 'gemini-2.5-flash');
+            commitTokenUsage(tokens);
 
             const newContent = originalContent.replace(selectedText, modifiedText);
             
@@ -1149,6 +1213,10 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     
     const handleModifyDiagram = async (userPrompt: string) => {
         if (!activeConversation) return;
+        if (!userProfile || userProfile.tokens_used >= userProfile.token_limit) {
+            setShowUpgradeModal(true);
+            return;
+        }
         
         const currentCode = (diagramType === 'bpmn' ? activeConversation.generatedDocs.bpmnViz?.code : activeConversation.generatedDocs.mermaidViz?.code) || '';
         if (!currentCode) {
@@ -1160,8 +1228,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         setGeneratingDocType('viz');
         
         try {
-             const { code: newCode, tokens } = await geminiService.modifyDiagram(currentCode, userPrompt, geminiModel, diagramType);
-             addTokensToActiveConversation(tokens);
+             const { code: newCode, tokens } = await geminiService.modifyDiagram(currentCode, userPrompt, 'gemini-2.5-flash', diagramType);
+             commitTokenUsage(tokens);
              const vizKey = diagramType === 'mermaid' ? 'mermaidViz' : 'bpmnViz';
              saveDocumentVersion(vizKey, { code: newCode, sourceHash: '' }, "AI Tarafından Diyagram Düzenlemesi");
         } catch (err) {
@@ -1175,6 +1243,10 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     
      const handleSuggestNextFeature = async () => {
         if (!activeConversation) return;
+        if (!userProfile || userProfile.tokens_used >= userProfile.token_limit) {
+            setShowUpgradeModal(true);
+            return;
+        }
 
         setIsFeatureSuggestionsModalOpen(true);
         setIsFetchingSuggestions(true);
@@ -1184,9 +1256,9 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             const { suggestions, tokens } = await geminiService.suggestNextFeature(
                 activeConversation.generatedDocs.analysisDoc,
                 activeConversation.messages,
-                geminiModel
+                'gemini-2.5-flash'
             );
-            addTokensToActiveConversation(tokens);
+            commitTokenUsage(tokens);
             setFeatureSuggestions(suggestions);
         } catch (e) {
             setSuggestionError(e instanceof Error ? e.message : 'Öneriler alınamadı.');
@@ -1326,16 +1398,16 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         }));
     };
     
-    const handleExpertModeChange = (isOn: boolean) => {
+    const handleDeepAnalysisModeChange = (isOn: boolean) => {
         if (!isOn) {
             // Reset counter when turning expert mode off
             expertModeClarificationAttempts.current = 0;
         }
-        setIsExpertMode(isOn);
+        setIsDeepAnalysisMode(isOn);
     };
 
 
-    if (isLoading) {
+    if (isDataLoading) {
         return (
             <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-900">
                 <svg className="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1374,7 +1446,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 maturityScore={displayedMaturityScore}
                 isProcessing={isProcessing}
                 onToggleDeveloperPanel={handleToggleDeveloperPanel}
-                totalTokensUsed={activeConversation?.total_tokens_used}
+                userProfile={userProfile}
             />
             <div className="flex-1 flex min-h-0 relative">
                 <Sidebar
@@ -1403,8 +1475,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                                     messageToEdit={messageToEdit}
                                     onSuggestNextFeature={handleSuggestNextFeature}
                                     nextBestAction={nextBestAction}
-                                    isExpertMode={isExpertMode}
-                                    onExpertModeChange={handleExpertModeChange}
+                                    isDeepAnalysisMode={isDeepAnalysisMode}
+                                    onDeepAnalysisModeChange={handleDeepAnalysisModeChange}
                                     onApplySuggestion={handleApplySuggestion}
                                  />
                              </div>
@@ -1430,7 +1502,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                                         onPrepareQuestionForAnswer={handlePrepareQuestionForAnswer}
                                         diagramType={diagramType}
                                         setDiagramType={setDiagramType}
-                                        onAddTokens={addTokensToActiveConversation}
+                                        onAddTokens={commitTokenUsage}
                                      />
                                  </div>
                              )}
@@ -1442,6 +1514,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             </div>
             {isNewAnalysisModalOpen && <NewAnalysisModal isOpen={isNewAnalysisModalOpen} onClose={() => setIsNewAnalysisModalOpen(false)} onStartFromScratch={handleStartFromScratch} onStartWithDocument={handleStartWithDocument} isProcessing={isProcessing} />}
             {isShareModalOpen && activeConversation && <ShareModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} conversation={activeConversation} onUpdateShareSettings={(id, updates) => updateConversation(id, updates)} />}
+            {showUpgradeModal && <UpgradeModal isOpen={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />}
             {isFeatureSuggestionsModalOpen && <FeatureSuggestionsModal isOpen={isFeatureSuggestionsModalOpen} onClose={() => setIsFeatureSuggestionsModalOpen(false)} isLoading={isFetchingSuggestions} suggestions={featureSuggestions} onSelectSuggestion={(s) => sendMessage(s)} error={suggestionError} onRetry={handleSuggestNextFeature} />}
             {isRegenerateModalOpen && regenerateModalData.current && (
                 <RegenerateConfirmationModal 
