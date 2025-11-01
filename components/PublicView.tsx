@@ -1,6 +1,7 @@
 // components/PublicView.tsx
 import React, { useState, useEffect } from 'react';
-import type { Conversation, Theme, User, GenerativeSuggestion, Message } from '../types';
+// FIX: Import missing types to handle generatedDocs and documentVersions.
+import type { Conversation, Theme, User, GenerativeSuggestion, Message, GeneratedDocs, Document, DocumentType, DocumentVersion } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { ChatMessageHistory } from './ChatMessageHistory';
 // FIX: The component 'GeneratedDocument' was renamed; it is now 'DocumentCanvas'.
@@ -33,6 +34,46 @@ const ErrorScreen: React.FC<{ message: string }> = ({ message }) => (
     </div>
 );
 
+// FIX: Added helper functions from App.tsx to build the generatedDocs object.
+const defaultGeneratedDocs: GeneratedDocs = {
+    analysisDoc: '',
+    testScenarios: '',
+    visualization: '',
+    traceabilityMatrix: '',
+};
+
+const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs> = {
+    analysis: 'analysisDoc',
+    test: 'testScenarios',
+    traceability: 'traceabilityMatrix',
+    mermaid: 'mermaidViz',
+    bpmn: 'bpmnViz',
+    maturity_report: 'maturityReport',
+};
+
+const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
+    const docs = { ...defaultGeneratedDocs };
+    if (!documents) return docs;
+
+    for (const doc of documents) {
+        const key = documentTypeToKeyMap[doc.document_type];
+        if (key) {
+            if (key === 'mermaidViz' || key === 'bpmnViz' || key === 'maturityReport') {
+                try {
+                    (docs as any)[key] = JSON.parse(doc.content);
+                } catch (e) {
+                    console.error(`Error parsing JSON for ${key}:`, e);
+                     (docs as any)[key] = key.endsWith('Viz') ? { code: '', sourceHash: '' } : null;
+                }
+            } else {
+                 (docs as any)[key] = doc.content;
+            }
+        }
+    }
+    return docs;
+};
+
+
 export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
     const [conversation, setConversation] = useState<Conversation | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -62,9 +103,10 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
             setIsLoading(true);
             setError(null);
             
+            // FIX: Fetch documents and document_versions along with the conversation.
             const { data, error } = await supabase
                 .from('conversations')
-                .select('*, conversation_details(*)')
+                .select('*, conversation_details(*), documents(*), document_versions(*)')
                 .eq('share_id', shareId)
                 .eq('is_shared', true)
                 .single();
@@ -73,13 +115,18 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                 console.error('Error fetching shared conversation:', error);
                 setError('Bu analize erişilemiyor. Linkin doğru olduğundan emin olun veya paylaşım ayarları değiştirilmiş olabilir.');
             } else if (data) {
-                const convWithMessages = {
+                // FIX: Populate documents and documentVersions in the conversation object.
+                const convWithDetails = {
                     ...data,
                     messages: (data.conversation_details || []).sort(
                         (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                    ),
+                    documents: data.documents || [],
+                    documentVersions: (data.document_versions || []).sort(
+                        (a: DocumentVersion, b: DocumentVersion) => a.version_number - b.version_number
                     )
                 };
-                setConversation(convWithMessages as Conversation);
+                setConversation(convWithDetails as Conversation);
             } else {
                  setError('Paylaşılan analiz bulunamadı.');
             }
@@ -110,7 +157,9 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
         return <ErrorScreen message="Paylaşılan analiz bulunamadı." />;
     }
     
-    const { title, messages, generatedDocs } = conversation;
+    // FIX: Compute generatedDocs from the documents array to fix property access error.
+    const { title, messages } = conversation;
+    const generatedDocs = buildGeneratedDocs(conversation.documents);
     
     const diagramType = generatedDocs.bpmnViz?.code ? 'bpmn' : 'mermaid';
 
@@ -157,7 +206,8 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-md font-bold">Analiz Dokümanı</h3>
                                     </div>
-                                    <DocumentCanvas content={generatedDocs.analysisDoc} onContentChange={noOpWithArgs} docKey='analysisDoc' onModifySelection={noOp} inlineModificationState={null} isGenerating={false} filename={`${conversation.title}-analiz`} onAddTokens={noOpWithArgs} />
+                                    {/* FIX: Pass required 'documentVersions' prop. */}
+                                    <DocumentCanvas content={generatedDocs.analysisDoc} onContentChange={noOpWithArgs} docKey='analysisDoc' onModifySelection={noOp} inlineModificationState={null} isGenerating={false} filename={`${conversation.title}-analiz`} onAddTokens={noOpWithArgs} documentVersions={conversation.documentVersions} />
                                 </div>
                             )}
 
@@ -183,7 +233,8 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-md font-bold">Test Senaryoları</h3>
                                     </div>
-                                    <DocumentCanvas content={generatedDocs.testScenarios} onContentChange={noOpWithArgs} docKey='testScenarios' onModifySelection={noOp} inlineModificationState={null} isGenerating={false} filename={`${conversation.title}-test-senaryolari`} isTable onAddTokens={noOpWithArgs} />
+                                    {/* FIX: Pass required 'documentVersions' prop. */}
+                                    <DocumentCanvas content={generatedDocs.testScenarios} onContentChange={noOpWithArgs} docKey='testScenarios' onModifySelection={noOp} inlineModificationState={null} isGenerating={false} filename={`${conversation.title}-test-senaryolari`} isTable onAddTokens={noOpWithArgs} documentVersions={conversation.documentVersions} />
                                 </div>
                             )}
 
@@ -192,6 +243,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-md font-bold">İzlenebilirlik Matrisi</h3>
                                     </div>
+                                    {/* FIX: Pass required 'documentVersions' prop. */}
                                     <DocumentCanvas 
                                         content={generatedDocs.traceabilityMatrix} 
                                         onContentChange={noOpWithArgs} 
@@ -202,6 +254,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                         filename={`${conversation.title}-izlenebilirlik`}
                                         isTable
                                         onAddTokens={noOpWithArgs}
+                                        documentVersions={conversation.documentVersions}
                                     />
                                 </div>
                             )}

@@ -91,7 +91,8 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     const { generatedDocs, id: conversationId } = conversation;
     const prevAnalysisDoc = usePrevious(generatedDocs.analysisDoc);
     
-    const onUpdateConversation = (id: string, updates: Partial<Conversation>) => {
+    // FIX: Update the signature of onUpdateConversation to allow 'generatedDocs' property for type safety in BacklogGenerationView.
+    const onUpdateConversation = (id: string, updates: Partial<Conversation> & { generatedDocs?: Partial<GeneratedDocs> }) => {
         // This is a placeholder now, the main logic is in App.tsx
         // But we need it for BacklogGenerationView
     };
@@ -245,7 +246,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             inlineModificationState={inlineModificationState} 
                             isGenerating={isProcessing} 
                             isStreaming={generatingDocType === 'analysis'}
-                            placeholder="Henüz bir analiz dokümanı oluşturulmadı. Başlamak için 'Doküman Oluştur' butonunu kullanın."
+                            placeholder="Henüz bir analiz dokümanı oluşturulmadı. Analist ile sohbet ederek gereksinimleri olgunlaştırın. Yeterli bilgi toplandığında, AI doküman oluşturmayı önerecektir."
                             templates={templates.analysis}
                             selectedTemplate={selectedTemplates.analysis}
                             onTemplateChange={onTemplateChange.analysis}

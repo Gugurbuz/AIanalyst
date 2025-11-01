@@ -187,9 +187,17 @@ const AnalystView: React.FC<AnalystViewProps> = ({
     onExpertModeChange,
     onApplySuggestion,
 }) => {
+    const scrollContainerRef = useRef<HTMLElement>(null);
+
+    useEffect(() => {
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
+    }, [activeConversation?.messages]);
+
     return (
         <div className="flex flex-col h-full overflow-hidden">
-            <main className="flex-1 overflow-y-auto min-h-0">
+            <main ref={scrollContainerRef} className="flex-1 overflow-y-auto min-h-0">
                  <div className="max-w-4xl mx-auto w-full px-4 pt-4">
                     {activeConversation && activeConversation.messages.filter(m => m.role !== 'system').length > 0 ? (
                         <ChatMessageHistory
@@ -810,56 +818,68 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         };
     
         let conversationForApi: Conversation & { generatedDocs: GeneratedDocs };
+        let currentConversationId: string | null = activeConversationId;
     
-        if (!activeConversation) {
+        if (!currentConversationId) {
             // --- NEW CONVERSATION ---
-            const newConv = await createNewConversation({}, content.trim());
+            const newConv = await createNewConversation(undefined, content.trim());
             if (!newConv) {
                 setError("Sohbet oluşturulamadı.");
                 return;
             }
+            currentConversationId = newConv.id;
             
+            // At this point, newConv is in state, but may not have messages yet.
+            // We'll add the message to the state and then call the API.
             const userMessage: Message = { ...userMessageData, id: uuidv4(), conversation_id: newConv.id };
-            
-            const { error: insertError } = await supabase.from('conversation_details').insert(userMessage);
+             const { error: insertError } = await supabase.from('conversation_details').insert(userMessage);
             if (insertError) {
                 setError("Mesajınız kaydedilemedi.");
-                // Optionally revert UI update
                 return;
             }
             
-            // Build the state for the API call
+            // Construct the conversation object for the API call
             conversationForApi = {
                 ...newConv,
-                messages: [userMessage], // Add the message to the empty array from newConv
+                messages: [userMessage],
                 generatedDocs: buildGeneratedDocs(newConv.documents),
             };
     
-            // Update the global state based on the fetched conversation, now with the first message
+            // Update the global state to include the new message
             setConversations(prev => prev.map(c => c.id === newConv.id ? { ...c, messages: [userMessage] } : c));
     
         } else {
             // --- EXISTING CONVERSATION ---
-            const userMessage: Message = { ...userMessageData, id: uuidv4(), conversation_id: activeConversation.id };
-    
+            const userMessage: Message = { ...userMessageData, id: uuidv4(), conversation_id: currentConversationId };
+            
+            // Immediately update UI for responsiveness
+            setConversations(prev => prev.map(c => 
+                c.id === currentConversationId 
+                ? { ...c, messages: [...c.messages, userMessage] } 
+                : c
+            ));
+            
             const { error: insertError } = await supabase.from('conversation_details').insert(userMessage);
             if (insertError) {
                 setError("Mesajınız gönderilemedi.");
+                // Revert UI update
+                setConversations(prev => prev.map(c => 
+                    c.id === currentConversationId
+                    ? { ...c, messages: c.messages.filter(m => m.id !== userMessage.id) }
+                    : c
+                ));
                 return;
             }
     
-            // Build the state for the API call
+            // Construct the conversation object for the API call from the *updated* state
+            const currentConv = conversations.find(c => c.id === currentConversationId);
+            if (!currentConv) return; // Should not happen
+            
             conversationForApi = {
-                ...activeConversation,
-                messages: [...activeConversation.messages, userMessage],
+                ...currentConv,
+                messages: [...currentConv.messages, userMessage],
+                generatedDocs: buildGeneratedDocs(currentConv.documents)
             };
-    
-            // Update the global state
-            setConversations(prev => prev.map(c => 
-                c.id === activeConversation.id 
-                ? { ...c, messages: conversationForApi.messages } 
-                : c
-            ));
         }
     
         setIsProcessing(true);
@@ -949,7 +969,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             setGeneratingDocType(null);
             streamControllerRef.current = null;
         }
-    }, [activeConversation, createNewConversation, isExpertMode, geminiModel, selectedTemplates, processStream, addTokensToActiveConversation]);
+    }, [activeConversationId, conversations, createNewConversation, isExpertMode, geminiModel, selectedTemplates, processStream, addTokensToActiveConversation]);
 
 
      const handleGenerateDoc = useCallback(async (

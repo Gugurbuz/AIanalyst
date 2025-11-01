@@ -295,7 +295,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
                         disabled={isLoading}
                         className="w-full p-3 pl-20 pr-12 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-slate-100 dark:bg-slate-700 disabled:opacity-50 transition-colors resize-none overflow-y-auto"
                         rows={1}
-                        style={{ lineHeight: '1.5rem', maxHeight: '180px' }}
+                        style={{ lineHeight: '1.5rem', maxHeight: '256px' }}
                     />
                      <button
                         type="button"

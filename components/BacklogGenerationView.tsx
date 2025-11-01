@@ -1,14 +1,17 @@
 // components/BacklogGenerationView.tsx
 import React, { useState, useCallback } from 'react';
-import type { Conversation, BacklogSuggestion, Task } from '../types';
+// FIX: Add GeneratedDocs to the type import to correctly type component props.
+import type { Conversation, BacklogSuggestion, Task, GeneratedDocs } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { geminiService } from '../services/geminiService';
 import { CheckSquare, LoaderCircle, Square, Layers, FileText, Beaker, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface BacklogGenerationViewProps {
-    conversation: Conversation;
-    onUpdateConversation: (id: string, updates: Partial<Conversation>) => void;
+    // FIX: Update the 'conversation' prop to include the 'generatedDocs' object.
+    conversation: Conversation & { generatedDocs: GeneratedDocs };
+    // FIX: Update the 'onUpdateConversation' signature to allow passing 'generatedDocs'.
+    onUpdateConversation: (id: string, updates: Partial<Conversation> & { generatedDocs?: Partial<GeneratedDocs> }) => void;
 }
 
 const typeInfo = {
