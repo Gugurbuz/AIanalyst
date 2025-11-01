@@ -153,7 +153,7 @@ export const Header: React.FC<HeaderProps> = ({
                 ) : (
                     <SaveStatusIndicator status={saveStatus} />
                 )}
-                {totalTokensUsed && totalTokensUsed > 0 && (
+                {totalTokensUsed > 0 && (
                     <>
                         <div className="h-4 w-px bg-slate-300 dark:bg-slate-600" />
                         <TokenUsageIndicator tokens={totalTokensUsed} />

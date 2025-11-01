@@ -1,6 +1,6 @@
 // components/PublicView.tsx
 import React, { useState, useEffect } from 'react';
-import type { Conversation, Theme, User, GenerativeSuggestion } from '../types';
+import type { Conversation, Theme, User, GenerativeSuggestion, Message } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { ChatMessageHistory } from './ChatMessageHistory';
 // FIX: The component 'GeneratedDocument' was renamed; it is now 'DocumentCanvas'.
@@ -64,7 +64,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
             
             const { data, error } = await supabase
                 .from('conversations')
-                .select('*')
+                .select('*, conversation_details(*)')
                 .eq('share_id', shareId)
                 .eq('is_shared', true)
                 .single();
@@ -73,7 +73,13 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                 console.error('Error fetching shared conversation:', error);
                 setError('Bu analize erişilemiyor. Linkin doğru olduğundan emin olun veya paylaşım ayarları değiştirilmiş olabilir.');
             } else if (data) {
-                setConversation(data as Conversation);
+                const convWithMessages = {
+                    ...data,
+                    messages: (data.conversation_details || []).sort(
+                        (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                    )
+                };
+                setConversation(convWithMessages as Conversation);
             } else {
                  setError('Paylaşılan analiz bulunamadı.');
             }
@@ -189,7 +195,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                     <DocumentCanvas 
                                         content={generatedDocs.traceabilityMatrix} 
                                         onContentChange={noOpWithArgs} 
-                                        docKey="analysisDoc" // Dummy key for type compliance
+                                        docKey="traceabilityMatrix" 
                                         onModifySelection={noOp} 
                                         inlineModificationState={null}
                                         isGenerating={false}

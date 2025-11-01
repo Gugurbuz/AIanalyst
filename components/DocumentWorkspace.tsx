@@ -1,6 +1,6 @@
 // components/DocumentWorkspace.tsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import type { Conversation, Template, MaturityReport, GeneratedDocs } from '../types';
+import type { Conversation, Template, MaturityReport, GeneratedDocs, Document, DocumentType } from '../types';
 import { DocumentCanvas } from './DocumentCanvas'; // Changed from GeneratedDocument
 import { Visualizations } from './Visualizations';
 import { MaturityCheckReport } from './MaturityCheckReport';
@@ -10,6 +10,8 @@ import { GanttChartSquare, Projector, RefreshCw } from 'lucide-react';
 import { BacklogGenerationView } from './BacklogGenerationView';
 import { geminiService } from '../services/geminiService';
 import type { DocumentImpactAnalysis } from '../services/geminiService';
+// FIX: Import the 'supabase' client to resolve the 'Cannot find name' error.
+import { supabase } from '../services/supabaseClient';
 
 
 // A simple hook to get the previous value of a prop or state.
@@ -23,10 +25,10 @@ function usePrevious<T>(value: T): T | undefined {
 
 
 interface DocumentWorkspaceProps {
-    conversation: Conversation;
+    conversation: Conversation & { generatedDocs: GeneratedDocs };
     isProcessing: boolean; // This is now the GLOBAL processing state (e.g., for chat)
     generatingDocType: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | null;
-    onUpdateDocument: (docKey: 'analysisDoc' | 'testScenarios', newContent: string, reason: string) => void;
+    onUpdateDocument: (docKey: keyof GeneratedDocs, newContent: string, reason: string) => void;
     onModifySelection: (selectedText: string, userPrompt: string, docKey: 'analysisDoc' | 'testScenarios') => Promise<void>;
     onModifyDiagram: (userPrompt: string) => Promise<void>;
     onGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => void;
@@ -94,6 +96,17 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
         // But we need it for BacklogGenerationView
     };
 
+    const updateDocumentStaleness = async (docType: DocumentType, isStale: boolean) => {
+        const { error } = await supabase
+            .from('documents')
+            .update({ is_stale: isStale })
+            .eq('conversation_id', conversationId)
+            .eq('document_type', docType);
+        if (error) {
+            console.error(`Failed to update staleness for ${docType}:`, error);
+        }
+    };
+
 
     // --- AI-Powered Impact Analysis Effect ---
     useEffect(() => {
@@ -102,7 +115,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             const analyze = async () => {
                 setIsAnalyzingChange(true);
                 try {
-                    // FIX: Destructure the 'impact' object from the service call result.
                     const { impact, tokens } = await geminiService.analyzeDocumentChange(
                         prevAnalysisDoc || '', 
                         generatedDocs.analysisDoc,
@@ -110,35 +122,27 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                     );
                     onAddTokens(tokens);
 
-                    const newGeneratedDocs: GeneratedDocs = {
-                        ...generatedDocs,
-                        isVizStale: impact.isVisualizationImpacted,
-                        isTestStale: impact.isTestScenariosImpacted,
-                        isTraceabilityStale: impact.isTraceabilityImpacted,
-                        isBacklogStale: impact.isBacklogImpacted,
-                    };
-                    
-                    // The parent component will handle the state update and token count
-                    // onUpdateConversation(conversationId, { generatedDocs: newGeneratedDocs });
+                    // Update staleness flags in the DB
+                    if (impact.isVisualizationImpacted) await updateDocumentStaleness('mermaid', true);
+                    if (impact.isTestScenariosImpacted) await updateDocumentStaleness('test', true);
+                    if (impact.isTraceabilityImpacted) await updateDocumentStaleness('traceability', true);
+                    // backlog staleness is handled in generatedDocs for now
 
                 } catch (error) {
                     console.error("Impact analysis failed:", error);
                     // On failure, assume major change and mark all as stale
-                    const newGeneratedDocs: GeneratedDocs = {
-                        ...generatedDocs,
-                        isVizStale: true,
-                        isTestStale: true,
-                        isTraceabilityStale: true,
-                        isBacklogStale: true,
-                    };
-                    // onUpdateConversation(conversationId, { generatedDocs: newGeneratedDocs });
+                    await Promise.all([
+                        updateDocumentStaleness('mermaid', true),
+                        updateDocumentStaleness('test', true),
+                        updateDocumentStaleness('traceability', true)
+                    ]);
                 } finally {
                     setIsAnalyzingChange(false);
                 }
             };
             analyze();
         }
-    }, [generatedDocs.analysisDoc, prevAnalysisDoc, conversationId, onUpdateConversation, isProcessing, onAddTokens]);
+    }, [generatedDocs.analysisDoc, prevAnalysisDoc, conversationId, isProcessing, onAddTokens]);
 
 
     const docTabs = [
@@ -188,16 +192,20 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             ),
         };
         
-        onUpdateConversation(conversation.id, {
-            generatedDocs: { ...conversation.generatedDocs, maturityReport: newReport }
-        });
+        onUpdateDocument('maturityReport', newReport as any, 'Kullanıcı soruyu reddetti');
     };
     
     // Wrapper for regeneration functions to clear the stale flag
     const handleRegenerate = (docType: 'viz' | 'test' | 'traceability' | 'backlog-generation') => {
-        const staleKey = `is${docType.charAt(0).toUpperCase() + docType.slice(1)}Stale`.replace('generation', '');
-        const newGeneratedDocs = { ...generatedDocs, [staleKey]: false };
-        onUpdateConversation(conversation.id, { generatedDocs: newGeneratedDocs });
+        const typeMap: Record<string, DocumentType> = {
+            viz: 'mermaid', // or bpmn, depending on current view
+            test: 'test',
+            traceability: 'traceability'
+        };
+        const dbDocType = typeMap[docType];
+        if (dbDocType) {
+            updateDocumentStaleness(dbDocType, false);
+        }
         onGenerateDoc(docType as any);
     }
     
@@ -242,7 +250,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             selectedTemplate={selectedTemplates.analysis}
                             onTemplateChange={onTemplateChange.analysis}
                             filename={`${conversation.title}-analiz`}
-                            history={generatedDocs.analysisDocHistory}
+                            documentVersions={conversation.documentVersions}
                             onAddTokens={onAddTokens}
                         />
                     </div>
@@ -298,7 +306,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             onTemplateChange={onTemplateChange.test}
                             filename={`${conversation.title}-test-senaryolari`}
                             isTable
-                            history={generatedDocs.testScenariosHistory}
+                            documentVersions={conversation.documentVersions}
                             onAddTokens={onAddTokens}
                         />
                     </div>
@@ -309,7 +317,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             key="traceability"
                             content={generatedDocs.traceabilityMatrix} 
                             onContentChange={() => {}} // Not editable directly
-                            docKey="analysisDoc" // Dummy key, rephrase is a no-op
+                            docKey="traceabilityMatrix" 
                             onModifySelection={async () => {}} // No-op to prevent errors
                             inlineModificationState={inlineModificationState} 
                             isGenerating={isProcessing}
@@ -320,6 +328,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             generateButtonText="Matris Oluştur"
                             isGenerationDisabled={isProcessing || !generatedDocs.analysisDoc || !generatedDocs.testScenarios}
                             generationDisabledTooltip="Matris oluşturmak için önce analiz ve test dokümanlarını oluşturmalısınız."
+                            documentVersions={conversation.documentVersions}
                             onAddTokens={onAddTokens}
                         />
                     </div>

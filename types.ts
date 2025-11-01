@@ -32,12 +32,14 @@ export interface GenerativeSuggestion {
 
 export interface Message {
     id:string;
+    conversation_id: string;
     role: 'user' | 'assistant' | 'system';
     content: string;
     timestamp: string; // ISO 8601 date string
     feedback?: Feedback;
     expertRunChecklist?: ExpertStep[];
     generativeSuggestion?: GenerativeSuggestion;
+    created_at: string;
 }
 
 export type MaturityLevel = 'Zayıf' | 'Gelişime Açık' | 'İyi' | 'Mükemmel';
@@ -59,13 +61,32 @@ export interface MaturityReport {
     maturity_level: MaturityLevel; // Kalitatif değerlendirme
 }
 
-export interface AnalysisVersion {
+export type DocumentType = 'analysis' | 'test' | 'traceability' | 'mermaid' | 'bpmn' | 'maturity_report';
+
+export interface DocumentVersion {
     id: string;
+    conversation_id: string;
+    user_id: string;
+    created_at: string;
+    document_type: DocumentType;
     content: string;
-    templateId: string;
-    createdAt: string;
-    reason: string; // e.g., "Initial Creation", "Manual Edit", "AI Regeneration"
+    version_number: number;
+    reason_for_change: string;
 }
+
+
+export interface Document {
+    id: string;
+    conversation_id: string;
+    user_id: string;
+    created_at: string;
+    updated_at: string;
+    document_type: DocumentType;
+    content: string;
+    current_version_id: string | null;
+    is_stale: boolean;
+}
+
 
 export interface VizData {
     code: string;
@@ -74,9 +95,7 @@ export interface VizData {
 
 export interface GeneratedDocs {
     analysisDoc: string;
-    analysisDocHistory?: AnalysisVersion[];
     testScenarios: string;
-    testScenariosHistory?: AnalysisVersion[];
     visualization: string; // Legacy, for backward compatibility
     visualizationType?: 'mermaid' | 'bpmn'; // Legacy
     mermaidViz?: VizData;
@@ -96,7 +115,8 @@ export interface Conversation {
     user_id: string;
     title: string;
     messages: Message[];
-    generatedDocs: GeneratedDocs;
+    documents: Document[];
+    documentVersions: DocumentVersion[];
     is_shared: boolean;
     share_id: string | null;
     created_at: string;

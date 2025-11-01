@@ -1,7 +1,7 @@
 // components/FeedbackDashboard.tsx
 import React from 'react';
 // FIX: Import the centralized FeedbackItem type from types.ts, which is now used across the app.
-import type { FeedbackItem } from '../types';
+import type { FeedbackItem, Message } from '../types';
 import { geminiService } from '../services/geminiService';
 import { MarkdownRenderer } from './MarkdownRenderer';
 

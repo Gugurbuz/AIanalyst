@@ -4,14 +4,14 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { StreamingIndicator } from './StreamingIndicator';
 import { TemplateSelector } from './TemplateSelector';
 import { ExportDropdown } from './ExportDropdown';
-import { Template, AnalysisVersion, LintingIssue } from '../types';
+import { Template, DocumentVersion, LintingIssue } from '../types';
 import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, Edit, Eye, Wrench, X } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 
 interface DocumentCanvasProps {
     content: string;
     onContentChange: (newContent: string, reason: string) => void;
-    docKey: 'analysisDoc' | 'testScenarios';
+    docKey: 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix';
     onModifySelection: (selectedText: string, userPrompt: string, docKey: 'analysisDoc' | 'testScenarios') => void;
     inlineModificationState: { docKey: 'analysisDoc' | 'testScenarios'; originalText: string } | null;
     isGenerating: boolean;
@@ -26,7 +26,7 @@ interface DocumentCanvasProps {
     generateButtonText?: string;
     isGenerationDisabled?: boolean;
     generationDisabledTooltip?: string;
-    history?: AnalysisVersion[];
+    documentVersions: DocumentVersion[];
     onAddTokens: (tokens: number) => void;
 }
 
@@ -130,7 +130,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         content, onContentChange, docKey, onModifySelection, inlineModificationState,
         isGenerating, isStreaming = false, placeholder, templates, selectedTemplate,
         onTemplateChange, filename, isTable, onGenerate, generateButtonText,
-        isGenerationDisabled, generationDisabledTooltip, history, onAddTokens
+        isGenerationDisabled, generationDisabledTooltip, documentVersions, onAddTokens
     } = props;
 
     const [localContent, setLocalContent] = useState(content);
@@ -144,6 +144,13 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const isModifyingRef = useRef(false);
     const originalContentRef = useRef<string>(content);
+    
+    const documentTypeMap: Record<string, DocumentVersion['document_type']> = {
+        analysisDoc: 'analysis',
+        testScenarios: 'test',
+        traceabilityMatrix: 'traceability',
+    };
+    const currentDocType = documentTypeMap[docKey];
 
     // Sync local content when parent content changes
     useEffect(() => {
@@ -235,7 +242,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const handleAiModify = async (userPrompt: string) => {
         if (!selection) return;
         isModifyingRef.current = true;
-        await onModifySelection(selection.text, userPrompt, docKey);
+        await onModifySelection(selection.text, userPrompt, docKey as 'analysisDoc' | 'testScenarios');
         isModifyingRef.current = false;
         setIsAiModalOpen(false);
         setSelection(null);
@@ -254,25 +261,27 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
             setIsFixing(false);
         }
     };
+    
+    const filteredHistory = useMemo(() => {
+        return (documentVersions || []).filter(v => v.document_type === currentDocType);
+    }, [documentVersions, currentDocType]);
 
     const displayContent = useMemo(() => {
         if (isEditing) {
             return localContent;
         }
         let fullContent = localContent;
-        if (history && history.length > 0) {
+        if (filteredHistory && filteredHistory.length > 0) {
             let notes = '\n\n---\n\n## Versiyon Geçmişi\n';
-            // Create a reversed copy for display without mutating the original prop
-            const reversedHistory = [...history].reverse();
+            const reversedHistory = [...filteredHistory].reverse();
 
-            reversedHistory.forEach((version, index) => {
-                const versionNumber = history.length - index;
-                notes += `### v1.${versionNumber} (${new Date(version.createdAt).toLocaleDateString('tr-TR')}) - *${version.reason}*\n`;
+            reversedHistory.forEach((version) => {
+                notes += `### v${version.version_number} (${new Date(version.created_at).toLocaleDateString('tr-TR')}) - *${version.reason_for_change}*\n`;
             });
             fullContent += notes;
         }
         return fullContent;
-    }, [localContent, history, isEditing]);
+    }, [localContent, filteredHistory, isEditing]);
 
     
     // View for documents that can be generated from within the canvas (e.g., Traceability Matrix)
@@ -301,8 +310,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         );
     }
 
-    const currentVersion = (history?.length ?? 0) + 1;
-
+    const currentVersion = filteredHistory.length > 0 ? Math.max(...filteredHistory.map(v => v.version_number)) : 0;
     
     return (
         <div className="flex flex-col h-full relative">
@@ -336,7 +344,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                 </div>
                 <div className="flex items-center gap-4">
                      <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded-md">
-                        v1.{currentVersion}
+                        v{currentVersion}
                     </span>
                     {templates && selectedTemplate && onTemplateChange &&
                         <TemplateSelector label="Şablon" templates={templates} selectedValue={selectedTemplate} onChange={onTemplateChange} disabled={isGenerating} />

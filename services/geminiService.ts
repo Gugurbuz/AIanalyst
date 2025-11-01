@@ -206,11 +206,13 @@ export const geminiService = {
             const ai = new GoogleGenAI({ apiKey });
 
             const analysisDocContent = generatedDocs.analysisDoc || "Henüz bir doküman oluşturulmadı.";
-            const isDocJustSample = analysisDocContent.includes("Bu bölüme projenin temel hedefini");
+            // Heuristic to determine if it's the start of a conversation.
+            // If there's only one message (the user's first), it's a new conversation.
+            const isNewConversation = history.filter(m => m.role === 'user' || m.role === 'assistant').length <= 1;
 
-            // If the document is just the initial sample, use a simpler conversational prompt.
+            // If it's a new conversation, always use the initial prompt to ask clarifying questions.
             // Otherwise, use the proactive prompt that knows about the document context.
-            const systemInstruction = isDocJustSample
+            const systemInstruction = isNewConversation
                 ? promptService.getPrompt('continueConversation')
                 : promptService.getPrompt('proactiveAnalystSystemInstruction').replace('{analysis_document_content}', analysisDocContent);
             
