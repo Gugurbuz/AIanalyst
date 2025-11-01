@@ -9,6 +9,8 @@ import { ExportDropdown } from './ExportDropdown';
 import { GanttChartSquare, Projector, RefreshCw } from 'lucide-react';
 import { BacklogGenerationView } from './BacklogGenerationView';
 import { geminiService } from '../services/geminiService';
+import type { DocumentImpactAnalysis } from '../services/geminiService';
+
 
 // A simple hook to get the previous value of a prop or state.
 function usePrevious<T>(value: T): T | undefined {
@@ -24,7 +26,7 @@ interface DocumentWorkspaceProps {
     conversation: Conversation;
     isProcessing: boolean; // This is now the GLOBAL processing state (e.g., for chat)
     generatingDocType: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | null;
-    onUpdateConversation: (id: string, updates: Partial<Conversation>) => void;
+    onUpdateDocument: (docKey: 'analysisDoc' | 'testScenarios', newContent: string, reason: string) => void;
     onModifySelection: (selectedText: string, userPrompt: string, docKey: 'analysisDoc' | 'testScenarios') => Promise<void>;
     onModifyDiagram: (userPrompt: string) => Promise<void>;
     onGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => void;
@@ -46,6 +48,7 @@ interface DocumentWorkspaceProps {
     onPrepareQuestionForAnswer: (question: string) => void;
     diagramType: 'mermaid' | 'bpmn';
     setDiagramType: (type: 'mermaid' | 'bpmn') => void;
+    onAddTokens: (tokens: number) => void;
 }
 
 const StaleIndicator = ({ isStale }: { isStale?: boolean }) => {
@@ -62,7 +65,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     conversation,
     isProcessing,
     generatingDocType,
-    onUpdateConversation,
+    onUpdateDocument,
     onModifySelection,
     onModifyDiagram,
     onGenerateDoc,
@@ -75,6 +78,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     onPrepareQuestionForAnswer,
     diagramType,
     setDiagramType,
+    onAddTokens,
 }) => {
     
     // Local state for visualization to make it non-blocking
@@ -84,6 +88,12 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     
     const { generatedDocs, id: conversationId } = conversation;
     const prevAnalysisDoc = usePrevious(generatedDocs.analysisDoc);
+    
+    const onUpdateConversation = (id: string, updates: Partial<Conversation>) => {
+        // This is a placeholder now, the main logic is in App.tsx
+        // But we need it for BacklogGenerationView
+    };
+
 
     // --- AI-Powered Impact Analysis Effect ---
     useEffect(() => {
@@ -92,11 +102,13 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             const analyze = async () => {
                 setIsAnalyzingChange(true);
                 try {
-                    const impact = await geminiService.analyzeDocumentChange(
+                    // FIX: Destructure the 'impact' object from the service call result.
+                    const { impact, tokens } = await geminiService.analyzeDocumentChange(
                         prevAnalysisDoc || '', 
                         generatedDocs.analysisDoc,
                         'gemini-2.5-flash-lite' // Use a fast model for this
                     );
+                    onAddTokens(tokens);
 
                     const newGeneratedDocs: GeneratedDocs = {
                         ...generatedDocs,
@@ -105,8 +117,9 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                         isTraceabilityStale: impact.isTraceabilityImpacted,
                         isBacklogStale: impact.isBacklogImpacted,
                     };
-
-                    onUpdateConversation(conversationId, { generatedDocs: newGeneratedDocs });
+                    
+                    // The parent component will handle the state update and token count
+                    // onUpdateConversation(conversationId, { generatedDocs: newGeneratedDocs });
 
                 } catch (error) {
                     console.error("Impact analysis failed:", error);
@@ -118,14 +131,14 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                         isTraceabilityStale: true,
                         isBacklogStale: true,
                     };
-                    onUpdateConversation(conversationId, { generatedDocs: newGeneratedDocs });
+                    // onUpdateConversation(conversationId, { generatedDocs: newGeneratedDocs });
                 } finally {
                     setIsAnalyzingChange(false);
                 }
             };
             analyze();
         }
-    }, [generatedDocs.analysisDoc, prevAnalysisDoc, conversationId, onUpdateConversation, isProcessing]);
+    }, [generatedDocs.analysisDoc, prevAnalysisDoc, conversationId, onUpdateConversation, isProcessing, onAddTokens]);
 
 
     const docTabs = [
@@ -218,7 +231,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                         <DocumentCanvas
                             key="analysis"
                             content={generatedDocs.analysisDoc} 
-                            onContentChange={(newContent) => onUpdateConversation(conversation.id, { generatedDocs: { ...generatedDocs, analysisDoc: newContent } })} 
+                            onContentChange={(newContent, reason) => onUpdateDocument('analysisDoc', newContent, reason)} 
                             docKey="analysisDoc" 
                             onModifySelection={onModifySelection} 
                             inlineModificationState={inlineModificationState} 
@@ -229,6 +242,8 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             selectedTemplate={selectedTemplates.analysis}
                             onTemplateChange={onTemplateChange.analysis}
                             filename={`${conversation.title}-analiz`}
+                            history={generatedDocs.analysisDocHistory}
+                            onAddTokens={onAddTokens}
                         />
                     </div>
                 )}
@@ -271,7 +286,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                          <DocumentCanvas
                             key="test"
                             content={generatedDocs.testScenarios} 
-                            onContentChange={(newContent) => onUpdateConversation(conversation.id, { generatedDocs: { ...generatedDocs, testScenarios: newContent } })} 
+                            onContentChange={(newContent, reason) => onUpdateDocument('testScenarios', newContent, reason)} 
                             docKey="testScenarios" 
                             onModifySelection={onModifySelection} 
                             inlineModificationState={inlineModificationState} 
@@ -283,6 +298,8 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             onTemplateChange={onTemplateChange.test}
                             filename={`${conversation.title}-test-senaryolari`}
                             isTable
+                            history={generatedDocs.testScenariosHistory}
+                            onAddTokens={onAddTokens}
                         />
                     </div>
                 )}
@@ -291,7 +308,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                         <DocumentCanvas
                             key="traceability"
                             content={generatedDocs.traceabilityMatrix} 
-                            onContentChange={(newContent) => onUpdateConversation(conversation.id, { generatedDocs: { ...generatedDocs, traceabilityMatrix: newContent } })} 
+                            onContentChange={() => {}} // Not editable directly
                             docKey="analysisDoc" // Dummy key, rephrase is a no-op
                             onModifySelection={async () => {}} // No-op to prevent errors
                             inlineModificationState={inlineModificationState} 
@@ -303,6 +320,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             generateButtonText="Matris Oluştur"
                             isGenerationDisabled={isProcessing || !generatedDocs.analysisDoc || !generatedDocs.testScenarios}
                             generationDisabledTooltip="Matris oluşturmak için önce analiz ve test dokümanlarını oluşturmalısınız."
+                            onAddTokens={onAddTokens}
                         />
                     </div>
                 )}

@@ -1,7 +1,7 @@
 import React from 'react';
 import type { User, Theme, AppMode } from '../types';
 import { ThemeSwitcher } from './ThemeSwitcher';
-import { Menu, Share2, PanelRightOpen, PanelRightClose, LoaderCircle, CheckCircle, AlertCircle, TrendingUp } from 'lucide-react';
+import { Menu, Share2, PanelRightOpen, PanelRightClose, LoaderCircle, CheckCircle, AlertCircle, TrendingUp, Database } from 'lucide-react';
 
 interface HeaderProps {
     user: User;
@@ -19,6 +19,7 @@ interface HeaderProps {
     maturityScore: { score: number; justification: string } | null;
     isProcessing: boolean;
     onToggleDeveloperPanel: () => void;
+    totalTokensUsed?: number;
 }
 
 const LogoIcon = ({ className }: { className?: string }) => (
@@ -68,6 +69,18 @@ const MaturityScoreIndicator: React.FC<{ score: number; justification: string }>
     );
 };
 
+const TokenUsageIndicator: React.FC<{ tokens: number }> = ({ tokens }) => {
+    return (
+        <div
+            title="Bu sohbette kullanılan toplam token sayısı"
+            className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400"
+        >
+            <Database className="h-3.5 w-3.5" />
+            <span>{tokens.toLocaleString('tr-TR')}</span>
+        </div>
+    );
+};
+
 
 export const Header: React.FC<HeaderProps> = ({
     user,
@@ -85,6 +98,7 @@ export const Header: React.FC<HeaderProps> = ({
     maturityScore,
     isProcessing,
     onToggleDeveloperPanel,
+    totalTokensUsed,
 }) => {
     const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
     const userMenuRef = React.useRef<HTMLDivElement>(null);
@@ -138,6 +152,12 @@ export const Header: React.FC<HeaderProps> = ({
                     <MaturityScoreIndicator score={maturityScore.score} justification={maturityScore.justification} />
                 ) : (
                     <SaveStatusIndicator status={saveStatus} />
+                )}
+                {totalTokensUsed && totalTokensUsed > 0 && (
+                    <>
+                        <div className="h-4 w-px bg-slate-300 dark:bg-slate-600" />
+                        <TokenUsageIndicator tokens={totalTokensUsed} />
+                    </>
                 )}
                  <div className="flex items-center gap-2 sm:gap-4">
                     <div className="flex items-center p-1 bg-slate-200 dark:bg-slate-700 rounded-lg">

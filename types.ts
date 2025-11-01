@@ -64,6 +64,7 @@ export interface AnalysisVersion {
     content: string;
     templateId: string;
     createdAt: string;
+    reason: string; // e.g., "Initial Creation", "Manual Edit", "AI Regeneration"
 }
 
 export interface VizData {
@@ -75,6 +76,7 @@ export interface GeneratedDocs {
     analysisDoc: string;
     analysisDocHistory?: AnalysisVersion[];
     testScenarios: string;
+    testScenariosHistory?: AnalysisVersion[];
     visualization: string; // Legacy, for backward compatibility
     visualizationType?: 'mermaid' | 'bpmn'; // Legacy
     mermaidViz?: VizData;
@@ -98,6 +100,7 @@ export interface Conversation {
     is_shared: boolean;
     share_id: string | null;
     created_at: string;
+    total_tokens_used?: number;
 }
 
 // --- Project Board Types ---
@@ -167,4 +170,11 @@ export type PromptData = PromptCategory[];
 export interface FeedbackItem {
     message: Message;
     conversationTitle: string;
+}
+
+// A type for structural issues found in a document
+export interface LintingIssue {
+    type: 'BROKEN_SEQUENCE';
+    section: string; // e.g., "Fonksiyonel Gereksinimler"
+    details: string; // e.g., "FR-001'den sonra FR-003 geliyor."
 }

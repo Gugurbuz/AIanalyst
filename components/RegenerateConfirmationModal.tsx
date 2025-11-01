@@ -23,7 +23,6 @@ export const RegenerateConfirmationModal: React.FC<RegenerateConfirmationModalPr
 
     const handleConfirm = () => {
         onConfirm(saveCurrent);
-        onClose();
     };
 
     return (
@@ -53,9 +52,9 @@ export const RegenerateConfirmationModal: React.FC<RegenerateConfirmationModalPr
                                 onChange={(e) => setSaveCurrent(e.target.checked)}
                                 className="h-5 w-5 text-indigo-600 border-slate-300 dark:border-slate-600 rounded focus:ring-indigo-500 bg-slate-100 dark:bg-slate-700 focus:ring-offset-white dark:focus:ring-offset-slate-800"
                             />
-                            <span className="text-sm text-slate-700 dark:text-slate-300">Mevcut versiyonu bir kenara kaydet</span>
+                            <span className="text-sm text-slate-700 dark:text-slate-300">Mevcut versiyonu arşive kaydet</span>
                         </label>
-                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 pl-8">Kaydedilen versiyonlara ileride erişilebilecektir.</p>
+                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 pl-8">Kaydedilen versiyonlara dokümanın altındaki "Versiyon Geçmişi" bölümünden erişilebilir.</p>
                     </div>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-900/50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse rounded-b-lg">

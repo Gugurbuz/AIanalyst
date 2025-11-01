@@ -1,3 +1,4 @@
+// components/FeedbackDashboard.tsx
 import React from 'react';
 // FIX: Import the centralized FeedbackItem type from types.ts, which is now used across the app.
 import type { FeedbackItem } from '../types';
@@ -30,8 +31,8 @@ export const FeedbackDashboard: React.FC<FeedbackDashboardProps> = ({ isOpen, on
         return null;
     }
 
-    const positiveFeedback = feedbackData.filter(f => f.message.feedback?.rating === 'up');
-    const negativeFeedback = feedbackData.filter(f => f.message.feedback?.rating === 'down');
+    const positiveFeedback = feedbackData.filter(f => f.message.feedback?.rating === 'up' && f.message.feedback.comment);
+    const negativeFeedback = feedbackData.filter(f => f.message.feedback?.rating === 'down' && f.message.feedback.comment);
     const totalFeedback = positiveFeedback.length + negativeFeedback.length;
     const satisfactionRate = totalFeedback > 0 ? (positiveFeedback.length / totalFeedback) * 100 : 0;
 
@@ -40,9 +41,9 @@ export const FeedbackDashboard: React.FC<FeedbackDashboardProps> = ({ isOpen, on
         setError(null);
         setAnalysis(null);
         try {
-            // FIX: The geminiService.analyzeFeedback function expects an array of FeedbackItem,
-            // which is exactly what the `feedbackData` prop is. We can pass it directly.
-            const result = await geminiService.analyzeFeedback(feedbackData);
+            // FIX: The geminiService.analyzeFeedback now returns an object with the analysis text.
+            // Destructure the `analysis` property to get the string result.
+            const { analysis: result } = await geminiService.analyzeFeedback(feedbackData);
             setAnalysis(result);
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Analiz sırasında bir hata oluştu.');

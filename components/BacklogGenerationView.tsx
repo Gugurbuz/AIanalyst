@@ -88,7 +88,8 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
         setIsGenerating(true);
         setError(null);
         try {
-            const result = await geminiService.generateBacklogSuggestions(
+            // FIX: Destructure the 'suggestions' array from the result object.
+            const { suggestions: result, tokens } = await geminiService.generateBacklogSuggestions(
                 conversation.generatedDocs.analysisDoc,
                 conversation.generatedDocs.testScenarios,
                 conversation.generatedDocs.traceabilityMatrix,
@@ -98,7 +99,8 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
                 generatedDocs: {
                     ...conversation.generatedDocs,
                     backlogSuggestions: result,
-                }
+                },
+                total_tokens_used: (conversation.total_tokens_used || 0) + tokens
             });
             // Auto-select all new suggestions
             const allIds = new Set<string>();

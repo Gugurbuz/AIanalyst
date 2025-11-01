@@ -1,15 +1,16 @@
 // components/DocumentCanvas.tsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { StreamingIndicator } from './StreamingIndicator';
 import { TemplateSelector } from './TemplateSelector';
 import { ExportDropdown } from './ExportDropdown';
-import { Template } from '../types';
-import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, Edit, Eye } from 'lucide-react';
+import { Template, AnalysisVersion, LintingIssue } from '../types';
+import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, Edit, Eye, Wrench, X } from 'lucide-react';
+import { geminiService } from '../services/geminiService';
 
 interface DocumentCanvasProps {
     content: string;
-    onContentChange: (newContent: string) => void;
+    onContentChange: (newContent: string, reason: string) => void;
     docKey: 'analysisDoc' | 'testScenarios';
     onModifySelection: (selectedText: string, userPrompt: string, docKey: 'analysisDoc' | 'testScenarios') => void;
     inlineModificationState: { docKey: 'analysisDoc' | 'testScenarios'; originalText: string } | null;
@@ -25,6 +26,8 @@ interface DocumentCanvasProps {
     generateButtonText?: string;
     isGenerationDisabled?: boolean;
     generationDisabledTooltip?: string;
+    history?: AnalysisVersion[];
+    onAddTokens: (tokens: number) => void;
 }
 
 const AiAssistantModal: React.FC<{
@@ -86,23 +89,61 @@ const AiAssistantModal: React.FC<{
     );
 };
 
+const LintingSuggestionsBar: React.FC<{
+    issues: LintingIssue[];
+    onFix: (issue: LintingIssue) => void;
+    onDismiss: (issue: LintingIssue) => void;
+    isFixing: boolean;
+}> = ({ issues, onFix, onDismiss, isFixing }) => {
+    if (issues.length === 0) return null;
+    const issue = issues[0]; // Show one issue at a time
+
+    return (
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-2xl mt-2 z-20">
+            <div className="bg-amber-100 dark:bg-amber-900/50 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 px-4 py-2 rounded-lg shadow-lg flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                    <Wrench className="h-5 w-5 flex-shrink-0" />
+                    <p className="text-sm font-medium">
+                        "{issue.section}" bölümündeki numaralandırmada bir tutarsızlık fark ettik. Otomatik olarak düzeltmek ister misiniz?
+                    </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                     <button
+                        onClick={() => onFix(issue)}
+                        disabled={isFixing}
+                        className="px-3 py-1 text-xs font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                        {isFixing ? 'Düzeltiliyor...' : 'Düzelt'}
+                    </button>
+                    <button onClick={() => onDismiss(issue)} className="p-1.5 rounded-full hover:bg-amber-200 dark:hover:bg-amber-800">
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 
 export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const {
         content, onContentChange, docKey, onModifySelection, inlineModificationState,
         isGenerating, isStreaming = false, placeholder, templates, selectedTemplate,
         onTemplateChange, filename, isTable, onGenerate, generateButtonText,
-        isGenerationDisabled, generationDisabledTooltip
+        isGenerationDisabled, generationDisabledTooltip, history, onAddTokens
     } = props;
 
     const [localContent, setLocalContent] = useState(content);
     const [isEditing, setIsEditing] = useState(false);
     const [selection, setSelection] = useState<{ start: number, end: number, text: string } | null>(null);
     const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+    const [isSummarizing, setIsSummarizing] = useState(false);
+    const [lintIssues, setLintIssues] = useState<LintingIssue[]>([]);
+    const [isFixing, setIsFixing] = useState(false);
     
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isModifyingRef = useRef(false);
+    const originalContentRef = useRef<string>(content);
 
     // Sync local content when parent content changes
     useEffect(() => {
@@ -110,19 +151,40 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
             setLocalContent(content);
         }
     }, [content]);
-
-    // Debounced save for textarea changes
+    
+    // Clear lint issues when content changes from parent
     useEffect(() => {
-        if (isEditing && localContent !== content) {
-            if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-            debounceTimerRef.current = setTimeout(() => {
-                onContentChange(localContent);
-            }, 1000);
+        setLintIssues([]);
+    }, [content]);
+
+    const handleToggleEditing = async () => {
+        if (isEditing) { // Finishing edit
+            setIsEditing(false); // Switch to view mode immediately
+            if (localContent !== originalContentRef.current) {
+                setIsSummarizing(true);
+                try {
+                    const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(originalContentRef.current, localContent);
+                    onAddTokens(summaryTokens);
+                    onContentChange(localContent, summary);
+                    
+                    // After content is updated, check for structural issues
+                    const { issues, tokens: lintTokens } = await geminiService.lintDocument(localContent);
+                    onAddTokens(lintTokens);
+                    setLintIssues(issues);
+
+                } catch (error) {
+                    console.error("Failed to summarize or lint changes:", error);
+                    onContentChange(localContent, "Manuel Düzenleme");
+                } finally {
+                    setIsSummarizing(false);
+                }
+            }
+        } else { // Starting edit
+            originalContentRef.current = content;
+            setLintIssues([]); // Clear issues when starting to edit
+            setIsEditing(true);
         }
-        return () => {
-            if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-        };
-    }, [localContent, content, onContentChange, isEditing]);
+    };
     
     const handleSelection = useCallback(() => {
         if (isEditing && !isTable) {
@@ -179,6 +241,40 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         setSelection(null);
     };
     
+    const handleFixIssue = async (issue: LintingIssue) => {
+        setIsFixing(true);
+        try {
+            const { fixedContent, tokens } = await geminiService.fixDocumentLinterIssues(content, issue);
+            onAddTokens(tokens);
+            onContentChange(fixedContent, `AI Tarafından Numaralandırma Düzeltildi: ${issue.section}`);
+            setLintIssues([]); // Clear issues after fixing
+        } catch (error) {
+            console.error("Failed to fix linting issue:", error);
+        } finally {
+            setIsFixing(false);
+        }
+    };
+
+    const displayContent = useMemo(() => {
+        if (isEditing) {
+            return localContent;
+        }
+        let fullContent = localContent;
+        if (history && history.length > 0) {
+            let notes = '\n\n---\n\n## Versiyon Geçmişi\n';
+            // Create a reversed copy for display without mutating the original prop
+            const reversedHistory = [...history].reverse();
+
+            reversedHistory.forEach((version, index) => {
+                const versionNumber = history.length - index;
+                notes += `### v1.${versionNumber} (${new Date(version.createdAt).toLocaleDateString('tr-TR')}) - *${version.reason}*\n`;
+            });
+            fullContent += notes;
+        }
+        return fullContent;
+    }, [localContent, history, isEditing]);
+
+    
     // View for documents that can be generated from within the canvas (e.g., Traceability Matrix)
     if (!content && !isStreaming && onGenerate) {
         return (
@@ -205,9 +301,17 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         );
     }
 
+    const currentVersion = (history?.length ?? 0) + 1;
+
     
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full relative">
+            <LintingSuggestionsBar 
+                issues={lintIssues}
+                onFix={handleFixIssue}
+                onDismiss={(issue) => setLintIssues(prev => prev.filter(i => i !== issue))}
+                isFixing={isFixing}
+            />
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-2 md:p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2 flex-wrap">
                     {(!isTable && isEditing) && (
@@ -230,16 +334,26 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                         <Sparkles className="h-4 w-4" /> <span className="text-sm font-semibold">Oluştur</span>
                     </button>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-4">
+                     <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded-md">
+                        v1.{currentVersion}
+                    </span>
                     {templates && selectedTemplate && onTemplateChange &&
                         <TemplateSelector label="Şablon" templates={templates} selectedValue={selectedTemplate} onChange={onTemplateChange} disabled={isGenerating} />
                     }
                      {!isTable && (
                          <button 
-                            onClick={() => setIsEditing(!isEditing)} 
-                            className="px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-2"
+                            onClick={handleToggleEditing}
+                            disabled={isSummarizing}
+                            className="px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-2 disabled:opacity-50"
                         >
-                            {isEditing ? <><Eye className="h-4 w-4" /> Görünüm</> : <><Edit className="h-4 w-4" /> Düzenle</>}
+                            {isSummarizing ? (
+                                <><LoaderCircle className="h-4 w-4 animate-spin" /> Özetleniyor...</>
+                            ) : isEditing ? (
+                                <><Eye className="h-4 w-4" /> Görünüm</>
+                            ) : (
+                                <><Edit className="h-4 w-4" /> Düzenle</>
+                            )}
                         </button>
                     )}
                     <ExportDropdown content={localContent} filename={filename} isTable={isTable} />
@@ -257,7 +371,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                 ) : (
                     <div className="h-full overflow-y-auto p-2">
                         <MarkdownRenderer
-                            content={localContent}
+                            content={displayContent}
                             rephrasingText={
                                 inlineModificationState && inlineModificationState.docKey === docKey
                                     ? inlineModificationState.originalText

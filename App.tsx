@@ -44,18 +44,20 @@ const NextActionIcons = {
 // This prevents errors where required properties might be missing after spreading.
 const defaultGeneratedDocs: GeneratedDocs = {
     analysisDoc: '',
+    analysisDocHistory: [],
     testScenarios: '',
+    testScenariosHistory: [],
     visualization: '',
     traceabilityMatrix: '',
 };
 
 // A helper generator function to wrap raw doc streams into StreamChunk objects
 const wrapDocStream = async function* (
-    stream: AsyncGenerator<string>, 
+    stream: AsyncGenerator<StreamChunk>, 
     docKey: 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix'
 ): AsyncGenerator<StreamChunk> {
     for await (const chunk of stream) {
-        yield { type: 'doc_stream_chunk', docKey, chunk };
+        yield chunk;
     }
 };
 
@@ -450,12 +452,83 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         });
     }, [triggerSave]);
 
+    const addTokensToActiveConversation = useCallback((tokens: number) => {
+        if (activeConversationId && tokens > 0) {
+            setConversations(prev => {
+                const newConversations = prev.map(c =>
+                    c.id === activeConversationId
+                        ? { ...c, total_tokens_used: (c.total_tokens_used || 0) + tokens }
+                        : c
+                );
+                // Find the updated conversation to save it
+                const updatedConv = newConversations.find(c => c.id === activeConversationId);
+                if (updatedConv) {
+                    triggerSave(updatedConv);
+                }
+                return newConversations;
+            });
+        }
+    }, [activeConversationId, triggerSave]);
+
+    const updateDocumentAndCreateVersion = useCallback((
+        docKey: 'analysisDoc' | 'testScenarios',
+        newContent: string,
+        reason: string
+    ) => {
+        if (!activeConversationId) return;
+
+        setConversations(prev => {
+            const newConversations = prev.map(conv => {
+                if (conv.id === activeConversationId) {
+                    const oldContent = conv.generatedDocs[docKey];
+                    // Don't create a version for no change or initial sample content
+                    if (oldContent === newContent || oldContent.includes("Bu bölüme projenin temel hedefini")) {
+                        const updatedDocs = { ...conv.generatedDocs, [docKey]: newContent };
+                        const updatedConv = { ...conv, generatedDocs: updatedDocs };
+                        triggerSave(updatedConv);
+                        return updatedConv;
+                    }
+                    
+                    const historyKey = `${docKey}History` as 'analysisDocHistory' | 'testScenariosHistory';
+                    const history = conv.generatedDocs[historyKey] || [];
+                    
+                    const newVersion: AnalysisVersion = {
+                        id: uuidv4(),
+                        content: oldContent,
+                        templateId: docKey === 'analysisDoc' ? selectedTemplates.analysis : selectedTemplates.test,
+                        createdAt: new Date().toISOString(),
+                        reason: reason,
+                    };
+
+                    const updatedDocs = {
+                        ...conv.generatedDocs,
+                        [docKey]: newContent,
+                        [historyKey]: [...history, newVersion]
+                    };
+
+                    const updatedConv = { ...conv, generatedDocs: updatedDocs };
+                    triggerSave(updatedConv);
+                    return updatedConv;
+                }
+                return conv;
+            });
+            return newConversations;
+        });
+    }, [activeConversationId, selectedTemplates, triggerSave]);
+
+
     const createNewConversation = useCallback(async (initialMessages: Message[] = [], initialDocs: Partial<GeneratedDocs> = {}, customTitle: string | null = null) => {
         let title = customTitle;
+        let tokensUsed = 0;
         if (!title) {
             const firstUserMessage = initialMessages.find(m => m.role === 'user');
-             // FIX: The `generateConversationTitle` function was called without the required 'firstMessage' argument.Passing `firstUserMessage.content` to fix the error.
-             title = firstUserMessage ? await geminiService.generateConversationTitle(firstUserMessage.content) : 'Yeni Analiz';
+             if (firstUserMessage) {
+                const { title: newTitle, tokens } = await geminiService.generateConversationTitle(firstUserMessage.content);
+                title = newTitle;
+                tokensUsed = tokens;
+             } else {
+                title = 'Yeni Analiz';
+             }
         }
 
         const newConversation: Omit<Conversation, 'id' | 'created_at'> = {
@@ -465,6 +538,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             generatedDocs: { ...defaultGeneratedDocs, ...initialDocs },
             is_shared: false,
             share_id: uuidv4(),
+            total_tokens_used: tokensUsed,
         };
 
         const { data, error } = await supabase
@@ -535,6 +609,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         let fullResponse = "";
         let finalMessage = "";
         let finalSuggestion: GenerativeSuggestion | null = null;
+        let totalTokens = 0;
 
         for await (const chunk of stream) {
             if (chunk.type === 'doc_stream_chunk' && activeConversationId) {
@@ -566,6 +641,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 finalMessage = chunk.content;
             } else if (chunk.type === 'generative_suggestion' && activeConversationId) {
                 finalSuggestion = chunk.suggestion;
+            } else if (chunk.type === 'usage_update' && activeConversationId) {
+                 totalTokens += chunk.tokens;
             } else if (chunk.type === 'maturity_update' && activeConversationId) {
                  setConversations(prev => prev.map(c => 
                     c.id === activeConversationId ? { ...c, generatedDocs: { ...c.generatedDocs, maturityReport: chunk.report } } : c
@@ -597,9 +674,13 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                  break;
             }
         }
+
+        if (totalTokens > 0) {
+            addTokensToActiveConversation(totalTokens);
+        }
         
         return { fullResponse, finalMessage, finalSuggestion };
-    }, [activeConversationId, diagramType]);
+    }, [activeConversationId, diagramType, addTokensToActiveConversation]);
 
 
     const sendMessage = useCallback(async (content: string, isSystemMessage: boolean = false) => {
@@ -649,14 +730,15 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 updateConversation(convId!, { messages: updatedMessagesWithPlaceholder });
                 convToUpdate = { ...convToUpdate, messages: updatedMessagesWithPlaceholder };
 
-                const clarification = await geminiService.clarifyAndConfirmExpertMode(convToUpdate.messages, geminiModel);
+                const { needsClarification, questions, confirmationRequest, checklist, tokens } = await geminiService.clarifyAndConfirmExpertMode(convToUpdate.messages, geminiModel);
+                addTokensToActiveConversation(tokens);
 
-                if (clarification.needsClarification && clarification.questions) {
-                    finalMessageContent = clarification.questions;
+                if (needsClarification && questions) {
+                    finalMessageContent = questions;
                 } else {
-                    assistantMessage.content = clarification.confirmationRequest || "Onay bekleniyor...";
-                    assistantMessage.expertRunChecklist = clarification.checklist;
-                    newChecklist = clarification.checklist;
+                    assistantMessage.content = confirmationRequest || "Onay bekleniyor...";
+                    assistantMessage.expertRunChecklist = checklist;
+                    newChecklist = checklist;
 
                     const existingMessages = convToUpdate.messages.filter(m => m.id !== assistantMessage.id);
                     const finalMessagesForRun = [...existingMessages, assistantMessage];
@@ -715,7 +797,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             setGeneratingDocType(null);
             streamControllerRef.current = null;
         }
-    }, [activeConversation, activeConversationId, user.id, isExpertMode, geminiModel, selectedTemplates, processStream, createNewConversation, updateConversation, conversations]);
+    }, [activeConversation, activeConversationId, user.id, isExpertMode, geminiModel, selectedTemplates, processStream, createNewConversation, updateConversation, addTokensToActiveConversation]);
 
      const handleGenerateDoc = useCallback(async (
         type: 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', 
@@ -740,25 +822,28 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             let stream: AsyncGenerator<StreamChunk>;
             const docKey = type === 'analysis' ? 'analysisDoc' : type === 'test' ? 'testScenarios' : 'traceabilityMatrix';
 
-            if (type === 'analysis') {
-                const rawStream = geminiService.generateAnalysisDocument(activeConversation.messages, currentTemplateId, geminiModel);
-                stream = wrapDocStream(rawStream, docKey);
-            } else if (type === 'test') {
-                const rawStream = geminiService.generateTestScenarios(activeConversation.generatedDocs.analysisDoc, currentTemplateId, geminiModel);
-                stream = wrapDocStream(rawStream, docKey);
-            } else if (type === 'traceability') {
-                 const rawStream = geminiService.generateTraceabilityMatrix(activeConversation.generatedDocs.analysisDoc, activeConversation.generatedDocs.testScenarios, geminiModel);
-                 stream = wrapDocStream(rawStream, docKey);
+            if (type === 'analysis' || type === 'test' || type === 'traceability') {
+                 let rawStream;
+                 if (type === 'analysis') {
+                    rawStream = geminiService.generateAnalysisDocument(activeConversation.messages, currentTemplateId, geminiModel);
+                 } else if (type === 'test') {
+                     rawStream = geminiService.generateTestScenarios(activeConversation.generatedDocs.analysisDoc, currentTemplateId, geminiModel);
+                 } else { // traceability
+                     rawStream = geminiService.generateTraceabilityMatrix(activeConversation.generatedDocs.analysisDoc, activeConversation.generatedDocs.testScenarios, geminiModel);
+                 }
+                 stream = wrapDocStream(rawStream, docKey as any);
+                 const { fullResponse } = await processStream(stream, docKey as any);
+                 updateDocumentAndCreateVersion(docKey as 'analysisDoc' | 'testScenarios', fullResponse, "AI Tarafından Oluşturuldu");
+
             } else { // 'viz'
-                 const code = await geminiService.generateDiagram(activeConversation.generatedDocs.analysisDoc, currentDiagramType, geminiModel);
+                 const { code, tokens } = await geminiService.generateDiagram(activeConversation.generatedDocs.analysisDoc, currentDiagramType, geminiModel);
+                 addTokensToActiveConversation(tokens);
                  await processStream((async function*() { yield { type: 'visualization_update', content: code }; })(), 'visualization');
                  // Exit early as it's not a real stream, handle state reset manually.
                  setIsProcessing(false);
                  setGeneratingDocType(null);
                  return;
             }
-
-            await processStream(stream, docKey);
             
         } catch (err) {
             if (err instanceof Error) {
@@ -772,7 +857,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 setGeneratingDocType(null);
             }
         }
-    }, [activeConversation, geminiModel, processStream, selectedTemplates, diagramType, setActiveDocTab]);
+    }, [activeConversation, geminiModel, processStream, selectedTemplates, diagramType, setActiveDocTab, updateDocumentAndCreateVersion, addTokensToActiveConversation]);
     
      const handleEvaluateDocument = useCallback(async () => {
         if (!activeConversation || !activeConversation.generatedDocs.analysisDoc) return;
@@ -842,16 +927,12 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         try {
             const basePrompt = promptService.getPrompt('modifySelectedText');
             const fullPrompt = `${basePrompt}\n\n**Orijinal Metin:**\n"${selectedText}"\n\n**Talimat:**\n"${userPrompt}"`;
-            const modifiedText = await geminiService.continueConversation([{ role: 'user', content: fullPrompt, id: 'temp', timestamp: '' }], geminiModel);
+            const { text: modifiedText, tokens } = await geminiService.continueConversation([{ role: 'user', content: fullPrompt, id: 'temp', timestamp: '' }], geminiModel);
+            addTokensToActiveConversation(tokens);
 
             const newContent = originalContent.replace(selectedText, modifiedText);
-
-            updateConversation(activeConversation.id, {
-                generatedDocs: {
-                    ...activeConversation.generatedDocs,
-                    [docKey]: newContent
-                }
-            });
+            
+            updateDocumentAndCreateVersion(docKey, newContent, "AI Metin Düzenlemesi");
 
         } catch (err) {
             console.error("Modification error:", err);
@@ -874,7 +955,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         setGeneratingDocType('viz');
         
         try {
-             const newCode = await geminiService.modifyDiagram(currentCode, userPrompt, geminiModel, diagramType);
+             const { code: newCode, tokens } = await geminiService.modifyDiagram(currentCode, userPrompt, geminiModel, diagramType);
+             addTokensToActiveConversation(tokens);
              
               if (activeConversationId) {
                 setConversations(prev => prev.map(c => {
@@ -907,11 +989,12 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         setSuggestionError(null);
 
         try {
-            const suggestions = await geminiService.suggestNextFeature(
+            const { suggestions, tokens } = await geminiService.suggestNextFeature(
                 activeConversation.generatedDocs.analysisDoc,
                 activeConversation.messages,
                 geminiModel
             );
+            addTokensToActiveConversation(tokens);
             setFeatureSuggestions(suggestions);
         } catch (e) {
             setSuggestionError(e instanceof Error ? e.message : 'Öneriler alınamadı.');
@@ -940,21 +1023,12 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     const handleConfirmRegenerate = (saveCurrent: boolean) => {
         const { docType, newTemplateId } = regenerateModalData.current!;
         if (saveCurrent && activeConversation) {
-            const currentContent = activeConversation.generatedDocs[docType === 'analysis' ? 'analysisDoc' : 'testScenarios'];
-            // FIX: The 'templates' variable was not defined. Use the imported constants instead.
-            const currentTemplate = (docType === 'analysis' ? ANALYSIS_TEMPLATES : TEST_SCENARIO_TEMPLATES).find(t => t.id === selectedTemplates[docType]);
+            const docKey = docType === 'analysis' ? 'analysisDoc' : 'testScenarios';
+            const currentContent = activeConversation.generatedDocs[docKey];
             
-            const newVersion: AnalysisVersion = {
-                id: uuidv4(),
-                content: currentContent,
-                templateId: currentTemplate?.id || 'unknown',
-                createdAt: new Date().toISOString()
-            };
+            const reason = "Şablon Değişikliği Öncesi Arşivlendi";
 
-            const newHistory = [...(activeConversation.generatedDocs.analysisDocHistory || []), newVersion];
-            updateConversation(activeConversation.id, {
-                generatedDocs: { ...activeConversation.generatedDocs, analysisDocHistory: newHistory }
-            });
+            updateDocumentAndCreateVersion(docKey, currentContent, reason);
         }
         
         setSelectedTemplates(prev => ({ ...prev, [docType]: newTemplateId }));
@@ -1046,16 +1120,12 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             userMessage, 
             assistantMessage
         ];
+        
+        // Use the versioning function instead of a direct update
+        updateDocumentAndCreateVersion('analysisDoc', updatedDoc, `AI Önerisi: '${targetSection}' Güncellendi`);
 
-        const updates: Partial<Conversation> = {
-            generatedDocs: {
-                ...activeConversation.generatedDocs,
-                analysisDoc: updatedDoc,
-            },
-            messages: updatedMessages,
-        };
-
-        updateConversation(activeConversation.id, updates);
+        // Update messages separately
+        updateConversation(activeConversation.id, { messages: updatedMessages });
     };
 
 
@@ -1098,6 +1168,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 maturityScore={displayedMaturityScore}
                 isProcessing={isProcessing}
                 onToggleDeveloperPanel={handleToggleDeveloperPanel}
+                totalTokensUsed={activeConversation?.total_tokens_used}
             />
             <div className="flex-1 flex min-h-0 relative">
                 <Sidebar
@@ -1137,7 +1208,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                                         conversation={activeConversation}
                                         isProcessing={isProcessing}
                                         generatingDocType={generatingDocType}
-                                        onUpdateConversation={updateConversation}
+                                        onUpdateDocument={updateDocumentAndCreateVersion}
                                         onModifySelection={handleModifySelection}
                                         onModifyDiagram={handleModifyDiagram}
                                         onGenerateDoc={handleGenerateDoc}
@@ -1153,6 +1224,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                                         onPrepareQuestionForAnswer={handlePrepareQuestionForAnswer}
                                         diagramType={diagramType}
                                         setDiagramType={setDiagramType}
+                                        onAddTokens={addTokensToActiveConversation}
                                      />
                                  </div>
                              )}

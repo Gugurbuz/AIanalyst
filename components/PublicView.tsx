@@ -1,6 +1,6 @@
 // components/PublicView.tsx
 import React, { useState, useEffect } from 'react';
-import type { Conversation, Theme, User } from '../types';
+import type { Conversation, Theme, User, GenerativeSuggestion } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { ChatMessageHistory } from './ChatMessageHistory';
 // FIX: The component 'GeneratedDocument' was renamed; it is now 'DocumentCanvas'.
@@ -106,15 +106,16 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
     
     const { title, messages, generatedDocs } = conversation;
     
-    const diagramType = generatedDocs.visualizationType || 'mermaid';
+    const diagramType = generatedDocs.bpmnViz?.code ? 'bpmn' : 'mermaid';
 
     const vizContent = diagramType === 'bpmn'
-        ? generatedDocs.bpmnViz?.code ?? (generatedDocs.visualizationType === 'bpmn' ? generatedDocs.visualization : '')
-        : generatedDocs.mermaidViz?.code ?? (generatedDocs.visualizationType !== 'bpmn' ? generatedDocs.visualization : '');
+        ? generatedDocs.bpmnViz?.code ?? ''
+        : generatedDocs.mermaidViz?.code ?? '';
 
 
     // A dummy function for read-only components
     const noOp = async () => {};
+    const noOpWithArgs = (...args: any[]) => {};
 
     return (
         <div className="font-sans bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 min-h-screen">
@@ -137,10 +138,9 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                 user={mockUser}
                                 chatHistory={messages} 
                                 isLoading={false}
-                                onFeedbackUpdate={() => {}} // No feedback in public view
-// FIX: The `ChatMessageHistory` component requires the `onEditLastUserMessage` prop.
-// Since this is a read-only view, a no-op function is provided to satisfy the type requirement.
-                                onEditLastUserMessage={() => {}}
+                                onFeedbackUpdate={noOpWithArgs}
+                                onEditLastUserMessage={noOpWithArgs}
+                                onApplySuggestion={noOpWithArgs}
                             />
                         </div>
                     </div>
@@ -151,7 +151,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-md font-bold">Analiz Dokümanı</h3>
                                     </div>
-                                    <DocumentCanvas content={generatedDocs.analysisDoc} onContentChange={() => {}} docKey='analysisDoc' onModifySelection={() => {}} inlineModificationState={null} isGenerating={false} filename={`${conversation.title}-analiz`} />
+                                    <DocumentCanvas content={generatedDocs.analysisDoc} onContentChange={noOpWithArgs} docKey='analysisDoc' onModifySelection={noOp} inlineModificationState={null} isGenerating={false} filename={`${conversation.title}-analiz`} onAddTokens={noOpWithArgs} />
                                 </div>
                             )}
 
@@ -160,11 +160,10 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-md font-bold">Süreç Akış Diyagramı</h3>
                                     </div>
-                                    {/* FIX: Corrected prop `isGenerating` to `isLoading` and added other required props (`onGenerateDiagram`, `error`, `isAnalysisDocReady`) to satisfy the Visualizations component's interface. */}
                                     <Visualizations 
                                         content={vizContent}
                                         onModifyDiagram={noOp}
-                                        onGenerateDiagram={noOp}
+                                        onGenerateDiagram={noOpWithArgs}
                                         isLoading={false}
                                         error={null}
                                         diagramType={diagramType}
@@ -178,7 +177,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-md font-bold">Test Senaryoları</h3>
                                     </div>
-                                    <DocumentCanvas content={generatedDocs.testScenarios} onContentChange={() => {}} docKey='testScenarios' onModifySelection={() => {}} inlineModificationState={null} isGenerating={false} filename={`${conversation.title}-test-senaryolari`} isTable />
+                                    <DocumentCanvas content={generatedDocs.testScenarios} onContentChange={noOpWithArgs} docKey='testScenarios' onModifySelection={noOp} inlineModificationState={null} isGenerating={false} filename={`${conversation.title}-test-senaryolari`} isTable onAddTokens={noOpWithArgs} />
                                 </div>
                             )}
 
@@ -189,13 +188,14 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                     </div>
                                     <DocumentCanvas 
                                         content={generatedDocs.traceabilityMatrix} 
-                                        onContentChange={() => {}} 
-                                        docKey='analysisDoc' // Dummy key for type compliance
-                                        onModifySelection={() => {}} 
+                                        onContentChange={noOpWithArgs} 
+                                        docKey="analysisDoc" // Dummy key for type compliance
+                                        onModifySelection={noOp} 
                                         inlineModificationState={null}
                                         isGenerating={false}
                                         filename={`${conversation.title}-izlenebilirlik`}
                                         isTable
+                                        onAddTokens={noOpWithArgs}
                                     />
                                 </div>
                             )}
