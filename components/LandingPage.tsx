@@ -1,29 +1,35 @@
 import React, { useEffect, useState } from 'react';
+import { X, CheckCircle2, MessagesSquare, FileText, FilePenLine, Zap, PlugZap, Workflow, Sparkles, Mail, Github } from 'lucide-react';
 
 interface LandingPageProps {
     onLoginClick: () => void;
     onSignupClick: () => void;
 }
 
-// --- ICON COMPONENTS ---
-const XIcon = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-    </svg>
-);
+const LogoIcon = ({ className, theme = 'light' }: { className?: string; theme?: 'light' | 'dark' }) => {
+    const colors = theme === 'light'
+        ? { path: '#4f46e5', circle: '#a5b4fc' } // indigo-600, indigo-300
+        : { path: '#6366f1', circle: '#818cf8' }; // indigo-500, indigo-400
+
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className={className} aria-hidden="true">
+          <path fill={colors.path} d="M50 5L0 95h25l25-50 25 50h25L50 5z"/>
+          <circle fill={colors.circle} cx="50" cy="58" r="10"/>
+        </svg>
+    );
+};
+
 
 const AuthModal = ({ onClose, onProceed }: { onClose: () => void; onProceed: () => void; }) => {
     return (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-70 flex items-center justify-center p-4 animate-fade-in-up" style={{ animationDuration: '0.3s' }}>
             <div className="bg-gray-900 text-white p-8 rounded-2xl w-full max-w-md relative border border-gray-700 shadow-2xl">
                 <button onClick={onClose} className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors">
-                    <XIcon className="w-6 h-6" />
+                    <X className="w-6 h-6" />
                 </button>
                 <div className="text-center">
                     <div className="flex justify-center mb-6">
-                         <svg className="w-10 h-10 text-indigo-500" fill="currentColor" viewBox="0 0 24 24"> 
-                            <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8zm-1.5-7.5h3v-3h-3v3zm0-4.5h3v-3h-3v3z"/>
-                         </svg>
+                         <LogoIcon className="w-12 h-12" theme="dark" />
                     </div>
                     <h2 className="text-2xl font-bold mb-3">Devam etmek için giriş yapın</h2>
                     <p className="text-gray-400 mb-8">
@@ -36,10 +42,11 @@ const AuthModal = ({ onClose, onProceed }: { onClose: () => void; onProceed: () 
                             <span className="font-semibold">Google ile Devam Et</span>
                         </button>
                         <button disabled className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.91 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12A12 12 0 0 0 12 0z"></path></svg>
+                            <Github className="w-5 h-5" />
                             <span className="font-semibold">GitHub ile Devam Et</span>
                         </button>
                         <button onClick={onProceed} className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 transition-colors font-semibold">
+                           <Mail className="w-5 h-5" />
                            E-posta ile Devam Et
                         </button>
                     </div>
@@ -129,42 +136,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
         }
     `;
 
-    const CheckCircleIcon = () => (
-        <svg fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-    );
-    const SparklesIcon = (props: React.SVGProps<SVGSVGElement>) => ( 
-        <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-             <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.898 20.624L16.5 21.75l-.398-1.126a3.375 3.375 0 00-2.456-2.456L12.75 18l1.126-.398a3.375 3.375 0 002.456-2.456L16.5 14.25l.398 1.126a3.375 3.375 0 002.456 2.456L20.25 18l-1.126.398a3.375 3.375 0 00-2.456 2.456z" />
-        </svg>
-    );
-    const ChatBubbleLeftRightIcon = (props: React.SVGProps<SVGSVGElement>) => (
-        <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193l-3.722.534c-1.104.15-2.096.6-2.884 1.255l-2.024 1.518a.75.75 0 01-1.06 0l-2.024-1.518c-.788-.656-1.78-1.106-2.884-1.256l-3.722-.534A2.25 2.25 0 012.25 15v-4.286c0-.97.609-1.813 1.5-2.097m16.5 0c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193l-3.722.534c-1.104.15-2.096.6-2.884 1.255l-2.024 1.518a.75.75 0 01-1.06 0l-2.024-1.518c-.788-.656-1.78-1.106-2.884-1.256l-3.722-.534A2.25 2.25 0 012.25 15v-4.286c0-.97.609-1.813 1.5-2.097m16.5 0a8.25 8.25 0 00-16.5 0H20.25z" />
-        </svg>
-    );
-    const DocumentTextIcon = (props: React.SVGProps<SVGSVGElement>) => (
-        <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-        </svg>
-    );
-    const BoltIcon = (props: React.SVGProps<SVGSVGElement>) => (
-        <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-        </svg>
-    );
-    const PencilSquareIcon = (props: React.SVGProps<SVGSVGElement>) => (
-        <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-        </svg>
-    );
-    const ShareIcon = (props: React.SVGProps<SVGSVGElement>) => (
-        <svg {...props} fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.19.02.38.05.57.09.57.15.99.53.99 1.1v.34c0 .57-.42 1.05-.99 1.1a.75.75 0 00-.57.09m0 0a2.25 2.25 0 100 2.186m0-2.186a2.25 2.25 0 110-2.186m11.623-1.428a2.25 2.25 0 01-.049 2.186m0 0a2.25 2.25 0 01-2.134 1.355m2.134-1.355a2.25 2.25 0 002.134-1.355m0 0c.046-.1.087-.202.12-.305m-2.134 2.186a2.25 2.25 0 00-.498-2.186m0 0a2.25 2.25 0 00-2.134-1.355M17.25 10.5a2.25 2.25 0 110 2.186m0-2.186c.19.02.38.05.57.09.57.15.99.53.99 1.1v.34c0 .57-.42 1.05-.99 1.1a.75.75 0 00-.57.09m0 0a2.25 2.25 0 110 2.186m0-2.186a2.25 2.25 0 100 2.186m-7.623-1.428a2.25 2.25 0 01-.049 2.186m0 0a2.25 2.25 0 01-2.134 1.355m2.134-1.355a2.25 2.25 0 002.134-1.355m0 0c.046-.1.087-.202.12-.305m-2.134 2.186a2.25 2.25 0 00-.498-2.186m0 0a2.25 2.25 0 00-2.134-1.355M6.75 10.5a2.25 2.25 0 110 2.186m0-2.186c.19.02.38.05.57.09.57.15.99.53.99 1.1v.34c0 .57-.42 1.05-.99 1.1a.75.75 0 00-.57.09m0 0a2.25 2.25 0 110 2.186m0-2.186a2.25 2.25 0 100 2.186" />
-        </svg>
-    );
-
     return (
         <>
             <style>{pageStyles}</style>
@@ -174,9 +145,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                     <header className="absolute top-0 left-0 right-0 w-full py-4 z-50">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-14">
                             <a href="#" className="flex items-center gap-2" aria-label="Asisty.ai Ana Sayfa">
-                                <svg className="w-8 h-8 text-indigo-600" fill="currentColor" viewBox="0 0 24 24"> 
-                                    <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8zm-1.5-7.5h3v-3h-3v3zm0-4.5h3v-3h-3v3z"/>
-                                </svg>
+                                <LogoIcon className="w-8 h-8" theme="light" />
                                 <span className="text-2xl font-bold text-gray-900">Asisty.ai</span>
                             </a>
                             <div className="hidden md:flex items-center gap-6">
@@ -224,10 +193,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                                         hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                                     aria-label="Analizi Başlat"
                                 >
-                                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 3L9.5 8.5L4 11L9.5 13.5L12 19L14.5 13.5L20 11L14.5 8.5L12 3Z" />
-                                        <path d="M5 3L6 5" /> <path d="M19 13L18 15" /> <path d="M3 19L5 18" /> <path d="M13 19L15 18" />
-                                    </svg>
+                                    <Sparkles className="w-6 h-6 text-white" />
                                 </button>
                             </div>
                         </form>
@@ -251,7 +217,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                         <div className="mt-20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-16">
                             <div className="flex flex-col">
                                 <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
-                                    <ChatBubbleLeftRightIcon className="w-6 h-6" />
+                                    <MessagesSquare className="w-6 h-6" />
                                 </div>
                                 <h3 className="mt-5 text-xl font-semibold text-gray-900">Sohbet Tabanlı Analiz</h3>
                                 <p className="mt-2 text-base text-gray-600">
@@ -260,7 +226,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                             </div>
                             <div className="flex flex-col">
                                 <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
-                                    <DocumentTextIcon className="w-6 h-6" />
+                                    <FileText className="w-6 h-6" />
                                 </div>
                                 <h3 className="mt-5 text-xl font-semibold text-gray-900">Canlı Canvas Editör</h3>
                                 <p className="mt-2 text-base text-gray-600">
@@ -269,7 +235,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                             </div>
                             <div className="flex flex-col">
                                 <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
-                                    <PencilSquareIcon className="w-6 h-6" />
+                                    <FilePenLine className="w-6 h-6" />
                                 </div>
                                 <h3 className="mt-5 text-xl font-semibold text-gray-900">Akıllı Düzenleme Araçları</h3>
                                 <p className="mt-2 text-base text-gray-600">
@@ -278,7 +244,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                             </div>
                             <div className="flex flex-col">
                                 <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
-                                    <BoltIcon className="w-6 h-6" />
+                                    <Zap className="w-6 h-6" />
                                 </div>
                                 <h3 className="mt-5 text-xl font-semibold text-gray-900">Hazır Şablonlar</h3>
                                 <p className="mt-2 text-base text-gray-600">
@@ -287,7 +253,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                             </div>
                             <div className="flex flex-col">
                                 <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
-                                    <ShareIcon className="w-6 h-6" />
+                                    <PlugZap className="w-6 h-6" />
                                 </div>
                                 <h3 className="mt-5 text-xl font-semibold text-gray-900">Entegrasyonlar</h3>
                                 <p className="mt-2 text-base text-gray-600">
@@ -296,7 +262,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                             </div>
                             <div className="flex flex-col">
                                 <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
-                                    <SparklesIcon className="w-6 h-6" />
+                                    <Workflow className="w-6 h-6" />
                                 </div>
                                 <h3 className="mt-5 text-xl font-semibold text-gray-900">Görselleştirme</h3>
                                 <p className="mt-2 text-base text-gray-600">
@@ -341,9 +307,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                                     Ücretsiz Başla
                                 </button>
                                 <ul className="mt-8 space-y-3 text-sm text-gray-600 feature-icon-list">
-                                    <li className="flex items-center gap-3"><CheckCircleIcon />5 Doküman Sınırı</li>
-                                    <li className="flex items-center gap-3"><CheckCircleIcon />Temel AI Özellikleri</li>
-                                    <li className="flex items-center gap-3"><CheckCircleIcon />Standart Şablonlar</li>
+                                    <li className="flex items-center gap-3"><CheckCircle2 />5 Doküman Sınırı</li>
+                                    <li className="flex items-center gap-3"><CheckCircle2 />Temel AI Özellikleri</li>
+                                    <li className="flex items-center gap-3"><CheckCircle2 />Standart Şablonlar</li>
                                 </ul>
                             </div>
                             <div className="bg-indigo-600 p-8 rounded-3xl shadow-2xl relative flex flex-col">
@@ -360,10 +326,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                                     Pro'yu Başlat
                                 </button>
                                 <ul className="mt-8 space-y-3 text-sm text-indigo-50 feature-icon-list">
-                                    <li className="flex items-center gap-3"><CheckCircleIcon />Sınırsız Doküman</li>
-                                    <li className="flex items-center gap-3"><CheckCircleIcon />Gelişmiş AI Özellikleri</li>
-                                    <li className="flex items-center gap-3"><CheckCircleIcon />Tüm Şablonlar</li>
-                                    <li className="flex items-center gap-3"><CheckCircleIcon />Entegrasyonlar</li>
+                                    <li className="flex items-center gap-3"><CheckCircle2 />Sınırsız Doküman</li>
+                                    <li className="flex items-center gap-3"><CheckCircle2 />Gelişmiş AI Özellikleri</li>
+                                    <li className="flex items-center gap-3"><CheckCircle2 />Tüm Şablonlar</li>
+                                    <li className="flex items-center gap-3"><CheckCircle2 />Entegrasyonlar</li>
                                 </ul>
                             </div>
                             <div className="bg-white p-8 rounded-3xl shadow-lg border border-gray-200 flex flex-col">
@@ -374,10 +340,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                                     İletişime Geçin
                                 </a>
                                 <ul className="mt-8 space-y-3 text-sm text-gray-600 feature-icon-list">
-                                    <li className="flex items-center gap-3"><CheckCircleIcon />Pro'daki Her Şey</li>
-                                    <li className="flex items-center gap-3"><CheckCircleIcon />Özel Güvenlik (SSO)</li>
-                                    <li className="flex items-center gap-3"><CheckCircleIcon />Öncelikli Destek</li>
-                                    <li className="flex items-center gap-3"><CheckCircleIcon />Özel Entegrasyonlar</li>
+                                    <li className="flex items-center gap-3"><CheckCircle2 />Pro'daki Her Şey</li>
+                                    <li className="flex items-center gap-3"><CheckCircle2 />Özel Güvenlik (SSO)</li>
+                                    <li className="flex items-center gap-3"><CheckCircle2 />Öncelikli Destek</li>
+                                    <li className="flex items-center gap-3"><CheckCircle2 />Özel Entegrasyonlar</li>
                                 </ul>
                             </div>
                         </div>
