@@ -5,7 +5,7 @@ import { StreamingIndicator } from './StreamingIndicator';
 import { TemplateSelector } from './TemplateSelector';
 import { ExportDropdown } from './ExportDropdown';
 import { Template } from '../types';
-import { Bold, Italic, Heading1, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, AlertTriangle } from 'lucide-react';
+import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, Edit, Eye } from 'lucide-react';
 
 interface DocumentCanvasProps {
     content: string;
@@ -96,6 +96,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     } = props;
 
     const [localContent, setLocalContent] = useState(content);
+    const [isEditing, setIsEditing] = useState(false);
     const [selection, setSelection] = useState<{ start: number, end: number, text: string } | null>(null);
     const [isAiModalOpen, setIsAiModalOpen] = useState(false);
     
@@ -105,36 +106,44 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
 
     // Sync local content when parent content changes
     useEffect(() => {
-        // Prevent overwriting local edits while AI is modifying the text
         if (!isModifyingRef.current) {
             setLocalContent(content);
         }
     }, [content]);
 
-    // Debounced save
+    // Debounced save for textarea changes
     useEffect(() => {
-        if (localContent !== content) {
+        if (isEditing && localContent !== content) {
             if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
             debounceTimerRef.current = setTimeout(() => {
                 onContentChange(localContent);
-            }, 1500);
+            }, 1000);
         }
         return () => {
             if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
         };
-    }, [localContent, content, onContentChange]);
-
-    const handleSelection = () => {
-        const textarea = textareaRef.current;
-        if (!textarea) return;
-        const { selectionStart, selectionEnd } = textarea;
-        const selectedText = textarea.value.substring(selectionStart, selectionEnd);
-        if (selectedText.length > 5) {
-            setSelection({ start: selectionStart, end: selectionEnd, text: selectedText });
+    }, [localContent, content, onContentChange, isEditing]);
+    
+    const handleSelection = useCallback(() => {
+        if (isEditing && !isTable) {
+            const textarea = textareaRef.current;
+            if (!textarea || document.activeElement !== textarea) return;
+            const { selectionStart, selectionEnd } = textarea;
+            const selectedText = textarea.value.substring(selectionStart, selectionEnd);
+            if (selectedText.trim().length > 5) {
+                setSelection({ start: selectionStart, end: selectionEnd, text: selectedText });
+            } else {
+                setSelection(null);
+            }
         } else {
-            setSelection(null);
+            const currentSelection = window.getSelection();
+            if (currentSelection && currentSelection.toString().trim().length > 5) {
+                setSelection({ start: 0, end: 0, text: currentSelection.toString() });
+            } else {
+                setSelection(null);
+            }
         }
-    };
+    }, [isEditing, isTable]);
 
     const applyMarkdown = (prefix: string, suffix: string = '', isBlock: boolean = false) => {
         const textarea = textareaRef.current;
@@ -146,19 +155,14 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         let newText;
         if (isBlock) {
             const lineStart = originalText.lastIndexOf('\n', selectionStart - 1) + 1;
-            const lineEnd = (originalText.indexOf('\n', selectionEnd) + 1) || originalText.length;
             const line = originalText.substring(lineStart, selectionEnd);
-            
-            // Remove existing block prefixes
             const cleanedLine = line.replace(/^(#+\s|\d+\.\s|-\s|\*\s)/, '');
             const newBlock = `${prefix}${cleanedLine}`;
             newText = originalText.substring(0, lineStart) + newBlock + originalText.substring(selectionEnd);
-            
             setTimeout(() => textarea.setSelectionRange(lineStart, lineStart + newBlock.length), 0);
         } else {
             const selectedText = originalText.substring(selectionStart, selectionEnd);
             newText = `${originalText.substring(0, selectionStart)}${prefix}${selectedText}${suffix}${originalText.substring(selectionEnd)}`;
-            
             setTimeout(() => textarea.setSelectionRange(selectionStart + prefix.length, selectionEnd + prefix.length), 0);
         }
         
@@ -169,63 +173,60 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const handleAiModify = async (userPrompt: string) => {
         if (!selection) return;
         isModifyingRef.current = true;
-        
-        // Optimistically show pulse
-        const originalSelection = selection.text;
-        const pulseText = `<AI IŞLIYOR...>\n${originalSelection}\n</AI IŞLIYOR...>`;
-        setLocalContent(prev => prev.replace(originalSelection, pulseText));
-        
-        await onModifySelection(originalSelection, userPrompt, docKey);
-        
-        // After modification, parent's content will update, which triggers useEffect
+        await onModifySelection(selection.text, userPrompt, docKey);
         isModifyingRef.current = false;
         setIsAiModalOpen(false);
         setSelection(null);
     };
-
-    if (isStreaming || (!content && onGenerate)) {
+    
+    // View for documents that can be generated from within the canvas (e.g., Traceability Matrix)
+    if (!content && !isStreaming && onGenerate) {
         return (
             <div className="p-6 text-center text-slate-500 dark:text-slate-400 h-full flex flex-col justify-center items-center">
-                 {isStreaming && (
-                    <>
-                        <LoaderCircle className="animate-spin h-8 w-8 text-indigo-500 mb-4" />
-                        <p>İçerik oluşturuluyor...</p>
-                    </>
-                 )}
-                 {!content && onGenerate && (
-                     <>
-                        <p className="mb-4">{placeholder}</p>
-                        <button
-                            onClick={onGenerate}
-                            disabled={isGenerationDisabled}
-                            title={generationDisabledTooltip}
-                            className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-                        >
-                            {generateButtonText}
-                        </button>
-                     </>
-                 )}
+                <p className="mb-4">{placeholder}</p>
+                <button
+                    onClick={onGenerate}
+                    disabled={isGenerationDisabled}
+                    title={generationDisabledTooltip}
+                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                >
+                    {generateButtonText}
+                </button>
             </div>
         );
     }
+    
+    // View for documents that are generated externally (e.g., Analysis Doc, Test Scenarios)
+    if (!content && !isStreaming && !onGenerate) {
+        return (
+            <div className="p-6 text-center text-slate-500 dark:text-slate-400 h-full flex flex-col justify-center items-center">
+                <p>{placeholder}</p>
+            </div>
+        );
+    }
+
     
     return (
         <div className="flex flex-col h-full">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-2 md:p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2 flex-wrap">
-                    <select onChange={(e) => applyMarkdown(e.target.value, '', true)} className="px-2 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-700">
-                        <option value="">Başlık...</option>
-                        <option value="## ">Başlık 1</option>
-                        <option value="### ">Başlık 2</option>
-                    </select>
-                     <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
-                     <button onClick={() => applyMarkdown('**', '**')} title="Kalın" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"><Bold className="h-4 w-4" /></button>
-                     <button onClick={() => applyMarkdown('*', '*')} title="İtalik" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"><Italic className="h-4 w-4" /></button>
-                     <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
-                     <button onClick={() => applyMarkdown('- ', '', true)} title="Madde İşaretli Liste" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"><List className="h-4 w-4" /></button>
-                     <button onClick={() => applyMarkdown('1. ', '', true)} title="Numaralı Liste" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"><ListOrdered className="h-4 w-4" /></button>
-                     <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
-                      <button onClick={() => setIsAiModalOpen(true)} disabled={!selection} title="AI ile düzenle" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1 text-indigo-600 dark:text-indigo-400 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed">
+                    {(!isTable && isEditing) && (
+                        <>
+                            <select onChange={(e) => applyMarkdown(e.target.value, '', true)} className="px-2 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-700">
+                                <option value="">Başlık...</option>
+                                <option value="## ">Başlık 1</option>
+                                <option value="### ">Başlık 2</option>
+                            </select>
+                             <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
+                             <button onClick={() => applyMarkdown('**', '**')} title="Kalın" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"><Bold className="h-4 w-4" /></button>
+                             <button onClick={() => applyMarkdown('*', '*')} title="İtalik" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"><Italic className="h-4 w-4" /></button>
+                             <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
+                             <button onClick={() => applyMarkdown('- ', '', true)} title="Madde İşaretli Liste" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"><List className="h-4 w-4" /></button>
+                             <button onClick={() => applyMarkdown('1. ', '', true)} title="Numaralı Liste" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"><ListOrdered className="h-4 w-4" /></button>
+                             <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
+                        </>
+                    )}
+                     <button onClick={() => setIsAiModalOpen(true)} disabled={!selection} title="AI ile düzenle" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1 text-indigo-600 dark:text-indigo-400 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed">
                         <Sparkles className="h-4 w-4" /> <span className="text-sm font-semibold">Oluştur</span>
                     </button>
                 </div>
@@ -233,18 +234,45 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                     {templates && selectedTemplate && onTemplateChange &&
                         <TemplateSelector label="Şablon" templates={templates} selectedValue={selectedTemplate} onChange={onTemplateChange} disabled={isGenerating} />
                     }
+                     {!isTable && (
+                         <button 
+                            onClick={() => setIsEditing(!isEditing)} 
+                            className="px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-2"
+                        >
+                            {isEditing ? <><Eye className="h-4 w-4" /> Görünüm</> : <><Edit className="h-4 w-4" /> Düzenle</>}
+                        </button>
+                    )}
                     <ExportDropdown content={localContent} filename={filename} isTable={isTable} />
                 </div>
             </div>
-            <div className="p-2 md:p-6 flex-1 relative">
-                <textarea
-                    ref={textareaRef}
-                    value={localContent}
-                    onChange={(e) => setLocalContent(e.target.value)}
-                    onSelect={handleSelection}
-                    className="w-full h-full p-2 bg-transparent border-none focus:outline-none resize-none font-sans text-base leading-relaxed"
-                    placeholder={placeholder}
-                />
+            <div className="p-2 md:p-6 flex-1 relative" onMouseUp={handleSelection}>
+                {(isEditing && !isTable) ? (
+                    <textarea
+                        ref={textareaRef}
+                        value={localContent}
+                        onChange={(e) => setLocalContent(e.target.value)}
+                        className="w-full h-full p-2 bg-transparent border-none focus:outline-none resize-none font-sans text-base leading-relaxed"
+                        placeholder={placeholder}
+                    />
+                ) : (
+                    <div className="h-full overflow-y-auto p-2">
+                        <MarkdownRenderer
+                            content={localContent}
+                            rephrasingText={
+                                inlineModificationState && inlineModificationState.docKey === docKey
+                                    ? inlineModificationState.originalText
+                                    : null
+                            }
+                            highlightedUserSelectionText={selection?.text || null}
+                        />
+                         {isStreaming && (
+                            <div className="flex items-center gap-2 mt-4">
+                                <LoaderCircle className="animate-spin h-5 w-5 text-indigo-500" />
+                                <span className="text-sm text-slate-500 dark:text-slate-400">Oluşturuluyor...</span>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
              {isAiModalOpen && selection && (
                 <AiAssistantModal

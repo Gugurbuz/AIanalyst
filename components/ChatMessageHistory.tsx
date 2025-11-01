@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Message, User } from '../types';
+import type { Message, User, GenerativeSuggestion } from '../types';
 import { LoadingSpinner } from './LoadingSpinner';
 import { ChatMessage } from './ChatMessage'; // Import the new component
 import { Bot } from 'lucide-react';
@@ -10,6 +10,7 @@ interface ChatMessageHistoryProps {
     isLoading: boolean;
     onFeedbackUpdate: (messageId: string, feedbackData: { rating: 'up' | 'down' | null; comment?: string }) => void;
     onEditLastUserMessage: () => void;
+    onApplySuggestion: (suggestion: GenerativeSuggestion, messageId: string) => void;
 }
 
 const AssistantAvatar = () => (
@@ -18,7 +19,7 @@ const AssistantAvatar = () => (
     </div>
 );
 
-export const ChatMessageHistory: React.FC<ChatMessageHistoryProps> = ({ user, chatHistory, isLoading, onFeedbackUpdate, onEditLastUserMessage }) => {
+export const ChatMessageHistory: React.FC<ChatMessageHistoryProps> = ({ user, chatHistory, isLoading, onFeedbackUpdate, onEditLastUserMessage, onApplySuggestion }) => {
     const visibleMessages = chatHistory.filter(msg => msg.role !== 'system');
     
     return (
@@ -46,6 +47,7 @@ export const ChatMessageHistory: React.FC<ChatMessageHistoryProps> = ({ user, ch
                         onFeedbackUpdate={onFeedbackUpdate}
                         isEditable={isEditable}
                         onEdit={onEditLastUserMessage}
+                        onApplySuggestion={onApplySuggestion}
                     />
                 );
             })}

@@ -1,4 +1,5 @@
 // App.tsx
+// FIX: Corrected the React import statement to properly import hooks.
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from './services/supabaseClient';
 import { geminiService } from './services/geminiService';
@@ -20,7 +21,7 @@ import { RegenerateConfirmationModal } from './components/RegenerateConfirmation
 import { DeveloperPanel } from './components/DeveloperPanel';
 import { FeedbackDashboard } from './components/FeedbackDashboard';
 import { SAMPLE_ANALYSIS_DOCUMENT, ANALYSIS_TEMPLATES, TEST_SCENARIO_TEMPLATES } from './templates';
-import type { User, Conversation, Message, Theme, AppMode, GeminiModel, GeneratedDocs, FeedbackItem, Template, VizData, AnalysisVersion, ExpertStep } from './types';
+import type { User, Conversation, Message, Theme, AppMode, GeminiModel, GeneratedDocs, FeedbackItem, Template, VizData, AnalysisVersion, ExpertStep, GenerativeSuggestion } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, X, AlertTriangle } from 'lucide-react';
 
@@ -46,6 +47,16 @@ const defaultGeneratedDocs: GeneratedDocs = {
     testScenarios: '',
     visualization: '',
     traceabilityMatrix: '',
+};
+
+// A helper generator function to wrap raw doc streams into StreamChunk objects
+const wrapDocStream = async function* (
+    stream: AsyncGenerator<string>, 
+    docKey: 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix'
+): AsyncGenerator<StreamChunk> {
+    for await (const chunk of stream) {
+        yield { type: 'doc_stream_chunk', docKey, chunk };
+    }
 };
 
 const useNextBestAction = (
@@ -157,6 +168,7 @@ interface AnalystViewProps {
     nextBestAction: ReturnType<typeof useNextBestAction>;
     isExpertMode: boolean;
     onExpertModeChange: (isOn: boolean) => void;
+    onApplySuggestion: (suggestion: GenerativeSuggestion, messageId: string) => void;
 }
 
 const AnalystView: React.FC<AnalystViewProps> = ({
@@ -173,6 +185,7 @@ const AnalystView: React.FC<AnalystViewProps> = ({
     nextBestAction,
     isExpertMode,
     onExpertModeChange,
+    onApplySuggestion,
 }) => {
     return (
         <div className="flex flex-col h-full overflow-hidden">
@@ -185,6 +198,7 @@ const AnalystView: React.FC<AnalystViewProps> = ({
                             isLoading={isProcessing && !generatingDocType}
                             onFeedbackUpdate={onFeedbackUpdate}
                             onEditLastUserMessage={onEditLastUserMessage}
+                            onApplySuggestion={onApplySuggestion}
                         />
                     ) : (
                         <div className="flex flex-col items-center justify-center h-full pt-10">
@@ -440,7 +454,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         let title = customTitle;
         if (!title) {
             const firstUserMessage = initialMessages.find(m => m.role === 'user');
-             // FIX: The `generateConversationTitle` function was called without the required 'firstMessage' argument. Passing `firstUserMessage.content` to fix the error.
+             // FIX: The `generateConversationTitle` function was called without the required 'firstMessage' argument.Passing `firstUserMessage.content` to fix the error.
              title = firstUserMessage ? await geminiService.generateConversationTitle(firstUserMessage.content) : 'Yeni Analiz';
         }
 
@@ -516,10 +530,11 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     
     const processStream = useCallback(async (
         stream: AsyncGenerator<StreamChunk>,
-        docKey: 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix' | 'chat_response' | 'visualization' | 'maturity' | 'expert_run'
+        docKey: 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix' | 'chat_response' | 'visualization' | 'maturity' | 'expert_run' | 'generative_suggestion'
     ) => {
         let fullResponse = "";
         let finalMessage = "";
+        let finalSuggestion: GenerativeSuggestion | null = null;
 
         for await (const chunk of stream) {
             if (chunk.type === 'doc_stream_chunk' && activeConversationId) {
@@ -549,6 +564,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 }));
             } else if (chunk.type === 'chat_response' && activeConversationId) {
                 finalMessage = chunk.content;
+            } else if (chunk.type === 'generative_suggestion' && activeConversationId) {
+                finalSuggestion = chunk.suggestion;
             } else if (chunk.type === 'maturity_update' && activeConversationId) {
                  setConversations(prev => prev.map(c => 
                     c.id === activeConversationId ? { ...c, generatedDocs: { ...c.generatedDocs, maturityReport: chunk.report } } : c
@@ -581,7 +598,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             }
         }
         
-        return { fullResponse, finalMessage };
+        return { fullResponse, finalMessage, finalSuggestion };
     }, [activeConversationId, diagramType]);
 
 
@@ -620,6 +637,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         try {
             let stream;
             let finalMessageContent = "";
+            let finalSuggestion: GenerativeSuggestion | null = null;
             let newChecklist: ExpertStep[] | undefined;
 
             if (isExpertMode) {
@@ -665,14 +683,16 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 }
             } else {
                 stream = geminiService.processAnalystMessageStream(convToUpdate.messages, convToUpdate.generatedDocs, { analysis: selectedTemplates.analysis, test: selectedTemplates.test }, geminiModel);
-                const { finalMessage } = await processStream(stream, 'chat_response');
+                const { finalMessage, finalSuggestion: suggestion } = await processStream(stream, 'chat_response');
                 finalMessageContent = finalMessage;
+                finalSuggestion = suggestion;
             }
             
-            if (finalMessageContent && convId) {
+            if ((finalMessageContent || finalSuggestion) && convId) {
                 const assistantMessage: Message = {
                     id: uuidv4(), role: 'assistant', content: finalMessageContent, timestamp: new Date().toISOString(),
-                    expertRunChecklist: newChecklist
+                    expertRunChecklist: newChecklist,
+                    generativeSuggestion: finalSuggestion || undefined,
                 };
                 // Ensure we are updating from the most recent state
                 setConversations(prev => {
@@ -717,23 +737,27 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         const currentDiagramType = newDiagramType || diagramType;
 
         try {
-            let stream;
+            let stream: AsyncGenerator<StreamChunk>;
+            const docKey = type === 'analysis' ? 'analysisDoc' : type === 'test' ? 'testScenarios' : 'traceabilityMatrix';
+
             if (type === 'analysis') {
-                stream = geminiService.generateAnalysisDocument(activeConversation.messages, currentTemplateId, geminiModel);
+                const rawStream = geminiService.generateAnalysisDocument(activeConversation.messages, currentTemplateId, geminiModel);
+                stream = wrapDocStream(rawStream, docKey);
             } else if (type === 'test') {
-                stream = geminiService.generateTestScenarios(activeConversation.generatedDocs.analysisDoc, currentTemplateId, geminiModel);
+                const rawStream = geminiService.generateTestScenarios(activeConversation.generatedDocs.analysisDoc, currentTemplateId, geminiModel);
+                stream = wrapDocStream(rawStream, docKey);
             } else if (type === 'traceability') {
-                 stream = geminiService.generateTraceabilityMatrix(activeConversation.generatedDocs.analysisDoc, activeConversation.generatedDocs.testScenarios, geminiModel);
+                 const rawStream = geminiService.generateTraceabilityMatrix(activeConversation.generatedDocs.analysisDoc, activeConversation.generatedDocs.testScenarios, geminiModel);
+                 stream = wrapDocStream(rawStream, docKey);
             } else { // 'viz'
-                 stream = geminiService.generateDiagram(activeConversation.generatedDocs.analysisDoc, currentDiagramType, geminiModel);
-                 // Note: generateDiagram is not a streaming function, but we wrap it for consistency
-                 const code = await stream;
+                 const code = await geminiService.generateDiagram(activeConversation.generatedDocs.analysisDoc, currentDiagramType, geminiModel);
                  await processStream((async function*() { yield { type: 'visualization_update', content: code }; })(), 'visualization');
-                 return; // Exit early as it's not a real stream
+                 // Exit early as it's not a real stream, handle state reset manually.
+                 setIsProcessing(false);
+                 setGeneratingDocType(null);
+                 return;
             }
 
-            // FIX: The `type` argument was incorrect. It's mapped to the expected 'docKey' for processStream.
-            const docKey = type === 'analysis' ? 'analysisDoc' : type === 'test' ? 'testScenarios' : 'traceabilityMatrix';
             await processStream(stream, docKey);
             
         } catch (err) {
@@ -742,8 +766,11 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 setError(err.message);
             }
         } finally {
-            setIsProcessing(false);
-            setGeneratingDocType(null);
+             // This will still run for the 'viz' case, but we handle the state inside the try block for that case.
+            if (type !== 'viz') {
+                setIsProcessing(false);
+                setGeneratingDocType(null);
+            }
         }
     }, [activeConversation, geminiModel, processStream, selectedTemplates, diagramType, setActiveDocTab]);
     
@@ -950,6 +977,87 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         }
     };
 
+    const handleApplySuggestion = (suggestion: GenerativeSuggestion, messageId: string) => {
+        if (!activeConversation) return;
+
+        const { targetSection, suggestions } = suggestion;
+        const newContent = suggestions.join('\n\n');
+        const currentDoc = activeConversation.generatedDocs.analysisDoc;
+
+        const lines = currentDoc.split('\n');
+        const escapeRegExp = (string: string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        // CORRECTED REGEX: Remove the end-of-line anchor '$'. This allows matching a heading
+        // even if the AI's `targetSection` doesn't include extra text like '(Hipotez)'.
+        const headingRegex = new RegExp(`^#{2,3}\\s*(?:\\d+\\.?\\s*)?${escapeRegExp(targetSection).trim()}`, 'i');
+        const startIndex = lines.findIndex(line => headingRegex.test(line.trim()));
+        
+        let updatedDoc;
+
+        if (startIndex !== -1) {
+            const headingLine = lines[startIndex];
+            const headingLevel = (headingLine.match(/^(#+)/)?.[1] || '').length;
+
+            // CORRECTED ENDINDEX LOGIC: Find the next heading of the same or higher level.
+            let endIndex = -1;
+            if (headingLevel > 0) {
+                endIndex = lines.findIndex((line, index) => {
+                    if (index <= startIndex) return false;
+                    const match = line.trim().match(/^(#+)/);
+                    if (match) {
+                        const currentLevel = match[1].length;
+                        return currentLevel <= headingLevel;
+                    }
+                    return false;
+                });
+            }
+
+            if (endIndex === -1) {
+                endIndex = lines.length; // Section goes to the end of the doc
+            }
+
+            const beforeLines = lines.slice(0, startIndex);
+            const afterLines = lines.slice(endIndex);
+            
+            updatedDoc = [
+                ...beforeLines,
+                headingLine,
+                '', // Add a blank line for spacing
+                ...newContent.split('\n'),
+                ...afterLines
+            ].join('\n');
+
+        } else {
+            console.warn(`Could not find section "${targetSection}" to apply suggestion. Appending to document.`);
+            updatedDoc = `${currentDoc.trim()}\n\n## ${targetSection}\n${newContent}`;
+        }
+
+        const userMessage: Message = {
+            id: uuidv4(), role: 'user', content: `[KULLANICI EYLEMİ]: "${targetSection}" bölümü için sunulan öneriler onaylandı.`,
+            timestamp: new Date().toISOString()
+        };
+        const assistantMessage: Message = {
+            id: uuidv4(), role: 'assistant', content: `Harika! "${targetSection}" bölümünü belirttiğiniz şekilde güncelledim. Başka bir konu üzerinde çalışmamı ister misiniz?`,
+            timestamp: new Date().toISOString()
+        };
+        
+        const updatedMessages = [
+            ...activeConversation.messages.filter(msg => msg.id !== messageId),
+            userMessage, 
+            assistantMessage
+        ];
+
+        const updates: Partial<Conversation> = {
+            generatedDocs: {
+                ...activeConversation.generatedDocs,
+                analysisDoc: updatedDoc,
+            },
+            messages: updatedMessages,
+        };
+
+        updateConversation(activeConversation.id, updates);
+    };
+
 
     if (isLoading) {
         return (
@@ -1020,6 +1128,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                                     nextBestAction={nextBestAction}
                                     isExpertMode={isExpertMode}
                                     onExpertModeChange={setIsExpertMode}
+                                    onApplySuggestion={handleApplySuggestion}
                                  />
                              </div>
                              {isWorkspaceVisible && activeConversation && (

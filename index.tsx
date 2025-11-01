@@ -6,6 +6,7 @@ import { authService } from './services/authService';
 import type { User } from './types';
 import type { Session } from '@supabase/supabase-js';
 import { PublicView } from './components/PublicView';
+import { LandingPage } from './components/LandingPage';
 
 
 const LoadingSpinner = () => (
@@ -20,6 +21,7 @@ const LoadingSpinner = () => (
 const AuthWrapper = () => {
     const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [authFlowStep, setAuthFlowStep] = useState<'landing' | 'login' | 'signup'>('landing');
 
     useEffect(() => {
         const getSession = async () => {
@@ -44,7 +46,16 @@ const AuthWrapper = () => {
     }
 
     if (!session?.user) {
-        return <AuthPage />;
+        if (authFlowStep === 'landing') {
+            return <LandingPage 
+                onLoginClick={() => setAuthFlowStep('login')}
+                onSignupClick={() => setAuthFlowStep('signup')}
+            />;
+        }
+        return <AuthPage 
+            initialView={authFlowStep} 
+            onNavigateBack={() => setAuthFlowStep('landing')}
+        />;
     }
 
     return <App user={session.user as User} onLogout={() => authService.logout()} />;

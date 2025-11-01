@@ -22,6 +22,14 @@ export interface ExpertStep {
     details?: string;
 }
 
+export interface GenerativeSuggestion {
+    title: string;
+    suggestions: string[]; // The list of suggestions from the AI
+    targetSection: string; // The section of the doc to be replaced (e.g., "Hedefler")
+    context: string; // The user's original command (e.g., "hedefleri genişlet")
+}
+
+
 export interface Message {
     id:string;
     role: 'user' | 'assistant' | 'system';
@@ -29,6 +37,7 @@ export interface Message {
     timestamp: string; // ISO 8601 date string
     feedback?: Feedback;
     expertRunChecklist?: ExpertStep[];
+    generativeSuggestion?: GenerativeSuggestion;
 }
 
 export type MaturityLevel = 'Zayıf' | 'Gelişime Açık' | 'İyi' | 'Mükemmel';

@@ -1,7 +1,7 @@
 // services/geminiService.ts
 
 import { GoogleGenAI, Type, Content, FunctionDeclaration } from "@google/genai";
-import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep } from '../types';
+import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep, GenerativeSuggestion } from '../types';
 import { promptService } from './promptService'; // Import the new prompt service
 import { v4 as uuidvv4 } from 'uuid';
 
@@ -29,6 +29,7 @@ export type StreamChunk =
     | { type: 'status_update'; message: string }
     | { type: 'maturity_update'; report: MaturityReport }
     | { type: 'expert_run_update'; checklist: ExpertStep[]; isComplete: boolean; finalMessage?: string; }
+    | { type: 'generative_suggestion'; suggestion: GenerativeSuggestion }
     | { type: 'error'; message: string };
 
 
@@ -195,6 +196,24 @@ const tools: FunctionDeclaration[] = [
         name: 'generateTraceabilityMatrix',
         description: 'Mevcut iş analizi ve test senaryolarına dayanarak izlenebilirlik matrisi oluşturur.',
         parameters: { type: Type.OBJECT, properties: {} }
+    },
+    {
+        name: 'performGenerativeTask',
+        description: "Kullanıcı, dokümanın bir bölümünü 'genişlet', 'iyileştir', 'detaylandır' gibi bir komutla değiştirmek istediğinde bu aracı kullan. Bu araç, AI'nın proaktif olarak öneriler sunmasını sağlar.",
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                task_description: {
+                    type: Type.STRING,
+                    description: "Kullanıcının orijinal komutu. Örn: 'hedefleri genişlet', 'kapsam dışı maddeleri netleştir'."
+                },
+                target_section: {
+                    type: Type.STRING,
+                    description: "Dokümanda hedeflenen bölümün başlığı. Örn: 'Amaç', 'Kapsam Dışındaki Maddeler', 'Fonksiyonel Gereksinimler'."
+                }
+            },
+            required: ['task_description', 'target_section']
+        }
     }
 ];
 
@@ -230,7 +249,41 @@ export const geminiService = {
             if (functionCalls && functionCalls.length > 0) {
                 for (const fc of functionCalls) {
                     const functionName = fc.name;
-                    if (functionName === 'generateAnalysisDocument') {
+                    if (functionName === 'performGenerativeTask') {
+                        const args = fc.args as { task_description: string, target_section: string };
+                        yield { type: 'status_update', message: `"${args.target_section}" bölümü için öneriler hazırlanıyor...` };
+                        
+                        const suggestionPrompt = promptService.getPrompt('generateSectionSuggestions')
+                            .replace('{task_description}', args.task_description)
+                            .replace('{target_section_name}', args.target_section)
+                            .replace('{analysis_document}', analysisDocContent);
+                        
+                        const schema = {
+                            type: Type.OBJECT,
+                            properties: {
+                                new_content_suggestions: {
+                                    type: Type.ARRAY,
+                                    items: { type: Type.STRING }
+                                },
+                            },
+                            required: ['new_content_suggestions']
+                        };
+                        const config = { responseMimeType: "application/json", responseSchema: schema };
+
+                        const jsonString = await generateContent(suggestionPrompt, 'gemini-2.5-pro', config);
+                        const result = JSON.parse(jsonString);
+
+                        const suggestionPayload: GenerativeSuggestion = {
+                            title: `"${args.target_section}" Bölümünü Geliştirmek İçin Önerilerim`,
+                            suggestions: result.new_content_suggestions,
+                            targetSection: args.target_section,
+                            context: args.task_description
+                        };
+                        
+                        yield { type: 'generative_suggestion', suggestion: suggestionPayload };
+                        responseGenerated = true;
+
+                    } else if (functionName === 'generateAnalysisDocument') {
                         const args = fc.args as { force?: boolean; incrementalUpdate?: boolean };
                         const isIncremental = args?.incrementalUpdate === true;
                         const isForced = args?.force === true;

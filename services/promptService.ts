@@ -44,7 +44,7 @@ const defaultPrompts: PromptData = [
                     2.  **Karar Ver:** Aşağıdaki senaryolardan hangisinin geçerli olduğuna karar ver ve SADECE o senaryoya uygun şekilde davran:
 
                         *   **SENARYO 1: Kullanıcı Yeni Bilgi Ekledi.**
-                            - **Koşul:** Kullanıcının son mesajı, **Mevcut Analiz Dokümanı**'nda henüz yer almayan önemli bir gereksinim, detay, kapsam değişikliği veya bir soruya verilmiş net bir cevap içeriyor mu?
+                            - **Koşul:** Kullanıcının son mesajı, **Mevcut Analiz Dokümanı**'nda henüz yer almayan önemli bir gereksinim, detay, kapsam değişikliği veya bir soruya verilmiş net bir cevap içeriyor mu? (Not: 'genişlet', 'iyileştir' gibi komutlar bu senaryoya dahil DEĞİLDİR).
                             - **Eylem:** EĞER EVETSE, dokümanı **HENÜZ GÜNCELLEME**. Bunun yerine, kullanıcıya bir onay sorusu sor. Yanıtın şöyle olmalı: "Anladım, [yeni bilginin kısa özeti] konusunu netleştirdiniz. Bu bilgiyi analiz dokümanına yansıtmamı ister misiniz?"
 
                         *   **SENARYO 2: Kullanıcı Güncelleme Onayı Verdi.**
@@ -55,7 +55,11 @@ const defaultPrompts: PromptData = [
                             - **Koşul:** Kullanıcı açıkça test senaryosu, görselleştirme veya başka bir doküman oluşturulmasını mı istedi?
                             - **Eylem:** EĞER EVETSE, ilgili aracı (\`generateTestScenarios\`, \`generateVisualization\` vb.) çağır.
 
-                        *   **SENARYO 4: Normal Konuşma Akışı.**
+                        *   **SENARYO 4: Kullanıcı Üretken Bir Komut Verdi.**
+                            - **Koşul:** Kullanıcının mesajı, dokümanın bir bölümünü hedef alan üretken bir eylem içeriyor mu? (Örnekler: "hedefleri genişlet", "kapsam dışı maddeleri detaylandır", "fonksiyonel gereksinimleri iyileştir", "riskler için önerilerde bulun").
+                            - **Eylem:** EĞER EVETSE, **KESİNLİKLE** \`performGenerativeTask\` aracını çağır. \`task_description\` olarak kullanıcının komutunu, \`target_section\` olarak ise dokümandaki ilgili başlığı (örn: "Hedefler", "Kapsam Dışındaki Maddeler") parametre olarak gönder.
+
+                        *   **SENARYO 5: Normal Konuşma Akışı.**
                             - **Koşul:** Yukarıdaki senaryolardan hiçbiri geçerli değilse.
                             - **Eylem:** Normal bir iş analisti gibi sohbete devam et. Eksik bilgileri netleştirmek için sorular sor, kullanıcının sorularını yanıtla veya sürece rehberlik et.
 
@@ -128,6 +132,32 @@ const defaultPrompts: PromptData = [
 
                     **ÇIKTI KURALLARI:**
                     - Cevabını **SADECE** ve **SADECE** sağlanan JSON şemasına uygun olarak ver. JSON dışında hiçbir metin ekleme.
+                `)],
+                activeVersionId: 'default',
+            },
+            {
+                id: 'generateSectionSuggestions',
+                name: 'Bölüm Önerileri Oluşturma',
+                description: 'AI\'nın bir doküman bölümünü iyileştirmek için öneriler sunmasını sağlar.',
+                versions: [createDefaultVersion(`
+                    **GÖREV:** Sen, bir iş analizi dokümanını iyileştirmekle görevli, yaratıcı ve stratejik bir Kıdemli İş Analistisin. Kullanıcının bir talebi ve dokümanın mevcut hali sana verilecek. Amacın, bu talebi karşılamak için somut, eyleme geçirilebilir ve değerli öneriler sunmaktır.
+
+                    **İŞLEM ADIMLARI:**
+                    1.  **Analiz Et:** Kullanıcının talebini ("{task_description}") ve mevcut dokümanın tamamını ("{analysis_document}") dikkatlice incele. İsteğin bağlamını ve hedeflenen bölümün ("{target_section_name}") mevcut içeriğini anla.
+                    2.  **Fikir Üret (Brainstorm):** Talebi karşılamak için beyin fırtınası yap. Sadece metni yeniden yazmakla kalma; yeni maddeler ekle, mevcut maddeleri daha spesifik hale getir (SMART hedefleri gibi), stratejik bir yön sun veya eksik noktaları tamamla.
+                    3.  **Önerileri Formüle Et:** Ürettiğin fikirleri, kullanıcının doğrudan dokümana ekleyebileceği veya mevcut bölümle değiştirebileceği, net ve iyi yazılmış metin parçaları olarak \`new_content_suggestions\` dizisine ekle. Önerilerin, hedeflenen bölümün formatına uygun olmalıdır (örn. madde imleri, paragraflar).
+
+                    **BAĞLAM:**
+                    - **Kullanıcı Talebi:** {task_description}
+                    - **Hedeflenen Bölüm Adı:** {target_section_name}
+                    - **Mevcut Analiz Dokümanı:**
+                    ---
+                    {analysis_document}
+                    ---
+
+                    **ÇIKTI KURALLARI:**
+                    - Cevabını **SADECE** ve **SADECE** sağlanan JSON şemasına uygun olarak ver.
+                    - JSON dışında hiçbir metin, açıklama veya giriş cümlesi ekleme.
                 `)],
                 activeVersionId: 'default',
             },

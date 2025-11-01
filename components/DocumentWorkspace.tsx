@@ -216,6 +216,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                 {activeDocTab === 'analysis' && (
                     <div className="relative h-full">
                         <DocumentCanvas
+                            key="analysis"
                             content={generatedDocs.analysisDoc} 
                             onContentChange={(newContent) => onUpdateConversation(conversation.id, { generatedDocs: { ...generatedDocs, analysisDoc: newContent } })} 
                             docKey="analysisDoc" 
@@ -268,6 +269,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                 {activeDocTab === 'test' && (
                     <div className="relative h-full">
                          <DocumentCanvas
+                            key="test"
                             content={generatedDocs.testScenarios} 
                             onContentChange={(newContent) => onUpdateConversation(conversation.id, { generatedDocs: { ...generatedDocs, testScenarios: newContent } })} 
                             docKey="testScenarios" 
@@ -287,6 +289,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                  {activeDocTab === 'traceability' && (
                      <div className="relative h-full">
                         <DocumentCanvas
+                            key="traceability"
                             content={generatedDocs.traceabilityMatrix} 
                             onContentChange={(newContent) => onUpdateConversation(conversation.id, { generatedDocs: { ...generatedDocs, traceabilityMatrix: newContent } })} 
                             docKey="analysisDoc" // Dummy key, rephrase is a no-op

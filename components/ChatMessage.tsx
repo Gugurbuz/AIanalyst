@@ -1,11 +1,9 @@
-
-
 // components/ChatMessage.tsx
 import React from 'react';
-import type { Message, User } from '../types';
+import type { Message, User, GenerativeSuggestion } from '../types';
 import { Feedback } from './Feedback';
 import { ExpertRunChecklist } from './ExpertRunChecklist';
-import { Bot, Edit } from 'lucide-react';
+import { Bot, Edit, Sparkles, Check, X } from 'lucide-react';
 
 interface ChatMessageProps {
     msg: Message;
@@ -13,6 +11,7 @@ interface ChatMessageProps {
     onFeedbackUpdate: (messageId: string, feedbackData: { rating: 'up' | 'down' | null; comment?: string }) => void;
     isEditable: boolean;
     onEdit: () => void;
+    onApplySuggestion?: (suggestion: GenerativeSuggestion, messageId: string) => void;
 }
 
 const AssistantAvatar = () => (
@@ -27,8 +26,53 @@ const UserAvatar: React.FC<{ initial: string }> = ({ initial }) => (
     </div>
 );
 
-const ChatMessageComponent: React.FC<ChatMessageProps> = ({ msg, user, onFeedbackUpdate, isEditable, onEdit }) => {
+const GenerativeSuggestionCard: React.FC<{ suggestion: GenerativeSuggestion, onApply: () => void, onReject: () => void }> = ({ suggestion, onApply, onReject }) => {
+    return (
+        <div className="p-4 space-y-3">
+            <h4 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-amber-500" />
+                {suggestion.title}
+            </h4>
+            <ul className="space-y-2 border-t border-slate-300 dark:border-slate-600 pt-3">
+                {suggestion.suggestions.map((s, index) => (
+                    <li key={index} className="text-sm p-2 bg-slate-100 dark:bg-slate-800/50 rounded-md">{s}</li>
+                ))}
+            </ul>
+            <div className="flex justify-end gap-2 pt-2">
+                <button 
+                    onClick={onReject}
+                    className="px-3 py-1.5 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-300 dark:bg-slate-600 rounded-md hover:bg-slate-400 dark:hover:bg-slate-500 flex items-center gap-1.5"
+                >
+                    <X className="h-4 w-4" /> Reddet
+                </button>
+                 <button 
+                    onClick={onApply}
+                    className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 flex items-center gap-1.5"
+                >
+                    <Check className="h-4 w-4" /> Değişiklikleri Uygula
+                </button>
+            </div>
+        </div>
+    );
+};
+
+
+const ChatMessageComponent: React.FC<ChatMessageProps> = ({ msg, user, onFeedbackUpdate, isEditable, onEdit, onApplySuggestion }) => {
     const userInitial = user?.email?.[0]?.toUpperCase() || 'U';
+
+    const handleApply = () => {
+        if (msg.generativeSuggestion && onApplySuggestion) {
+            onApplySuggestion(msg.generativeSuggestion, msg.id);
+        }
+    };
+    
+    // For now, reject just hides the card (a more complex implementation could send feedback to the model)
+    // We'll achieve this by setting the suggestion to null on the message object in the parent state.
+    const handleReject = () => {
+        // This is a placeholder for potential future logic.
+        // The card will be removed once the next message comes in.
+        // A more robust solution would involve updating the message state to remove the suggestion.
+    };
 
     return (
         <div className={`group flex items-start gap-3.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -57,11 +101,17 @@ const ChatMessageComponent: React.FC<ChatMessageProps> = ({ msg, user, onFeedbac
                             steps={msg.expertRunChecklist}
                             initialMessage={msg.content}
                         />
+                    ) : msg.generativeSuggestion ? (
+                        <GenerativeSuggestionCard 
+                            suggestion={msg.generativeSuggestion}
+                            onApply={handleApply}
+                            onReject={handleReject}
+                        />
                     ) : (
                         <div className="px-4 py-3 whitespace-pre-wrap">{msg.content}</div>
                     )}
                 </div>
-                {msg.role === 'assistant' && (
+                {msg.role === 'assistant' && !msg.generativeSuggestion && (
                      <Feedback 
                         messageId={msg.id}
                         feedback={msg.feedback}

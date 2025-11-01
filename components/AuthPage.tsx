@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { LoginPage } from './LoginPage';
 import { SignupPage } from './SignupPage';
 import { DeveloperPanel } from './DeveloperPanel';
+import { ArrowLeft } from 'lucide-react';
 
 const LogoIcon = ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className={className} aria-hidden="true">
@@ -17,13 +18,21 @@ const Logo = () => (
     </div>
 );
 
+interface AuthPageProps {
+    initialView?: 'login' | 'signup';
+    onNavigateBack?: () => void;
+}
 
-export const AuthPage: React.FC = () => {
-    const [isLogin, setIsLogin] = useState(true);
+export const AuthPage: React.FC<AuthPageProps> = ({ initialView = 'login', onNavigateBack }) => {
+    const [isLogin, setIsLogin] = useState(initialView === 'login');
     const [isDeveloperPanelOpen, setIsDeveloperPanelOpen] = useState(false);
     const logoClickCount = useRef(0);
     // FIX: Replaced NodeJS.Timeout with ReturnType<typeof setTimeout> for browser compatibility.
     const logoClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+     useEffect(() => {
+        setIsLogin(initialView === 'login');
+    }, [initialView]);
 
     const handleLogoClick = () => {
         logoClickCount.current += 1;
@@ -48,7 +57,16 @@ export const AuthPage: React.FC = () => {
     return (
         <>
             <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900 p-4">
-                <div className="w-full max-w-md">
+                <div className="w-full max-w-md relative">
+                     {onNavigateBack && (
+                        <button 
+                            onClick={onNavigateBack} 
+                            className="absolute top-0 left-0 -translate-y-full mb-4 flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 font-semibold"
+                        >
+                            <ArrowLeft className="w-4 h-4" />
+                            Ana Sayfaya Dön
+                        </button>
+                    )}
                     <div className="text-center mb-8">
                         <div onClick={handleLogoClick} className="inline-block cursor-pointer" title="Geliştirici Panelini açmak için 5 kez tıklayın">
                             <Logo />
