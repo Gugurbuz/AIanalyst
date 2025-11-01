@@ -175,7 +175,7 @@ const AnalystView: React.FC<AnalystViewProps> = ({
     onExpertModeChange,
 }) => {
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full overflow-hidden">
             <main className="flex-1 overflow-y-auto min-h-0">
                  <div className="max-w-4xl mx-auto w-full px-4 pt-4">
                     {activeConversation && activeConversation.messages.filter(m => m.role !== 'system').length > 0 ? (
@@ -193,7 +193,7 @@ const AnalystView: React.FC<AnalystViewProps> = ({
                     )}
                  </div>
             </main>
-            <footer className="p-4 bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm border-t border-slate-200 dark:border-slate-700">
+            <footer className="p-4 bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
                 <div className="max-w-4xl mx-auto w-full space-y-3">
                     <ActionButtons
                         onSuggestNextFeature={onSuggestNextFeature}
@@ -1004,8 +1004,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 />
                 <div className={`flex-1 flex flex-col min-h-0 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'md:ml-72' : 'ml-0'}`}>
                     {appMode === 'analyst' ? (
-                        <div className={`flex-1 grid grid-cols-1 ${isWorkspaceVisible ? 'lg:grid-cols-3' : ''}`}>
-                             <div className={`col-span-1 ${isWorkspaceVisible ? 'lg:col-span-1' : 'lg:col-span-3'} flex flex-col h-full border-r border-slate-200 dark:border-slate-700`}>
+                        <div className="flex-1 flex flex-row min-h-0">
+                            <div className={`flex flex-col border-r border-slate-200 dark:border-slate-700 ${isWorkspaceVisible ? 'w-full lg:w-1/3' : 'w-full'}`}>
                                  <AnalystView 
                                     activeConversation={activeConversation || null}
                                     user={user}
@@ -1023,7 +1023,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                                  />
                              </div>
                              {isWorkspaceVisible && activeConversation && (
-                                 <div className="col-span-1 lg:col-span-2 h-full bg-white dark:bg-slate-800 hidden lg:flex">
+                                 <div className="flex-1 h-full bg-white dark:bg-slate-800 hidden lg:flex">
                                      <DocumentWorkspace 
                                         conversation={activeConversation}
                                         isProcessing={isProcessing}

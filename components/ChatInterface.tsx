@@ -51,7 +51,7 @@ declare global {
   }
 }
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { Paperclip, Mic, X, Send, StopCircle, Bot } from 'lucide-react';
 
 interface ChatInterfaceProps {
@@ -164,15 +164,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
     }, [activeConversationId, initialText]);
 
 
-    // Auto-resize textarea
-    useEffect(() => {
+    // Auto-resize textarea. Use useLayoutEffect to run synchronously after DOM mutations
+    // but before the browser paints, preventing layout jumps and incorrect scrollHeight calculations.
+    useLayoutEffect(() => {
         const textarea = textareaRef.current;
         if (textarea) {
             textarea.style.height = 'auto';
-            const scrollHeight = textarea.scrollHeight;
-            // Max height increased to 180px
-            const maxHeight = 180;
-            textarea.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
+            textarea.style.height = `${textarea.scrollHeight}px`;
         }
     }, [input]);
 
@@ -296,7 +294,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
                         placeholder="Bir iş analisti gibi sorun, Asisty yanıtlasın..."
                         disabled={isLoading}
                         className="w-full p-3 pl-20 pr-12 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-slate-100 dark:bg-slate-700 disabled:opacity-50 transition-colors resize-none overflow-y-auto"
-                        rows={2}
+                        rows={1}
                         style={{ lineHeight: '1.5rem', maxHeight: '180px' }}
                     />
                      <button
