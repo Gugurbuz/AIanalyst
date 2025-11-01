@@ -10,7 +10,6 @@ import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { ChatInterface } from './components/ChatInterface';
 import { ChatMessageHistory } from './components/ChatMessageHistory';
-import { ActionButtons } from './components/ActionButtons';
 import { PromptSuggestions } from './components/PromptSuggestions';
 import { ShareModal } from './components/ShareModal';
 import { ProjectBoard } from './components/ProjectBoard';
@@ -222,13 +221,7 @@ const AnalystView: React.FC<AnalystViewProps> = ({
                  </div>
             </main>
             <footer className="p-4 bg-slate-100/80 dark:bg-slate-900/80 backdrop-blur-sm border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
-                <div className="max-w-4xl mx-auto w-full space-y-3">
-                    <ActionButtons
-                        onSuggestNextFeature={onSuggestNextFeature}
-                        isLoading={isProcessing}
-                        isConversationStarted={!!activeConversation && activeConversation.messages.filter(m => m.role !== 'system').length > 0}
-                        nextAction={nextBestAction}
-                    />
+                <div className="max-w-4xl mx-auto w-full">
                     <ChatInterface
                         isLoading={isProcessing && !generatingDocType}
                         onSendMessage={onSendMessage}
@@ -237,6 +230,9 @@ const AnalystView: React.FC<AnalystViewProps> = ({
                         initialText={messageToEdit}
                         isDeepAnalysisMode={isDeepAnalysisMode}
                         onDeepAnalysisModeChange={onDeepAnalysisModeChange}
+                        onSuggestNextFeature={onSuggestNextFeature}
+                        isConversationStarted={!!activeConversation && activeConversation.messages.filter(m => m.role !== 'system').length > 0}
+                        nextAction={nextBestAction}
                     />
                 </div>
             </footer>

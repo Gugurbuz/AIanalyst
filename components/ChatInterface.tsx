@@ -52,7 +52,15 @@ declare global {
 }
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { Paperclip, Mic, X, Send, StopCircle, Bot } from 'lucide-react';
+import { Paperclip, Mic, X, Send, StopCircle, Bot, Lightbulb } from 'lucide-react';
+
+interface NextAction {
+    label: string;
+    action: () => void;
+    icon: React.ReactElement;
+    disabled: boolean;
+    tooltip?: string;
+}
 
 interface ChatInterfaceProps {
     isLoading: boolean;
@@ -62,6 +70,9 @@ interface ChatInterfaceProps {
     initialText?: string | null;
     isDeepAnalysisMode: boolean;
     onDeepAnalysisModeChange: (isOn: boolean) => void;
+    onSuggestNextFeature: () => void;
+    isConversationStarted: boolean;
+    nextAction: NextAction;
 }
 
 // Helper to read file content as a promise
@@ -74,7 +85,18 @@ const readFileAsText = (file: File): Promise<string> => {
     });
 };
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendMessage, activeConversationId, onStopGeneration, initialText, isDeepAnalysisMode, onDeepAnalysisModeChange }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
+    isLoading, 
+    onSendMessage, 
+    activeConversationId, 
+    onStopGeneration, 
+    initialText, 
+    isDeepAnalysisMode, 
+    onDeepAnalysisModeChange,
+    onSuggestNextFeature,
+    isConversationStarted,
+    nextAction 
+}) => {
     const [input, setInput] = useState('');
     const [attachedFile, setAttachedFile] = useState<File | null>(null);
     const [isModeSelectorOpen, setIsModeSelectorOpen] = useState(false);
@@ -234,17 +256,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
     }
 
     return (
-        <div className="w-full bg-white dark:bg-slate-800 rounded-lg p-2 space-y-2">
-            {attachedFile && (
-                <div className="px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-md flex items-center justify-between text-sm">
-                    <span className="font-medium text-slate-700 dark:text-slate-200 truncate pr-2">
-                        Ekli: {attachedFile.name}
-                    </span>
-                    <button onClick={handleRemoveFile} className="p-1 rounded-full hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-400">
-                         <X className="h-4 w-4" />
-                    </button>
-                </div>
-            )}
+        <div className="w-full bg-white dark:bg-slate-800 rounded-lg p-2">
             <form onSubmit={handleSubmit} className="flex items-end space-x-2">
                  <input
                     type="file"
@@ -253,62 +265,96 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ isLoading, onSendM
                     style={{ display: 'none' }}
                     accept=".txt,.md"
                  />
-                 <div className="relative flex-1 flex items-end">
-                    <div className="absolute left-3 bottom-3 flex items-center gap-2">
-                         <button 
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            title="Dosya Ekle"
-                            disabled={isLoading}
-                            className="p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors"
-                        >
-                             <Paperclip className="h-5 w-5" />
-                        </button>
-                         <div ref={modeSelectorRef} className="relative">
-                              <button 
-                                type="button"
-                                onClick={() => setIsModeSelectorOpen(!isModeSelectorOpen)}
-                                title="Analiz Modunu Değiştir"
-                                disabled={isLoading}
-                                className={`p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors ${isDeepAnalysisMode ? 'text-indigo-500' : 'text-slate-500 dark:text-slate-400'}`}
-                            >
-                                 <Bot className="h-5 w-5" />
-                            </button>
-                            {isModeSelectorOpen && (
-                                <div className="origin-bottom-left absolute bottom-full left-0 mb-2 w-56 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-30 animate-fade-in-up" style={{animationDuration: '0.1s'}}>
-                                    <button onClick={() => handleModeChange(false)} className={`w-full text-left flex flex-col px-3 py-2 text-sm ${!isDeepAnalysisMode ? 'bg-indigo-50 dark:bg-indigo-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
-                                        <span className={`font-semibold ${!isDeepAnalysisMode ? 'text-indigo-700 dark:text-indigo-200' : 'text-slate-800 dark:text-slate-200'}`}>Normal Analiz</span>
-                                        <span className="text-xs text-slate-500 dark:text-slate-400">Hızlı ve verimli. (gemini-2.5-flash)</span>
+                 <div className="flex-1 flex flex-col border border-slate-300 dark:border-slate-600 rounded-lg focus-within:ring-2 focus-within:ring-indigo-500 bg-slate-100 dark:bg-slate-700 transition-shadow">
+                    {(isConversationStarted || !nextAction.disabled) && (
+                        <div className="flex flex-wrap items-center justify-center gap-2 p-2 border-b border-slate-200 dark:border-slate-600">
+                             <div className="flex items-center gap-1 border-r border-slate-300 dark:border-slate-600 pr-2">
+                                <button 
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    title="Dosya Ekle"
+                                    disabled={isLoading}
+                                    className="p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors"
+                                >
+                                    <Paperclip className="h-5 w-5" />
+                                </button>
+                                <div ref={modeSelectorRef} className="relative">
+                                    <button 
+                                        type="button"
+                                        onClick={() => setIsModeSelectorOpen(!isModeSelectorOpen)}
+                                        title="Analiz Modunu Değiştir"
+                                        disabled={isLoading}
+                                        className={`p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors ${isDeepAnalysisMode ? 'text-indigo-500' : 'text-slate-500 dark:text-slate-400'}`}
+                                    >
+                                        <Bot className="h-5 w-5" />
                                     </button>
-                                     <button onClick={() => handleModeChange(true)} className={`w-full text-left flex flex-col px-3 py-2 text-sm ${isDeepAnalysisMode ? 'bg-indigo-50 dark:bg-indigo-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
-                                        <span className={`font-semibold ${isDeepAnalysisMode ? 'text-indigo-700 dark:text-indigo-200' : 'text-slate-800 dark:text-slate-200'}`}>Derin Analiz</span>
-                                        <span className="text-xs text-slate-500 dark:text-slate-400">Daha kapsamlı, yavaş yanıt. (gemini-2.5-pro)</span>
-                                    </button>
+                                    {isModeSelectorOpen && (
+                                        <div className="origin-bottom-left absolute bottom-full left-0 mb-2 w-56 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-30 animate-fade-in-up" style={{animationDuration: '0.1s'}}>
+                                            <button onClick={() => handleModeChange(false)} className={`w-full text-left flex flex-col px-3 py-2 text-sm ${!isDeepAnalysisMode ? 'bg-indigo-50 dark:bg-indigo-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+                                                <span className={`font-semibold ${!isDeepAnalysisMode ? 'text-indigo-700 dark:text-indigo-200' : 'text-slate-800 dark:text-slate-200'}`}>Normal Analiz</span>
+                                                <span className="text-xs text-slate-500 dark:text-slate-400">Hızlı ve verimli. (gemini-2.5-flash)</span>
+                                            </button>
+                                            <button onClick={() => handleModeChange(true)} className={`w-full text-left flex flex-col px-3 py-2 text-sm ${isDeepAnalysisMode ? 'bg-indigo-50 dark:bg-indigo-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+                                                <span className={`font-semibold ${isDeepAnalysisMode ? 'text-indigo-700 dark:text-indigo-200' : 'text-slate-800 dark:text-slate-200'}`}>Derin Analiz</span>
+                                                <span className="text-xs text-slate-500 dark:text-slate-400">Daha kapsamlı, yavaş yanıt. (gemini-2.5-pro)</span>
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
-                            )}
-                         </div>
+                            </div>
+                            <button
+                                onClick={nextAction.action}
+                                disabled={isLoading || nextAction.disabled}
+                                title={nextAction.tooltip}
+                                className="px-3 py-1.5 text-sm font-semibold text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-2"
+                            >
+                                {nextAction.icon}
+                                {nextAction.label}
+                            </button>
+                            <button
+                                onClick={onSuggestNextFeature}
+                                disabled={isLoading || !isConversationStarted}
+                                title="AI'nın mevcut analize dayanarak bir sonraki adımı önermesini sağlayın"
+                                className="px-3 py-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 rounded-md shadow-sm hover:bg-slate-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-2"
+                            >
+                                <Lightbulb className="h-5 w-5" />
+                                Fikir Üret
+                            </button>
+                        </div>
+                    )}
+                    {attachedFile && (
+                        <div className="mx-2 mt-2 px-3 py-2 bg-slate-200 dark:bg-slate-600 rounded-md flex items-center justify-between text-sm">
+                            <span className="font-medium text-slate-700 dark:text-slate-200 truncate pr-2">
+                                Ekli: {attachedFile.name}
+                            </span>
+                            <button onClick={handleRemoveFile} className="p-1 rounded-full hover:bg-slate-300 dark:hover:bg-slate-500 text-slate-500 dark:text-slate-400">
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                    )}
+                    <div className="relative flex-1 flex items-end">
+                        <textarea
+                            ref={textareaRef}
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="Bir iş analisti gibi sorun, Asisty yanıtlasın..."
+                            disabled={isLoading}
+                            className="w-full p-3 pl-4 pr-12 bg-transparent focus:outline-none disabled:opacity-50 resize-none overflow-y-auto"
+                            rows={1}
+                            style={{ lineHeight: '1.5rem', maxHeight: '256px' }}
+                        />
+                        <button
+                            type="button"
+                            onClick={toggleListening}
+                            title={isSpeechSupported ? (isListening ? 'Kaydı Durdur' : 'Sesle Yaz') : 'Tarayıcı desteklemiyor'}
+                            disabled={isLoading || !isSpeechSupported}
+                            className={`absolute right-3 bottom-3 p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors ${isListening ? 'text-red-500 animate-pulse' : ''}`}
+                        >
+                            <Mic className="h-5 w-5" />
+                        </button>
                     </div>
-                    <textarea
-                        ref={textareaRef}
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        placeholder="Bir iş analisti gibi sorun, Asisty yanıtlasın..."
-                        disabled={isLoading}
-                        className="w-full p-3 pl-20 pr-12 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-slate-100 dark:bg-slate-700 disabled:opacity-50 transition-colors resize-none overflow-y-auto"
-                        rows={1}
-                        style={{ lineHeight: '1.5rem', maxHeight: '256px' }}
-                    />
-                     <button
-                        type="button"
-                        onClick={toggleListening}
-                        title={isSpeechSupported ? (isListening ? 'Kaydı Durdur' : 'Sesle Yaz') : 'Tarayıcı desteklemiyor'}
-                        disabled={isLoading || !isSpeechSupported}
-                        className={`absolute right-3 bottom-3 p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 transition-colors ${isListening ? 'text-red-500 animate-pulse' : ''}`}
-                    >
-                        <Mic className="h-5 w-5" />
-                    </button>
-                 </div>
+                </div>
                  {isLoading ? (
                      <button
                         type="button"
