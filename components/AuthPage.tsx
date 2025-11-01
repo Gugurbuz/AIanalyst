@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LoginPage } from './LoginPage';
 import { SignupPage } from './SignupPage';
 import { DeveloperPanel } from './DeveloperPanel';
@@ -21,30 +21,38 @@ const Logo = () => (
 export const AuthPage: React.FC = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [isDeveloperPanelOpen, setIsDeveloperPanelOpen] = useState(false);
+    const logoClickCount = useRef(0);
+    // FIX: Replaced NodeJS.Timeout with ReturnType<typeof setTimeout> for browser compatibility.
+    const logoClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    useEffect(() => {
-        let keySequence = '';
-        const targetSequence = 'devmode';
-        const handler = (e: KeyboardEvent) => {
-            keySequence += e.key.toLowerCase();
-            if (keySequence.length > targetSequence.length) {
-                keySequence = keySequence.slice(1);
+    const handleLogoClick = () => {
+        logoClickCount.current += 1;
+
+        if (logoClickTimer.current) {
+            clearTimeout(logoClickTimer.current);
+        }
+
+        logoClickTimer.current = setTimeout(() => {
+            logoClickCount.current = 0;
+        }, 1500); // Reset after 1.5 seconds
+
+        if (logoClickCount.current >= 5) {
+            setIsDeveloperPanelOpen(true);
+            logoClickCount.current = 0;
+            if (logoClickTimer.current) {
+                clearTimeout(logoClickTimer.current);
             }
-            if (keySequence === targetSequence) {
-                setIsDeveloperPanelOpen(true);
-                keySequence = '';
-            }
-        };
-        window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    }, []);
+        }
+    };
 
     return (
         <>
             <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900 p-4">
                 <div className="w-full max-w-md">
                     <div className="text-center mb-8">
-                        <Logo />
+                        <div onClick={handleLogoClick} className="inline-block cursor-pointer" title="Geliştirici Panelini açmak için 5 kez tıklayın">
+                            <Logo />
+                        </div>
                         <h2 className="mt-4 text-2xl font-bold text-slate-800 dark:text-slate-200">
                             Asisty.ai'ye Hoş Geldiniz
                         </h2>

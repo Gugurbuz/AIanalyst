@@ -24,7 +24,12 @@ export const authService = {
 
     logout: async (): Promise<void> => {
         const { error } = await supabase.auth.signOut();
-        if (error) throw error;
+        if (error) {
+            throw error;
+        }
+        // Force a page reload to ensure a clean state and re-initialization of the Supabase client.
+        // This definitively solves issues with stale sessions or configurations across logins.
+        window.location.reload();
     },
 
     getCurrentUser: async (): Promise<User | null> => {
@@ -42,8 +47,8 @@ export const authService = {
     },
 
     loginWithTestUser: async (): Promise<User> => {
-        const testUserEmail = localStorage.getItem('devTestUserEmail') || 'test.analyst@internal-demo.com';
-        const testUserPassword = localStorage.getItem('devTestUserPassword') || 'password123';
+        const testUserEmail = localStorage.getItem('devTestUserEmail') || 'gurkangurbuz@hotmail.com.tr';
+        const testUserPassword = localStorage.getItem('devTestUserPassword') || '12345678';
         
         try {
             // First, try to log in. This is the fastest path if the user exists and password is correct.

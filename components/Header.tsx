@@ -18,6 +18,7 @@ interface HeaderProps {
     saveStatus: 'idle' | 'saving' | 'saved' | 'error';
     maturityScore: { score: number; justification: string } | null;
     isProcessing: boolean;
+    onToggleDeveloperPanel: () => void;
 }
 
 const LogoIcon = ({ className }: { className?: string }) => (
@@ -82,10 +83,25 @@ export const Header: React.FC<HeaderProps> = ({
     onToggleWorkspace,
     saveStatus,
     maturityScore,
-    isProcessing
+    isProcessing,
+    onToggleDeveloperPanel,
 }) => {
     const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
     const userMenuRef = React.useRef<HTMLDivElement>(null);
+    const logoClickCount = React.useRef(0);
+    // FIX: Replaced NodeJS.Timeout with ReturnType<typeof setTimeout> for browser compatibility.
+    const logoClickTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const handleLogoClick = () => {
+        logoClickCount.current += 1;
+        if (logoClickTimer.current) clearTimeout(logoClickTimer.current);
+        logoClickTimer.current = setTimeout(() => { logoClickCount.current = 0; }, 1500);
+        if (logoClickCount.current >= 5) {
+            onToggleDeveloperPanel();
+            logoClickCount.current = 0;
+            if (logoClickTimer.current) clearTimeout(logoClickTimer.current);
+        }
+    };
 
      React.useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -112,7 +128,7 @@ export const Header: React.FC<HeaderProps> = ({
                         {isWorkspaceVisible ? <PanelRightClose className="h-5 w-5" /> : <PanelRightOpen className="h-5 w-5" />}
                     </button>
                 )}
-                 <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
+                 <div onClick={handleLogoClick} title="Geliştirici Panelini açmak için 5 kez tıklayın" className="cursor-pointer flex items-center gap-2 overflow-hidden flex-1 min-w-0">
                     <Logo />
                 </div>
             </div>

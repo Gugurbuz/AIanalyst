@@ -1,7 +1,7 @@
 // components/DocumentWorkspace.tsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { Conversation, Template, MaturityReport, GeneratedDocs } from '../types';
-import { GeneratedDocument } from './GeneratedDocument';
+import { DocumentCanvas } from './DocumentCanvas'; // Changed from GeneratedDocument
 import { Visualizations } from './Visualizations';
 import { MaturityCheckReport } from './MaturityCheckReport';
 import { TemplateSelector } from './TemplateSelector';
@@ -193,7 +193,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
         <div className="flex flex-col h-full w-full">
             {/* Tabs Navigation */}
             <div className="px-4 flex-shrink-0 border-b border-slate-200 dark:border-slate-700">
-                <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+                <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Tabs">
                     {docTabs.map(tab => (
                         <button
                             key={tab.id}
@@ -212,17 +212,10 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             </div>
             
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar relative">
+            <div className="flex-1 overflow-y-auto relative min-h-0">
                 {activeDocTab === 'analysis' && (
                     <div className="relative h-full">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
-                             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">İş Analizi Dokümanı</h3>
-                            <div className="flex items-center gap-2">
-                                <TemplateSelector label="Şablon" templates={templates.analysis} selectedValue={selectedTemplates.analysis} onChange={onTemplateChange.analysis} disabled={isProcessing} />
-                                <ExportDropdown content={generatedDocs.analysisDoc} filename={`${conversation.title}-analiz`} />
-                            </div>
-                        </div>
-                        <GeneratedDocument 
+                        <DocumentCanvas
                             content={generatedDocs.analysisDoc} 
                             onContentChange={(newContent) => onUpdateConversation(conversation.id, { generatedDocs: { ...generatedDocs, analysisDoc: newContent } })} 
                             docKey="analysisDoc" 
@@ -231,6 +224,10 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             isGenerating={isProcessing} 
                             isStreaming={generatingDocType === 'analysis'}
                             placeholder="Henüz bir analiz dokümanı oluşturulmadı. Başlamak için 'Doküman Oluştur' butonunu kullanın."
+                            templates={templates.analysis}
+                            selectedTemplate={selectedTemplates.analysis}
+                            onTemplateChange={onTemplateChange.analysis}
+                            filename={`${conversation.title}-analiz`}
                         />
                     </div>
                 )}
@@ -270,19 +267,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                 )}
                 {activeDocTab === 'test' && (
                     <div className="relative h-full">
-                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
-                            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Test Senaryoları</h3>
-                            <div className="flex items-center gap-2">
-                                {generatedDocs.isTestStale && (
-                                     <button onClick={() => handleRegenerate('test')} className="px-3 py-1.5 text-sm font-medium text-white bg-amber-500 rounded-md shadow-sm hover:bg-amber-600 flex items-center gap-2">
-                                        <RefreshCw className="h-4 w-4" /> Şimdi Güncelle
-                                    </button>
-                                )}
-                                <TemplateSelector label="Şablon" templates={templates.test} selectedValue={selectedTemplates.test} onChange={onTemplateChange.test} disabled={isProcessing} />
-                                <ExportDropdown content={generatedDocs.testScenarios} filename={`${conversation.title}-test-senaryolari`} isTable={true} />
-                            </div>
-                        </div>
-                        <GeneratedDocument 
+                         <DocumentCanvas
                             content={generatedDocs.testScenarios} 
                             onContentChange={(newContent) => onUpdateConversation(conversation.id, { generatedDocs: { ...generatedDocs, testScenarios: newContent } })} 
                             docKey="testScenarios" 
@@ -291,45 +276,31 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             isGenerating={isProcessing}
                             isStreaming={generatingDocType === 'test'}
                             placeholder="Henüz test senaryosu oluşturulmadı. Önce bir analiz dokümanı oluşturun, ardından AI'dan senaryo üretmesini isteyin."
+                            templates={templates.test}
+                            selectedTemplate={selectedTemplates.test}
+                            onTemplateChange={onTemplateChange.test}
+                            filename={`${conversation.title}-test-senaryolari`}
+                            isTable
                         />
                     </div>
                 )}
                  {activeDocTab === 'traceability' && (
-                    <div className="relative h-full">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
-                            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">İzlenebilirlik Matrisi</h3>
-                            <div className="flex items-center gap-2">
-                                {generatedDocs.isTraceabilityStale && (
-                                     <button onClick={() => handleRegenerate('traceability')} className="px-3 py-1.5 text-sm font-medium text-white bg-amber-500 rounded-md shadow-sm hover:bg-amber-600 flex items-center gap-2">
-                                        <RefreshCw className="h-4 w-4" /> Şimdi Güncelle
-                                    </button>
-                                )}
-                                <ExportDropdown content={generatedDocs.traceabilityMatrix} filename={`${conversation.title}-izlenebilirlik`} isTable={true} />
-                            </div>
-                        </div>
-                        {generatedDocs.traceabilityMatrix ? (
-                            <GeneratedDocument 
-                                content={generatedDocs.traceabilityMatrix} 
-                                onContentChange={(newContent) => onUpdateConversation(conversation.id, { generatedDocs: { ...generatedDocs, traceabilityMatrix: newContent } })} 
-                                docKey="analysisDoc" // Dummy key, rephrase is a no-op
-                                onModifySelection={async () => {}} // No-op to prevent errors
-                                inlineModificationState={inlineModificationState} 
-                                isGenerating={isProcessing}
-                                isStreaming={generatingDocType === 'traceability'}
-                            />
-                        ) : (
-                            <div className="p-6 text-center">
-                                <p className="text-slate-500 dark:text-slate-400">Henüz bir izlenebilirlik matrisi oluşturulmadı. Bu matris, gereksinimlerle test senaryolarını eşleştirir.</p>
-                                <button 
-                                    onClick={() => onGenerateDoc('traceability')} 
-                                    disabled={isProcessing || !generatedDocs.analysisDoc || !generatedDocs.testScenarios}
-                                    title={(!generatedDocs.analysisDoc || !generatedDocs.testScenarios) ? "Matris oluşturmak için önce analiz ve test dokümanlarını oluşturmalısınız." : "Gereksinimleri ve test senaryolarını eşleştir"}
-                                    className="mt-4 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    Matris Oluştur
-                                </button>
-                            </div>
-                        )}
+                     <div className="relative h-full">
+                        <DocumentCanvas
+                            content={generatedDocs.traceabilityMatrix} 
+                            onContentChange={(newContent) => onUpdateConversation(conversation.id, { generatedDocs: { ...generatedDocs, traceabilityMatrix: newContent } })} 
+                            docKey="analysisDoc" // Dummy key, rephrase is a no-op
+                            onModifySelection={async () => {}} // No-op to prevent errors
+                            inlineModificationState={inlineModificationState} 
+                            isGenerating={isProcessing}
+                            isStreaming={generatingDocType === 'traceability'}
+                            isTable
+                            filename={`${conversation.title}-izlenebilirlik`}
+                             onGenerate={() => onGenerateDoc('traceability')}
+                            generateButtonText="Matris Oluştur"
+                            isGenerationDisabled={isProcessing || !generatedDocs.analysisDoc || !generatedDocs.testScenarios}
+                            generationDisabledTooltip="Matris oluşturmak için önce analiz ve test dokümanlarını oluşturmalısınız."
+                        />
                     </div>
                 )}
                 {activeDocTab === 'backlog-generation' && (

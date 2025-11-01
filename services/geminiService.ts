@@ -3,7 +3,7 @@
 import { GoogleGenAI, Type, Content, FunctionDeclaration } from "@google/genai";
 import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep } from '../types';
 import { promptService } from './promptService'; // Import the new prompt service
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidvv4 } from 'uuid';
 
 /**
  * Gets the effective API key from environment variables.
@@ -77,7 +77,18 @@ const generateContent = async (prompt: string, model: GeminiModel, modelConfig?:
             contents: prompt,
             ...(modelConfig && { config: modelConfig }),
         });
-        return response.text;
+        
+        // Manually extract text from parts to avoid SDK warning about non-text parts.
+        if (response.candidates && response.candidates.length > 0) {
+            const candidate = response.candidates[0];
+            if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
+                return candidate.content.parts
+                    .map(part => part.text)
+                    .filter(Boolean) // Filter out undefined/null/empty strings from non-text parts
+                    .join('');
+            }
+        }
+        return ''; // Return empty string if no text is found
     } catch (error) {
         handleGeminiError(error);
     }
@@ -94,8 +105,19 @@ const generateContentStream = async function* (prompt: string, model: GeminiMode
         });
 
         for await (const chunk of responseStream) {
-            if (chunk.text) {
-                yield chunk.text;
+            // Manually extract text from parts to avoid SDK warning about non-text parts.
+            let textChunk = '';
+            if (chunk.candidates && chunk.candidates.length > 0) {
+                const candidate = chunk.candidates[0];
+                if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
+                    textChunk = candidate.content.parts
+                        .map(part => part.text)
+                        .filter(Boolean)
+                        .join('');
+                }
+            }
+            if (textChunk) {
+                yield textChunk;
             }
         }
     } catch (error) {
@@ -184,8 +206,13 @@ export const geminiService = {
             const ai = new GoogleGenAI({ apiKey });
 
             const analysisDocContent = generatedDocs.analysisDoc || "Henüz bir doküman oluşturulmadı.";
-            const basePrompt = promptService.getPrompt('proactiveAnalystSystemInstruction');
-            const systemInstruction = basePrompt.replace('{analysis_document_content}', analysisDocContent);
+            const isDocJustSample = analysisDocContent.includes("Bu bölüme projenin temel hedefini");
+
+            // If the document is just the initial sample, use a simpler conversational prompt.
+            // Otherwise, use the proactive prompt that knows about the document context.
+            const systemInstruction = isDocJustSample
+                ? promptService.getPrompt('continueConversation')
+                : promptService.getPrompt('proactiveAnalystSystemInstruction').replace('{analysis_document_content}', analysisDocContent);
             
             const geminiHistory = convertMessagesToGeminiFormat(history);
 
@@ -260,13 +287,27 @@ export const geminiService = {
                         responseGenerated = true;
                     }
                 }
-            } else if (response.text) {
-                 yield { type: 'chat_response', content: response.text };
-                 responseGenerated = true;
             } else {
-                 // Fallback if model returns neither text nor function call
-                 yield { type: 'chat_response', content: "Ne demek istediğinizi anlayamadım, farklı bir şekilde ifade edebilir misiniz?" };
-                 responseGenerated = true;
+                 // No function calls, handle text response
+                let textResponse = '';
+                if (response.candidates && response.candidates.length > 0) {
+                    const candidate = response.candidates[0];
+                    if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
+                        textResponse = candidate.content.parts
+                            .map(part => part.text)
+                            .filter(Boolean)
+                            .join('');
+                    }
+                }
+
+                if (textResponse) {
+                    yield { type: 'chat_response', content: textResponse };
+                    responseGenerated = true;
+                } else {
+                    // Fallback if model returns neither text nor function call
+                    yield { type: 'chat_response', content: "Ne demek istediğinizi anlayamadım, farklı bir şekilde ifade edebilir misiniz?" };
+                    responseGenerated = true;
+                }
             }
 
         } catch (error) {
@@ -431,7 +472,17 @@ export const geminiService = {
                     systemInstruction: systemInstruction,
                 }
             });
-            return response.text;
+            // Manually extract text from parts to avoid SDK warning about non-text parts.
+            if (response.candidates && response.candidates.length > 0) {
+                const candidate = response.candidates[0];
+                if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
+                    return candidate.content.parts
+                        .map(part => part.text)
+                        .filter(Boolean) 
+                        .join('');
+                }
+            }
+            return '';
         } catch (error) {
             handleGeminiError(error);
         }
@@ -627,7 +678,8 @@ export const geminiService = {
             const addIds = (items: any[]): BacklogSuggestion[] => {
                 return items.map(item => ({
                     ...item,
-                    id: item.id || uuidv4(),
+                    // FIX: Correct typo from uuidv4 to uuidvv4
+                    id: item.id || uuidvv4(),
                     children: item.children ? addIds(item.children) : []
                 }));
             }

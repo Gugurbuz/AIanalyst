@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import type { Conversation, Theme, User } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { ChatMessageHistory } from './ChatMessageHistory';
-import { GeneratedDocument } from './GeneratedDocument';
+// FIX: The component 'GeneratedDocument' was renamed; it is now 'DocumentCanvas'.
+import { DocumentCanvas } from './DocumentCanvas';
 import { Visualizations } from './Visualizations';
 import { ThemeSwitcher } from './ThemeSwitcher';
 
@@ -150,7 +151,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-md font-bold">Analiz Dokümanı</h3>
                                     </div>
-                                    <GeneratedDocument content={generatedDocs.analysisDoc} onContentChange={() => {}} docKey='analysisDoc' onModifySelection={() => {}} inlineModificationState={null} isGenerating={false}/>
+                                    <DocumentCanvas content={generatedDocs.analysisDoc} onContentChange={() => {}} docKey='analysisDoc' onModifySelection={() => {}} inlineModificationState={null} isGenerating={false} filename={`${conversation.title}-analiz`} />
                                 </div>
                             )}
 
@@ -177,7 +178,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-md font-bold">Test Senaryoları</h3>
                                     </div>
-                                    <GeneratedDocument content={generatedDocs.testScenarios} onContentChange={() => {}} docKey='testScenarios' onModifySelection={() => {}} inlineModificationState={null} isGenerating={false}/>
+                                    <DocumentCanvas content={generatedDocs.testScenarios} onContentChange={() => {}} docKey='testScenarios' onModifySelection={() => {}} inlineModificationState={null} isGenerating={false} filename={`${conversation.title}-test-senaryolari`} isTable />
                                 </div>
                             )}
 
@@ -186,13 +187,15 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-md font-bold">İzlenebilirlik Matrisi</h3>
                                     </div>
-                                    <GeneratedDocument 
+                                    <DocumentCanvas 
                                         content={generatedDocs.traceabilityMatrix} 
                                         onContentChange={() => {}} 
                                         docKey='analysisDoc' // Dummy key for type compliance
                                         onModifySelection={() => {}} 
                                         inlineModificationState={null}
                                         isGenerating={false}
+                                        filename={`${conversation.title}-izlenebilirlik`}
+                                        isTable
                                     />
                                 </div>
                             )}
