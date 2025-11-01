@@ -1,6 +1,6 @@
 // components/DocumentWorkspace.tsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import type { Conversation, Template, MaturityReport, GeneratedDocs, Document, DocumentType } from '../types';
+import type { Conversation, Template, MaturityReport, GeneratedDocs, Document, DocumentType, SourcedDocument } from '../types';
 import { DocumentCanvas } from './DocumentCanvas'; // Changed from GeneratedDocument
 import { Visualizations } from './Visualizations';
 import { MaturityCheckReport } from './MaturityCheckReport';
@@ -23,12 +23,23 @@ function usePrevious<T>(value: T): T | undefined {
     return ref.current;
 }
 
+const simpleHash = (str: string): string => {
+    let hash = 0;
+    if (str.length === 0) return hash.toString();
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = (hash << 5) - hash + char;
+        hash |= 0; // Convert to 32bit integer
+    }
+    return hash.toString();
+};
+
 
 interface DocumentWorkspaceProps {
     conversation: Conversation & { generatedDocs: GeneratedDocs };
     isProcessing: boolean; // This is now the GLOBAL processing state (e.g., for chat)
     generatingDocType: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | null;
-    onUpdateDocument: (docKey: keyof GeneratedDocs, newContent: string, reason: string) => void;
+    onUpdateDocument: (docKey: keyof GeneratedDocs, newContent: string | SourcedDocument, reason: string) => void;
     onModifySelection: (selectedText: string, userPrompt: string, docKey: 'analysisDoc' | 'testScenarios') => Promise<void>;
     onModifyDiagram: (userPrompt: string) => Promise<void>;
     onGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => void;
@@ -36,14 +47,17 @@ interface DocumentWorkspaceProps {
     templates: {
         analysis: Template[];
         test: Template[];
+        traceability: Template[];
     };
     selectedTemplates: {
         analysis: string;
         test: string;
+        traceability: string;
     };
     onTemplateChange: {
         analysis: (event: React.ChangeEvent<HTMLSelectElement>) => void;
         test: (event: React.ChangeEvent<HTMLSelectElement>) => void;
+        traceability: (event: React.ChangeEvent<HTMLSelectElement>) => void;
     };
     activeDocTab: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation';
     setActiveDocTab: (tab: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation') => void;
@@ -161,6 +175,14 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
 
     const isAnalysisDocReady = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
 
+    const testScenariosContent = typeof generatedDocs.testScenarios === 'object' 
+        ? generatedDocs.testScenarios.content 
+        : generatedDocs.testScenarios;
+        
+    const traceabilityMatrixContent = typeof generatedDocs.traceabilityMatrix === 'object'
+        ? generatedDocs.traceabilityMatrix.content
+        : generatedDocs.traceabilityMatrix;
+
     const handleGenerateOrModifyViz = async (prompt?: string) => {
         setIsVisualizing(true);
         setVizError(null);
@@ -179,8 +201,18 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
 
     const handleDiagramTypeChange = (newType: 'mermaid' | 'bpmn') => {
         if (newType === diagramType) return;
+
+        // Optimistically switch the view
         setDiagramType(newType);
-        handleGenerateOrModifyViz();
+
+        // Check if regeneration is needed
+        const analysisHash = simpleHash(conversation.generatedDocs.analysisDoc);
+        const targetVizData = newType === 'mermaid' ? conversation.generatedDocs.mermaidViz : conversation.generatedDocs.bpmnViz;
+
+        // If the target diagram doesn't exist or is stale (based on hash), then generate it.
+        if (!targetVizData || targetVizData.sourceHash !== analysisHash) {
+            onGenerateDoc('viz', undefined, newType);
+        }
     };
 
     const handleDismissMaturityQuestion = (questionToRemove: string) => {
@@ -294,14 +326,17 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                     <div className="relative h-full">
                          <DocumentCanvas
                             key="test"
-                            content={generatedDocs.testScenarios} 
+                            content={testScenariosContent} 
                             onContentChange={(newContent, reason) => onUpdateDocument('testScenarios', newContent, reason)} 
                             docKey="testScenarios" 
                             onModifySelection={onModifySelection} 
                             inlineModificationState={inlineModificationState} 
                             isGenerating={isProcessing}
                             isStreaming={generatingDocType === 'test'}
-                            placeholder="Henüz test senaryosu oluşturulmadı. Önce bir analiz dokümanı oluşturun, ardından AI'dan senaryo üretmesini isteyin."
+                            placeholder={isAnalysisDocReady 
+                                ? "Henüz test senaryosu oluşturulmadı. Analiz dokümanınıza dayanarak senaryo oluşturmak için butona tıklayın." 
+                                : "Önce geçerli bir analiz dokümanı oluşturmalısınız."
+                            }
                             templates={templates.test}
                             selectedTemplate={selectedTemplates.test}
                             onTemplateChange={onTemplateChange.test}
@@ -309,6 +344,10 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             isTable
                             documentVersions={conversation.documentVersions}
                             onAddTokens={onAddTokens}
+                            onGenerate={() => onGenerateDoc('test')}
+                            generateButtonText="Test Senaryoları Oluştur"
+                            isGenerationDisabled={isProcessing || !isAnalysisDocReady}
+                            generationDisabledTooltip={!isAnalysisDocReady ? "Senaryo oluşturmak için önce geçerli bir analiz dokümanı oluşturmalısınız." : ""}
                         />
                     </div>
                 )}
@@ -316,8 +355,8 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                      <div className="relative h-full">
                         <DocumentCanvas
                             key="traceability"
-                            content={generatedDocs.traceabilityMatrix} 
-                            onContentChange={() => {}} // Not editable directly
+                            content={traceabilityMatrixContent} 
+                            onContentChange={(newContent, reason) => onUpdateDocument('traceabilityMatrix', newContent, reason)} 
                             docKey="traceabilityMatrix" 
                             onModifySelection={async () => {}} // No-op to prevent errors
                             inlineModificationState={inlineModificationState} 
@@ -327,10 +366,13 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             filename={`${conversation.title}-izlenebilirlik`}
                              onGenerate={() => onGenerateDoc('traceability')}
                             generateButtonText="Matris Oluştur"
-                            isGenerationDisabled={isProcessing || !generatedDocs.analysisDoc || !generatedDocs.testScenarios}
+                            isGenerationDisabled={isProcessing || !generatedDocs.analysisDoc || !testScenariosContent}
                             generationDisabledTooltip="Matris oluşturmak için önce analiz ve test dokümanlarını oluşturmalısınız."
                             documentVersions={conversation.documentVersions}
                             onAddTokens={onAddTokens}
+                            templates={templates.traceability}
+                            selectedTemplate={selectedTemplates.traceability}
+                            onTemplateChange={onTemplateChange.traceability}
                         />
                     </div>
                 )}

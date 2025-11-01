@@ -24,16 +24,12 @@ const AuthWrapper = () => {
     const [authFlowStep, setAuthFlowStep] = useState<'landing' | 'login' | 'signup'>('landing');
 
     useEffect(() => {
-        const getSession = async () => {
-            const currentSession = await authService.getSession();
-            setSession(currentSession);
-            setIsLoading(false);
-        };
-        
-        getSession();
-
+        // Use onAuthStateChange as the single source of truth.
+        // It fires once on load with the initial session state, and then on every auth change.
+        // This prevents the flicker/race condition between getSession() and the listener.
         const { data: { subscription } } = authService.onAuthStateChange((_event, session) => {
             setSession(session);
+            setIsLoading(false); // Only stop loading after the initial auth state is confirmed.
         });
 
         return () => {

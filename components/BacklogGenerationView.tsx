@@ -1,7 +1,7 @@
 // components/BacklogGenerationView.tsx
 import React, { useState, useCallback } from 'react';
 // FIX: Add GeneratedDocs to the type import to correctly type component props.
-import type { Conversation, BacklogSuggestion, Task, GeneratedDocs } from '../types';
+import type { Conversation, BacklogSuggestion, Task, GeneratedDocs, SourcedDocument } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { geminiService } from '../services/geminiService';
 import { CheckSquare, LoaderCircle, Square, Layers, FileText, Beaker, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
@@ -91,11 +91,18 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
         setIsGenerating(true);
         setError(null);
         try {
-            // FIX: Destructure the 'suggestions' array from the result object.
+            // FIX: Extract string content from SourcedDocument types before passing to service.
+            const testScenariosContent = typeof conversation.generatedDocs.testScenarios === 'object'
+                ? (conversation.generatedDocs.testScenarios as SourcedDocument).content
+                : conversation.generatedDocs.testScenarios;
+            const traceabilityMatrixContent = typeof conversation.generatedDocs.traceabilityMatrix === 'object'
+                ? (conversation.generatedDocs.traceabilityMatrix as SourcedDocument).content
+                : conversation.generatedDocs.traceabilityMatrix;
+
             const { suggestions: result, tokens } = await geminiService.generateBacklogSuggestions(
                 conversation.generatedDocs.analysisDoc,
-                conversation.generatedDocs.testScenarios,
-                conversation.generatedDocs.traceabilityMatrix,
+                testScenariosContent,
+                traceabilityMatrixContent,
                 'gemini-2.5-pro' // Use a more powerful model for this complex task
             );
             onUpdateConversation(conversation.id, {

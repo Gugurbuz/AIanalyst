@@ -83,6 +83,7 @@ export interface DocumentVersion {
     content: string;
     version_number: number;
     reason_for_change: string;
+    template_id?: string | null;
 }
 
 
@@ -96,6 +97,7 @@ export interface Document {
     content: string;
     current_version_id: string | null;
     is_stale: boolean;
+    template_id?: string | null;
 }
 
 
@@ -104,14 +106,19 @@ export interface VizData {
     sourceHash: string;
 }
 
+export interface SourcedDocument {
+    content: string;
+    sourceHash: string;
+}
+
 export interface GeneratedDocs {
     analysisDoc: string;
-    testScenarios: string;
+    testScenarios: SourcedDocument | string;
     visualization: string; // Legacy, for backward compatibility
     visualizationType?: 'mermaid' | 'bpmn'; // Legacy
     mermaidViz?: VizData;
     bpmnViz?: VizData;
-    traceabilityMatrix: string;
+    traceabilityMatrix: SourcedDocument | string;
     maturityReport?: MaturityReport | null;
     backlogSuggestions?: BacklogSuggestion[];
     // --- New flags for impact analysis ---
@@ -170,8 +177,11 @@ export interface BacklogSuggestion {
 // Types for prompt management
 export interface Template {
     id: string;
+    user_id: string | null;
     name: string;
+    document_type: 'analysis' | 'test' | 'traceability' | 'visualization';
     prompt: string;
+    is_system_template: boolean;
 }
 
 export interface PromptVersion {

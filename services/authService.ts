@@ -1,6 +1,6 @@
 // services/authService.ts
 import { supabase } from './supabaseClient';
-import type { User, UserProfile } from '../types';
+import type { User, UserProfile, Template } from '../types';
 import type { Session } from '@supabase/supabase-js';
 
 export const authService = {
@@ -60,6 +60,19 @@ export const authService = {
             return null;
         }
         return data as UserProfile;
+    },
+    
+    fetchTemplates: async (userId: string): Promise<Template[]> => {
+        const { data, error } = await supabase
+            .from('templates')
+            .select('*')
+            .or(`user_id.eq.${userId},is_system_template.eq.true`);
+
+        if (error) {
+            console.error("Error fetching templates:", error);
+            return [];
+        }
+        return data as Template[];
     },
 
     loginWithTestUser: async (): Promise<User> => {

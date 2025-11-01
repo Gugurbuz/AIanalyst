@@ -1,7 +1,7 @@
 // components/PublicView.tsx
 import React, { useState, useEffect } from 'react';
 // FIX: Import missing types to handle generatedDocs and documentVersions.
-import type { Conversation, Theme, User, GenerativeSuggestion, Message, GeneratedDocs, Document, DocumentType, DocumentVersion } from '../types';
+import type { Conversation, Theme, User, GenerativeSuggestion, Message, GeneratedDocs, Document, DocumentType, DocumentVersion, SourcedDocument } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { ChatMessageHistory } from './ChatMessageHistory';
 // FIX: The component 'GeneratedDocument' was renamed; it is now 'DocumentCanvas'.
@@ -58,12 +58,18 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
     for (const doc of documents) {
         const key = documentTypeToKeyMap[doc.document_type];
         if (key) {
-            if (key === 'mermaidViz' || key === 'bpmnViz' || key === 'maturityReport') {
+            if (key === 'mermaidViz' || key === 'bpmnViz' || key === 'maturityReport' || key === 'testScenarios' || key === 'traceabilityMatrix') {
                 try {
                     (docs as any)[key] = JSON.parse(doc.content);
                 } catch (e) {
                     console.error(`Error parsing JSON for ${key}:`, e);
-                     (docs as any)[key] = key.endsWith('Viz') ? { code: '', sourceHash: '' } : null;
+                     if (key.endsWith('Viz')) {
+                        (docs as any)[key] = { code: '', sourceHash: '' };
+                     } else if (key === 'testScenarios' || key === 'traceabilityMatrix') {
+                        (docs as any)[key] = doc.content; // Fallback for old string format
+                     } else {
+                        (docs as any)[key] = null;
+                     }
                 }
             } else {
                  (docs as any)[key] = doc.content;
@@ -172,6 +178,14 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
     const noOp = async () => {};
     const noOpWithArgs = (...args: any[]) => {};
 
+    const testScenariosContent = typeof generatedDocs.testScenarios === 'object'
+        ? generatedDocs.testScenarios.content
+        : generatedDocs.testScenarios;
+
+    const traceabilityMatrixContent = typeof generatedDocs.traceabilityMatrix === 'object'
+        ? generatedDocs.traceabilityMatrix.content
+        : generatedDocs.traceabilityMatrix;
+
     return (
         <div className="font-sans bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 min-h-screen">
              <header className="sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md shadow-sm p-2 flex items-center justify-between h-16 border-b border-slate-200 dark:border-slate-700 z-20">
@@ -234,7 +248,8 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                         <h3 className="text-md font-bold">Test Senaryoları</h3>
                                     </div>
                                     {/* FIX: Pass required 'documentVersions' prop. */}
-                                    <DocumentCanvas content={generatedDocs.testScenarios} onContentChange={noOpWithArgs} docKey='testScenarios' onModifySelection={noOp} inlineModificationState={null} isGenerating={false} filename={`${conversation.title}-test-senaryolari`} isTable onAddTokens={noOpWithArgs} documentVersions={conversation.documentVersions} />
+                                    {/* FIX: The 'content' prop for DocumentCanvas expects a string, but 'testScenarios' can be an object. Extract the 'content' property if it is an object. */}
+                                    <DocumentCanvas content={testScenariosContent} onContentChange={noOpWithArgs} docKey='testScenarios' onModifySelection={noOp} inlineModificationState={null} isGenerating={false} filename={`${conversation.title}-test-senaryolari`} isTable onAddTokens={noOpWithArgs} documentVersions={conversation.documentVersions} />
                                 </div>
                             )}
 
@@ -244,8 +259,9 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                                         <h3 className="text-md font-bold">İzlenebilirlik Matrisi</h3>
                                     </div>
                                     {/* FIX: Pass required 'documentVersions' prop. */}
+                                    {/* FIX: The 'content' prop for DocumentCanvas expects a string, but 'traceabilityMatrix' can be an object. Extract the 'content' property if it is an object. */}
                                     <DocumentCanvas 
-                                        content={generatedDocs.traceabilityMatrix} 
+                                        content={traceabilityMatrixContent} 
                                         onContentChange={noOpWithArgs} 
                                         docKey="traceabilityMatrix" 
                                         onModifySelection={noOp} 

@@ -1,7 +1,7 @@
 // services/geminiService.ts
 
 import { GoogleGenAI, Type, Content, FunctionDeclaration, GenerateContentResponse } from "@google/genai";
-import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep, GenerativeSuggestion, LintingIssue } from '../types';
+import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep, GenerativeSuggestion, LintingIssue, SourcedDocument } from '../types';
 import { promptService } from './promptService'; // Import the new prompt service
 import { v4 as uuidvv4 } from 'uuid';
 
@@ -199,7 +199,7 @@ const tools: FunctionDeclaration[] = [
 ];
 
 export const geminiService = {
-    processAnalystMessageStream: async function* (history: Message[], generatedDocs: GeneratedDocs, templates: { analysis: string; test: string }, model: GeminiModel): AsyncGenerator<StreamChunk> {
+    processAnalystMessageStream: async function* (history: Message[], generatedDocs: GeneratedDocs, templates: { analysis: string; test: string; traceability: string; visualization: string; }, model: GeminiModel): AsyncGenerator<StreamChunk> {
         let responseGenerated = false;
         try {
             const apiKey = getApiKey();
@@ -288,14 +288,16 @@ export const geminiService = {
                         responseGenerated = true;
                     } else if (functionName === 'generateTraceabilityMatrix') {
                         yield { type: 'status_update', message: 'İzlenebilirlik matrisi oluşturuluyor...' };
-                        for await (const chunk of geminiService.generateTraceabilityMatrix(generatedDocs.analysisDoc, generatedDocs.testScenarios, model)) {
+                        // FIX: Extract the string content from testScenarios, which can be a string or a SourcedDocument object.
+                        const testScenariosContent = typeof generatedDocs.testScenarios === 'object' ? generatedDocs.testScenarios.content : generatedDocs.testScenarios;
+                        for await (const chunk of geminiService.generateTraceabilityMatrix(generatedDocs.analysisDoc, testScenariosContent, templates.traceability, model)) {
                            yield chunk;
                         }
                         yield { type: 'chat_response', content: "İzlenebilirlik matrisini oluşturdum. Çalışma alanından inceleyebilirsiniz." };
                         responseGenerated = true;
                     } else if (functionName === 'generateVisualization') {
                         yield { type: 'status_update', message: 'Süreç akışı görselleştiriliyor...' };
-                        const { code: vizCode, tokens } = await geminiService.generateDiagram(generatedDocs.analysisDoc, 'mermaid', model);
+                        const { code: vizCode, tokens } = await geminiService.generateDiagram(generatedDocs.analysisDoc, 'mermaid', templates.visualization, model);
                         yield { type: 'usage_update', tokens };
                         yield { type: 'visualization_update', content: vizCode };
                         yield { type: 'chat_response', content: "Süreç akış diyagramını oluşturdum. Çalışma alanından inceleyebilirsiniz." };
@@ -372,7 +374,7 @@ export const geminiService = {
         }
     },
 
-    executeExpertRun: async function* (history: Message[], templates: { analysis: string; test: string }, model: GeminiModel): AsyncGenerator<StreamChunk> {
+    executeExpertRun: async function* (history: Message[], templates: { analysis: string; test: string; traceability: string; visualization: string; }, model: GeminiModel): AsyncGenerator<StreamChunk> {
         let analysisDocContent = '';
         for await (const chunk of geminiService.generateAnalysisDocument(history, templates.analysis, model)) {
             if (chunk.type === 'doc_stream_chunk' && chunk.docKey === 'analysisDoc') {
@@ -382,7 +384,7 @@ export const geminiService = {
         }
 
         if (analysisDocContent) {
-            const { code: vizCode, tokens: vizTokens } = await geminiService.generateDiagram(analysisDocContent, 'mermaid', model);
+            const { code: vizCode, tokens: vizTokens } = await geminiService.generateDiagram(analysisDocContent, 'mermaid', templates.visualization, model);
             yield { type: 'usage_update', tokens: vizTokens };
             yield { type: 'visualization_update', content: vizCode };
             
@@ -395,7 +397,7 @@ export const geminiService = {
             }
 
             if (testScenariosContent) {
-                for await (const chunk of geminiService.generateTraceabilityMatrix(analysisDocContent, testScenariosContent, model)) {
+                for await (const chunk of geminiService.generateTraceabilityMatrix(analysisDocContent, testScenariosContent, templates.traceability, model)) {
                     yield chunk;
                 }
             }
@@ -456,8 +458,7 @@ export const geminiService = {
         }
     },
 
-    generateAnalysisDocument: async function* (history: Message[], templateId: string, model: GeminiModel, modelConfig?: object): AsyncGenerator<StreamChunk> {
-        const templatePrompt = promptService.getPrompt(templateId);
+    generateAnalysisDocument: async function* (history: Message[], templatePrompt: string, model: GeminiModel, modelConfig?: object): AsyncGenerator<StreamChunk> {
         const prompt = `${templatePrompt}\n\n**TALİMAT:**\nDokümanı yalnızca ve yalnızca aşağıda sağlanan konuşma geçmişine dayanarak oluştur.\n\n**Konuşma Geçmişi:**\n${formatHistory(history)}`;
         const stream = generateContentStream(prompt, model, modelConfig);
         let totalTokens = 0;
@@ -474,11 +475,10 @@ export const geminiService = {
         }
     },
 
-    generateTestScenarios: async function* (analysisDocument: string, templateId: string, model: GeminiModel, modelConfig?: object): AsyncGenerator<StreamChunk> {
+    generateTestScenarios: async function* (analysisDocument: string, templatePrompt: string, model: GeminiModel, modelConfig?: object): AsyncGenerator<StreamChunk> {
         if (!analysisDocument || analysisDocument.includes("Bu bölüme projenin temel hedefini")) {
             throw new Error("Lütfen önce geçerli bir analiz dokümanı oluşturun.");
         }
-        const templatePrompt = promptService.getPrompt(templateId);
         const prompt = `${templatePrompt}\n\n**TALİMAT:**\nTest senaryolarını yalnızca aşağıda sağlanan İş Analizi Dokümanına dayanarak oluştur.\n\n**İş Analizi Dokümanı:**\n'${analysisDocument}'`;
         const stream = generateContentStream(prompt, model, modelConfig);
         let totalTokens = 0;
@@ -495,11 +495,10 @@ export const geminiService = {
         }
     },
     
-    generateTraceabilityMatrix: async function* (analysisDocument: string, testScenarios: string, model: GeminiModel, modelConfig?: object): AsyncGenerator<StreamChunk> {
+    generateTraceabilityMatrix: async function* (analysisDocument: string, testScenarios: string, templatePrompt: string, model: GeminiModel, modelConfig?: object): AsyncGenerator<StreamChunk> {
         if (!analysisDocument || analysisDocument.includes("Bu bölüme projenin temel hedefini") || !testScenarios) {
             throw new Error("Lütfen önce geçerli bir analiz dokümanı ve test senaryoları oluşturun.");
         }
-        const templatePrompt = promptService.getPrompt('generateTraceabilityMatrix');
         const prompt = `${templatePrompt}\n\n**İş Analizi Dokümanı:**\n'${analysisDocument}'\n\n**Test Senaryoları Dokümanı:**\n'${testScenarios}'`;
         const stream = generateContentStream(prompt, model, modelConfig);
         let totalTokens = 0;
@@ -523,16 +522,13 @@ export const geminiService = {
         return { title: title.replace(/["*]/g, '').trim(), tokens };
     },
 
-    generateDiagram: async (analysisDocument: string, diagramType: 'mermaid' | 'bpmn', model: GeminiModel, modelConfig?: object): Promise<{ code: string, tokens: number }> => {
+    generateDiagram: async (analysisDocument: string, diagramType: 'mermaid' | 'bpmn', templatePrompt: string, model: GeminiModel, modelConfig?: object): Promise<{ code: string, tokens: number }> => {
         if (!analysisDocument || analysisDocument.includes("Bu bölüme projenin temel hedefini")) {
            throw new Error("Lütfen önce geçerli bir analiz dokümanı oluşturun.");
        }
        
-       const promptId = diagramType === 'bpmn' ? 'generateBPMN' : 'generateVisualization';
-       const basePrompt = promptService.getPrompt(promptId);
-       
        const prompt = `
-           ${basePrompt}
+           ${templatePrompt}
            ---
            **İş Analizi Dokümanı:**
            \`\`\`
@@ -580,17 +576,33 @@ export const geminiService = {
     },
     
     generateBacklogSuggestions: async (analysisDoc: string, testScenarios: string, traceabilityMatrix: string, model: GeminiModel): Promise<{ suggestions: BacklogSuggestion[], tokens: number }> => {
+        const backlogItemProperties = {
+            id: { type: Type.STRING },
+            type: { type: Type.STRING, enum: ['epic', 'story', 'test_case'] },
+            title: { type: Type.STRING },
+            description: { type: Type.STRING },
+            priority: { type: Type.STRING, enum: ['low', 'medium', 'high', 'critical'] },
+        };
+        
         const schema = {
             type: Type.ARRAY,
             items: {
                 type: Type.OBJECT,
                 properties: {
-                    id: { type: Type.STRING },
-                    type: { type: Type.STRING, enum: ['epic', 'story', 'test_case'] },
-                    title: { type: Type.STRING },
-                    description: { type: Type.STRING },
-                    priority: { type: Type.STRING, enum: ['low', 'medium', 'high', 'critical'] },
-                    children: { type: Type.ARRAY, items: { type: Type.OBJECT } } // Recursive definition
+                    ...backlogItemProperties,
+                    children: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                ...backlogItemProperties,
+                                // For grandchildren, define children as a generic array to stop schema recursion
+                                // while still satisfying the API's requirement for defined properties.
+                                children: { type: Type.ARRAY }
+                            },
+                            required: ['id', 'type', 'title', 'description', 'priority', 'children']
+                        }
+                    }
                 },
                 required: ['id', 'type', 'title', 'description', 'priority', 'children']
             }

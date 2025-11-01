@@ -22,8 +22,8 @@ import { DeveloperPanel } from './components/DeveloperPanel';
 import { FeedbackDashboard } from './components/FeedbackDashboard';
 import { UpgradeModal } from './components/UpgradeModal';
 import { authService } from './services/authService';
-import { SAMPLE_ANALYSIS_DOCUMENT, ANALYSIS_TEMPLATES, TEST_SCENARIO_TEMPLATES } from './templates';
-import type { User, Conversation, Message, Theme, AppMode, GeminiModel, GeneratedDocs, FeedbackItem, Template, VizData, ExpertStep, GenerativeSuggestion, DocumentVersion, Document, DocumentType, UserProfile } from './types';
+import { SAMPLE_ANALYSIS_DOCUMENT } from './templates';
+import type { User, Conversation, Message, Theme, AppMode, GeminiModel, GeneratedDocs, FeedbackItem, Template, VizData, ExpertStep, GenerativeSuggestion, DocumentVersion, Document, DocumentType, UserProfile, SourcedDocument } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, X, AlertTriangle } from 'lucide-react';
 
@@ -93,8 +93,12 @@ const useNextBestAction = (
         }
         
         const hasVisualization = generatedDocs?.mermaidViz?.code || generatedDocs?.bpmnViz?.code || generatedDocs?.visualization;
+        
+        const hasTestScenarios = typeof generatedDocs.testScenarios === 'object' 
+            ? !!generatedDocs.testScenarios.content 
+            : !!generatedDocs.testScenarios;
 
-        if (hasRealAnalysisDoc && hasVisualization && generatedDocs?.testScenarios) {
+        if (hasRealAnalysisDoc && hasVisualization && hasTestScenarios) {
             return {
                 label: "Proje Görevleri Oluştur",
                 action: onNavigateToBacklogGeneration,
@@ -102,7 +106,7 @@ const useNextBestAction = (
                 disabled: false
             };
         }
-        if (hasRealAnalysisDoc && hasVisualization && !generatedDocs?.testScenarios) {
+        if (hasRealAnalysisDoc && hasVisualization && !hasTestScenarios) {
              return {
                 label: "Test Senaryoları Oluştur",
                 action: () => onGenerateDoc('test'),
@@ -275,12 +279,22 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
     for (const doc of documents) {
         const key = documentTypeToKeyMap[doc.document_type];
         if (key) {
-            if (key === 'mermaidViz' || key === 'bpmnViz' || key === 'maturityReport') {
+            if (key === 'mermaidViz' || key === 'bpmnViz' || key === 'maturityReport' || key === 'testScenarios' || key === 'traceabilityMatrix') {
                 try {
                     (docs as any)[key] = JSON.parse(doc.content);
                 } catch (e) {
-                    console.error(`Error parsing JSON for ${key}:`, e);
-                     (docs as any)[key] = key.endsWith('Viz') ? { code: '', sourceHash: '' } : null;
+                    // If parsing fails, it's probably an old string format.
+                    const fallbackToStringKeys: (keyof GeneratedDocs)[] = ['testScenarios', 'traceabilityMatrix'];
+                    if (fallbackToStringKeys.includes(key as any)) {
+                        (docs as any)[key] = doc.content;
+                    } else {
+                         console.error(`Error parsing JSON for ${key}:`, e);
+                        if (key.endsWith('Viz')) {
+                            (docs as any)[key] = { code: '', sourceHash: '' };
+                        } else if (key === 'maturityReport') {
+                            (docs as any)[key] = null;
+                        }
+                    }
                 }
             } else {
                  (docs as any)[key] = doc.content;
@@ -289,6 +303,18 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
     }
     return docs;
 };
+
+const simpleHash = (str: string): string => {
+    let hash = 0;
+    if (str.length === 0) return hash.toString();
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = (hash << 5) - hash + char;
+        hash |= 0; // Convert to 32bit integer
+    }
+    return hash.toString();
+};
+
 
 export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     // --- Core State ---
@@ -315,7 +341,9 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
     const [suggestionError, setSuggestionError] = useState<string | null>(null);
     const [isRegenerateModalOpen, setIsRegenerateModalOpen] = useState(false);
-    const regenerateModalData = useRef<{ docType: 'analysis' | 'test', newTemplateId: string } | null>(null);
+    // FIX: Removed a misplaced assignment to regenerateModalData.current. It was causing a ReferenceError because
+    // it was called before the ref was declared and used variables ('type', 'newTemplateId') that were not in scope.
+    const regenerateModalData = useRef<{ docType: 'analysis' | 'test' | 'traceability', newTemplateId: string } | null>(null);
     // FIX: Moved state declaration before its first use to prevent a ReferenceError.
     const [activeDocTab, setActiveDocTab] = useState<'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation'>('analysis');
     
@@ -332,9 +360,11 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     const [isDeepAnalysisMode, setIsDeepAnalysisMode] = useState(false);
     const expertModeClarificationAttempts = useRef(0);
     const [diagramType, setDiagramType] = useState<'mermaid' | 'bpmn'>('mermaid');
+    const [allTemplates, setAllTemplates] = useState<Template[]>([]);
     const [selectedTemplates, setSelectedTemplates] = useState({
-        analysis: ANALYSIS_TEMPLATES[0].id,
-        test: TEST_SCENARIO_TEMPLATES[0].id,
+        analysis: '',
+        test: '',
+        traceability: '',
     });
     
     const [displayedMaturityScore, setDisplayedMaturityScore] = useState<{ score: number; justification: string } | null>(null);
@@ -387,14 +417,15 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         const fetchInitialData = async () => {
             setIsDataLoading(true);
             
-            // Fetch profile and conversations in parallel
-            const [profileResult, conversationsResult] = await Promise.all([
+            // Fetch profile, conversations, and templates in parallel
+            const [profileResult, conversationsResult, templatesResult] = await Promise.all([
                 authService.getProfile(user.id),
                 supabase
                     .from('conversations')
                     .select('*, conversation_details(*), document_versions(*), documents(*)')
                     .eq('user_id', user.id)
-                    .order('created_at', { ascending: false })
+                    .order('created_at', { ascending: false }),
+                authService.fetchTemplates(user.id)
             ]);
 
             // Process profile
@@ -403,6 +434,17 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             } else {
                 setError("Kullanıcı profili yüklenemedi. Lütfen tekrar giriş yapmayı deneyin.");
             }
+            
+            // Process templates
+            setAllTemplates(templatesResult);
+            const defaultAnalysisTpl = templatesResult.find(t => t.document_type === 'analysis' && t.is_system_template);
+            const defaultTestTpl = templatesResult.find(t => t.document_type === 'test' && t.is_system_template);
+            const defaultTraceabilityTpl = templatesResult.find(t => t.document_type === 'traceability' && t.is_system_template);
+            setSelectedTemplates({
+                analysis: defaultAnalysisTpl?.id || '',
+                test: defaultTestTpl?.id || '',
+                traceability: defaultTraceabilityTpl?.id || '',
+            });
 
             // Process conversations
             if (conversationsResult.error) {
@@ -586,7 +628,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     const saveDocumentVersion = useCallback(async (
         docKey: keyof GeneratedDocs,
         newContent: any, // Can be string or object
-        reason: string
+        reason: string,
+        templateId?: string | null
     ) => {
         if (!activeConversationId) return;
 
@@ -612,7 +655,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             document_type,
             content: newContentString,
             version_number: newVersionNumber,
-            reason_for_change: reason
+            reason_for_change: reason,
+            template_id: templateId
         };
 
         const { data: newVersionDb, error: insertError } = await supabase
@@ -635,6 +679,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 document_type: document_type,
                 content: newContentString,
                 current_version_id: newVersionDb.id,
+                template_id: templateId
             }, { onConflict: 'conversation_id, document_type' })
             .select()
             .single();
@@ -723,11 +768,12 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 const docKey = key as keyof GeneratedDocs;
                 const docContent = initialDocs[docKey];
                 if (docContent) {
+                    const templateId = docKey === 'analysisDoc' ? selectedTemplates.analysis : docKey === 'testScenarios' ? selectedTemplates.test : null;
                     // We need to use a callback with setConversations to get the latest state inside this loop
                     setConversations(prev => {
                         const updatedConv = prev.find(c => c.id === newConv.id);
                         if(updatedConv) {
-                            saveDocumentVersion(docKey, docContent, "İlk Oluşturma");
+                            saveDocumentVersion(docKey, docContent, "İlk Oluşturma", templateId);
                         }
                         return prev;
                     });
@@ -739,7 +785,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         // await fetchConversations(); // This is now handled by the main data fetcher.
 
         return newConv;
-    }, [user.id, saveDocumentVersion, commitTokenUsage]);
+    }, [user.id, saveDocumentVersion, commitTokenUsage, selectedTemplates]);
     
      const handleNewConversation = useCallback(() => {
         setIsNewAnalysisModalOpen(true);
@@ -777,37 +823,59 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
 
     const handleStopGeneration = () => {
         if (streamControllerRef.current) {
-// FIX: Pass an argument to abort() to resolve the "Expected 1 arguments, but got 0" error. The argument is optional in modern browsers, but some TypeScript configurations or older type definitions might require it. Passing undefined maintains the default behavior.
-            streamControllerRef.current.abort(undefined);
+            // FIX: Pass an argument to abort() to resolve the "Expected 1 arguments, but got 0" error.
+            streamControllerRef.current.abort('User stopped generation');
             setIsProcessing(false);
             setGeneratingDocType(null);
             console.log("Stream stopped by user.");
         }
     };
     
-    const processStream = useCallback(async (
-        stream: AsyncGenerator<StreamChunk>,
-        docKey: 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix' | 'chat_response' | 'visualization' | 'maturity' | 'expert_run' | 'generative_suggestion'
-    ) => {
-        let fullResponse = "";
+    const processStream = useCallback(async (stream: AsyncGenerator<StreamChunk>) => {
+        let docResponses: { [key in keyof GeneratedDocs]?: string } = {};
         let finalMessage = "";
         let finalSuggestion: GenerativeSuggestion | null = null;
-        
+    
         for await (const chunk of stream) {
             if (chunk.type === 'doc_stream_chunk' && activeConversationId) {
-                fullResponse += chunk.chunk;
+                const docKey = chunk.docKey;
+                if (!docResponses[docKey]) {
+                    docResponses[docKey] = '';
+                }
+                docResponses[docKey]! += chunk.chunk;
+    
                 setConversations(prev => prev.map(c => {
                     if (c.id === activeConversationId) {
-                        const tempGeneratedDocs = buildGeneratedDocs(c.documents);
-                        tempGeneratedDocs[chunk.docKey] = fullResponse;
-                         if (chunk.updatedReport) {
-                            tempGeneratedDocs.maturityReport = chunk.updatedReport;
+                        const docType = keyToDocumentTypeMap[docKey];
+                        if (!docType) return c;
+    
+                        const existingDocs = c.documents || [];
+                        const docIndex = existingDocs.findIndex(d => d.document_type === docType);
+    
+                        let updatedDocuments;
+                        if (docIndex > -1) {
+                            updatedDocuments = [...existingDocs];
+                            updatedDocuments[docIndex] = { ...updatedDocuments[docIndex], content: docResponses[docKey]! };
+                        } else {
+                            const tempDoc: Document = {
+                                id: `temp-${docType}`,
+                                conversation_id: c.id,
+                                user_id: user.id,
+                                created_at: new Date().toISOString(),
+                                updated_at: new Date().toISOString(),
+                                document_type: docType,
+                                content: docResponses[docKey]!,
+                                current_version_id: null,
+                                is_stale: false,
+                            };
+                            updatedDocuments = [...existingDocs, tempDoc];
                         }
-                        // This is a temporary UI update, the final save will happen after the stream
-                        return { ...c };
+    
+                        return { ...c, documents: updatedDocuments };
                     }
                     return c;
                 }));
+    
             } else if (chunk.type === 'visualization_update' && activeConversationId) {
                 const vizKey = diagramType === 'mermaid' ? 'mermaidViz' : 'bpmnViz';
                 saveDocumentVersion(vizKey, { code: chunk.content, sourceHash: '' }, "AI Tarafından Oluşturuldu");
@@ -816,18 +884,18 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             } else if (chunk.type === 'generative_suggestion' && activeConversationId) {
                 finalSuggestion = chunk.suggestion;
             } else if (chunk.type === 'usage_update' && activeConversationId) {
-                 commitTokenUsage(chunk.tokens);
+                commitTokenUsage(chunk.tokens);
             } else if (chunk.type === 'maturity_update' && activeConversationId) {
-                 saveDocumentVersion('maturityReport', chunk.report, "AI Olgunluk Değerlendirmesi");
-                 if (maturityScoreTimerRef.current) clearTimeout(maturityScoreTimerRef.current);
+                saveDocumentVersion('maturityReport', chunk.report, "AI Olgunluk Değerlendirmesi");
+                if (maturityScoreTimerRef.current) clearTimeout(maturityScoreTimerRef.current);
                 setDisplayedMaturityScore({ score: chunk.report.overallScore, justification: chunk.report.justification });
                 maturityScoreTimerRef.current = setTimeout(() => setDisplayedMaturityScore(null), 5000);
             } else if (chunk.type === 'expert_run_update' && activeConversationId) {
                 setConversations(prev => prev.map(c => {
                     if (c.id === activeConversationId) {
-                        const lastMessage = c.messages[c.messages.length -1];
+                        const lastMessage = c.messages[c.messages.length - 1];
                         if (lastMessage && lastMessage.role === 'assistant') {
-                           return {
+                            return {
                                 ...c,
                                 messages: [
                                     ...c.messages.slice(0, -1),
@@ -842,19 +910,23 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                     finalMessage = chunk.finalMessage || "Süreç tamamlandı.";
                 }
             } else if (chunk.type === 'error') {
-                 setError(chunk.message);
-                 break;
+                setError(chunk.message);
+                break;
             }
         }
-        
-        return { fullResponse, finalMessage, finalSuggestion };
-    }, [activeConversationId, diagramType, commitTokenUsage, saveDocumentVersion]);
+    
+        return { docResponses, finalMessage, finalSuggestion };
+    }, [activeConversationId, diagramType, commitTokenUsage, saveDocumentVersion, user.id]);
 
 
     const sendMessage = useCallback(async (content: string, isSystemMessage: boolean = false) => {
         if (!content.trim()) return;
 
         if (!userProfile || userProfile.tokens_used >= userProfile.token_limit) {
+            if (streamControllerRef.current) {
+                // FIX: Pass an argument to abort() to resolve the "Expected 1 arguments, but got 0" error.
+                streamControllerRef.current.abort('Token limit reached');
+            }
             setShowUpgradeModal(true);
             return;
         }
@@ -971,18 +1043,44 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                     const userConfirmed = await new Promise(resolve => resolve(true)); // Simplified
     
                     if (userConfirmed) {
-                        stream = geminiService.executeExpertRun(messagesForExpertRun, { analysis: selectedTemplates.analysis, test: selectedTemplates.test }, 'gemini-2.5-pro');
-                        const { finalMessage } = await processStream(stream, 'expert_run');
+                        const analysisTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.analysis)?.prompt || '';
+                        const testTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.test)?.prompt || '';
+                        const traceabilityTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.traceability)?.prompt || '';
+                        const vizTemplate = allTemplates.find(t => t.document_type === 'visualization' && t.name.includes('Mermaid'));
+                        const vizTemplatePrompt = vizTemplate?.prompt || '';
+                        
+                        stream = geminiService.executeExpertRun(messagesForExpertRun, { analysis: analysisTemplatePrompt, test: testTemplatePrompt, traceability: traceabilityTemplatePrompt, visualization: vizTemplatePrompt }, 'gemini-2.5-pro');
+                        const { finalMessage } = await processStream(stream);
                         finalMessageContent = finalMessage;
                     } else {
                         finalMessageContent = "Anladım, devam etmeden önce eklemek istediğiniz başka bir detay var mı?";
                     }
                 }
             } else {
-                stream = geminiService.processAnalystMessageStream(conversationForApi.messages, conversationForApi.generatedDocs, { analysis: selectedTemplates.analysis, test: selectedTemplates.test }, modelForChat);
-                const { finalMessage, finalSuggestion: suggestion } = await processStream(stream, 'chat_response');
+                const analysisTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.analysis)?.prompt || '';
+                const testTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.test)?.prompt || '';
+                const traceabilityTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.traceability)?.prompt || '';
+                const vizTemplate = allTemplates.find(t => t.document_type === 'visualization' && t.name.includes('Mermaid'));
+                const vizTemplatePrompt = vizTemplate?.prompt || '';
+
+                stream = geminiService.processAnalystMessageStream(conversationForApi.messages, conversationForApi.generatedDocs, { analysis: analysisTemplatePrompt, test: testTemplatePrompt, traceability: traceabilityTemplatePrompt, visualization: vizTemplatePrompt }, modelForChat);
+                const { docResponses, finalMessage, finalSuggestion: suggestion } = await processStream(stream);
                 finalMessageContent = finalMessage;
                 finalSuggestion = suggestion;
+            
+                // Save any generated documents from the function call
+                if (docResponses) {
+                    for (const key in docResponses) {
+                        if (Object.prototype.hasOwnProperty.call(docResponses, key)) {
+                            const docKey = key as keyof GeneratedDocs;
+                            const docContent = docResponses[docKey];
+                            if (docContent) {
+                                 const templateId = docKey === 'analysisDoc' ? selectedTemplates.analysis : docKey === 'testScenarios' ? selectedTemplates.test : docKey === 'traceabilityMatrix' ? selectedTemplates.traceability : null;
+                                await saveDocumentVersion(docKey, docContent, "AI Tarafından Sohbet Üzerinden Oluşturuldu", templateId);
+                            }
+                        }
+                    }
+                }
             }
     
             if ((finalMessageContent || finalSuggestion) && conversationForApi.id) {
@@ -1023,7 +1121,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             setGeneratingDocType(null);
             streamControllerRef.current = null;
         }
-    }, [activeConversationId, conversations, createNewConversation, isDeepAnalysisMode, selectedTemplates, processStream, userProfile]);
+    }, [activeConversationId, conversations, createNewConversation, isDeepAnalysisMode, selectedTemplates, processStream, userProfile, saveDocumentVersion, allTemplates]);
 
 
      const handleGenerateDoc = useCallback(async (
@@ -1043,11 +1141,62 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             return;
         }
 
+        // --- Caching Logic ---
+        if (type === 'test') {
+            const analysisHash = simpleHash(activeConversation.generatedDocs.analysisDoc);
+            const currentTestDoc = activeConversation.generatedDocs.testScenarios;
+            if (typeof currentTestDoc === 'object' && currentTestDoc.content && currentTestDoc.sourceHash === analysisHash) {
+                setActiveDocTab('test');
+                return; // Skip regeneration
+            }
+        }
+        
+        if (type === 'traceability') {
+            const analysisDoc = activeConversation.generatedDocs.analysisDoc;
+            const testDoc = activeConversation.generatedDocs.testScenarios;
+            const testDocContent = typeof testDoc === 'object' ? testDoc.content : testDoc;
+        
+            if (!analysisDoc || !testDocContent) return;
+            
+            const combinedHash = simpleHash(analysisDoc + testDocContent);
+            const currentTraceabilityDoc = activeConversation.generatedDocs.traceabilityMatrix;
+        
+            if (typeof currentTraceabilityDoc === 'object' && currentTraceabilityDoc.content && currentTraceabilityDoc.sourceHash === combinedHash) {
+                setActiveDocTab('traceability');
+                return; // Skip regeneration
+            }
+        }
+        // --- End Caching Logic ---
+
         setIsProcessing(true);
         setGeneratingDocType(type);
         setActiveDocTab(type);
 
-        const currentTemplateId = newTemplateId || (type === 'analysis' ? selectedTemplates.analysis : selectedTemplates.test);
+        let currentTemplateId;
+        let template;
+
+        if (type === 'viz') {
+            const currentDiagramType = newDiagramType || diagramType;
+            const templateIdentifier = currentDiagramType === 'bpmn' ? 'BPMN' : 'Mermaid';
+            template = allTemplates.find(t => t.document_type === 'visualization' && t.name.includes(templateIdentifier));
+            currentTemplateId = template?.id;
+        } else {
+            switch (type) {
+                case 'analysis': currentTemplateId = newTemplateId || selectedTemplates.analysis; break;
+                case 'test': currentTemplateId = newTemplateId || selectedTemplates.test; break;
+                case 'traceability': currentTemplateId = newTemplateId || selectedTemplates.traceability; break;
+                default: currentTemplateId = '';
+            }
+            template = allTemplates.find(t => t.id === currentTemplateId);
+        }
+
+        if ((type === 'analysis' || type === 'test' || type === 'traceability' || type === 'viz') && !template) {
+            setError(`${type} için geçerli şablon bulunamadı.`);
+            setIsProcessing(false);
+            setGeneratingDocType(null);
+            return;
+        }
+
         const currentDiagramType = newDiagramType || diagramType;
 
         try {
@@ -1057,22 +1206,38 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
 
             if (type === 'analysis' || type === 'test' || type === 'traceability') {
                  let rawStream;
+                 const testDoc = activeConversation.generatedDocs.testScenarios;
+                 const testScenariosContent = typeof testDoc === 'object' ? testDoc.content : testDoc;
+
                  if (type === 'analysis') {
-                    rawStream = geminiService.generateAnalysisDocument(activeConversation.messages, currentTemplateId, modelForGeneration);
+                    rawStream = geminiService.generateAnalysisDocument(activeConversation.messages, template!.prompt, modelForGeneration);
                  } else if (type === 'test') {
-                     rawStream = geminiService.generateTestScenarios(activeConversation.generatedDocs.analysisDoc, currentTemplateId, modelForGeneration);
+                     rawStream = geminiService.generateTestScenarios(activeConversation.generatedDocs.analysisDoc, template!.prompt, modelForGeneration);
                  } else { // traceability
-                     rawStream = geminiService.generateTraceabilityMatrix(activeConversation.generatedDocs.analysisDoc, activeConversation.generatedDocs.testScenarios, modelForGeneration);
+                     rawStream = geminiService.generateTraceabilityMatrix(activeConversation.generatedDocs.analysisDoc, testScenariosContent, template!.prompt, modelForGeneration);
                  }
                  stream = wrapDocStream(rawStream, docKey as any);
-                 const { fullResponse } = await processStream(stream, docKey as any);
-                 saveDocumentVersion(docKey as 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix', fullResponse, "AI Tarafından Oluşturuldu");
+                 const { docResponses } = await processStream(stream);
+                 const fullResponse = docResponses[docKey as keyof GeneratedDocs];
+                 if (fullResponse) {
+                     if (docKey === 'testScenarios') {
+                        const analysisHash = simpleHash(activeConversation.generatedDocs.analysisDoc);
+                        await saveDocumentVersion(docKey, { content: fullResponse, sourceHash: analysisHash }, "AI Tarafından Oluşturuldu", currentTemplateId);
+                    } else if (docKey === 'traceabilityMatrix') {
+                        const analysisDoc = activeConversation.generatedDocs.analysisDoc;
+                        const combinedHash = simpleHash(analysisDoc + testScenariosContent);
+                        await saveDocumentVersion(docKey, { content: fullResponse, sourceHash: combinedHash }, "AI Tarafından Oluşturuldu", currentTemplateId);
+                    } else {
+                        await saveDocumentVersion(docKey as 'analysisDoc', fullResponse, "AI Tarafından Oluşturuldu", currentTemplateId);
+                    }
+                 }
 
             } else { // 'viz'
-                 const { code, tokens } = await geminiService.generateDiagram(activeConversation.generatedDocs.analysisDoc, currentDiagramType, 'gemini-2.5-flash');
+                 const analysisHash = simpleHash(activeConversation.generatedDocs.analysisDoc);
+                 const { code, tokens } = await geminiService.generateDiagram(activeConversation.generatedDocs.analysisDoc, currentDiagramType, template!.prompt, 'gemini-2.5-flash');
                  commitTokenUsage(tokens);
                  const vizKey = currentDiagramType === 'mermaid' ? 'mermaidViz' : 'bpmnViz';
-                 saveDocumentVersion(vizKey, { code, sourceHash: '' }, "AI Tarafından Oluşturuldu");
+                 saveDocumentVersion(vizKey, { code, sourceHash: analysisHash }, "AI Tarafından Oluşturuldu");
                  // Exit early as it's not a real stream, handle state reset manually.
                  setIsProcessing(false);
                  setGeneratingDocType(null);
@@ -1091,7 +1256,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 setGeneratingDocType(null);
             }
         }
-    }, [activeConversation, processStream, selectedTemplates, diagramType, setActiveDocTab, saveDocumentVersion, commitTokenUsage, userProfile]);
+    }, [activeConversation, processStream, selectedTemplates, diagramType, setActiveDocTab, saveDocumentVersion, commitTokenUsage, userProfile, allTemplates]);
     
      const handleEvaluateDocument = useCallback(async () => {
         if (!activeConversation || !activeConversation.generatedDocs.analysisDoc) return;
@@ -1191,6 +1356,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         }
         
         const originalContent = activeConversation.generatedDocs[docKey];
+        const originalStringContent = typeof originalContent === 'object' ? (originalContent as SourcedDocument).content : originalContent;
+
         setInlineModificationState({ docKey, originalText: selectedText });
         
         try {
@@ -1199,9 +1366,16 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             const { text: modifiedText, tokens } = await geminiService.continueConversation([{ role: 'user', content: fullPrompt, id: 'temp', timestamp: '', conversation_id: 'temp', created_at: '' }], 'gemini-2.5-flash');
             commitTokenUsage(tokens);
 
-            const newContent = originalContent.replace(selectedText, modifiedText);
+            const newContent = originalStringContent.replace(selectedText, modifiedText);
             
-            saveDocumentVersion(docKey, newContent, "AI Metin Düzenlemesi");
+            const currentDoc = activeConversation.documents.find(d => d.document_type === keyToDocumentTypeMap[docKey]);
+
+            if (docKey === 'testScenarios') {
+                const analysisHash = simpleHash(activeConversation.generatedDocs.analysisDoc);
+                saveDocumentVersion(docKey, { content: newContent, sourceHash: analysisHash }, "AI Metin Düzenlemesi", currentDoc?.template_id);
+            } else {
+                 saveDocumentVersion(docKey, newContent, "AI Metin Düzenlemesi", currentDoc?.template_id);
+            }
 
         } catch (err) {
             console.error("Modification error:", err);
@@ -1231,7 +1405,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
              const { code: newCode, tokens } = await geminiService.modifyDiagram(currentCode, userPrompt, 'gemini-2.5-flash', diagramType);
              commitTokenUsage(tokens);
              const vizKey = diagramType === 'mermaid' ? 'mermaidViz' : 'bpmnViz';
-             saveDocumentVersion(vizKey, { code: newCode, sourceHash: '' }, "AI Tarafından Diyagram Düzenlemesi");
+             const analysisHash = simpleHash(activeConversation.generatedDocs.analysisDoc);
+             saveDocumentVersion(vizKey, { code: newCode, sourceHash: analysisHash }, "AI Tarafından Diyagram Düzenlemesi");
         } catch (err) {
              console.error("Diagram modification error:", err);
             setError(err instanceof Error ? err.message : "Diyagram değiştirilemedi.");
@@ -1267,18 +1442,19 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         }
     };
 
-    const handleTemplateChange = (type: 'analysis' | 'test') => (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const handleTemplateChange = (type: 'analysis' | 'test' | 'traceability') => (event: React.ChangeEvent<HTMLSelectElement>) => {
         const newTemplateId = event.target.value;
-        const currentDoc = type === 'analysis' 
-            ? activeConversation?.generatedDocs.analysisDoc 
-            : activeConversation?.generatedDocs.testScenarios;
+        const docKey = type === 'analysis' ? 'analysisDoc' : type === 'test' ? 'testScenarios' : 'traceabilityMatrix';
+        const currentDoc = activeConversation?.generatedDocs[docKey];
+        const docContent = typeof currentDoc === 'object' ? (currentDoc as SourcedDocument).content : currentDoc;
 
-        if (currentDoc && currentDoc !== SAMPLE_ANALYSIS_DOCUMENT) {
+
+        if (docContent && docContent !== SAMPLE_ANALYSIS_DOCUMENT) {
             regenerateModalData.current = { docType: type, newTemplateId: newTemplateId };
             setIsRegenerateModalOpen(true);
         } else {
              setSelectedTemplates(prev => ({ ...prev, [type]: newTemplateId }));
-             if (currentDoc) {
+             if (docContent) {
                  handleGenerateDoc(type, newTemplateId);
              }
         }
@@ -1287,10 +1463,11 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     const handleConfirmRegenerate = (saveCurrent: boolean) => {
         const { docType, newTemplateId } = regenerateModalData.current!;
         if (saveCurrent && activeConversation) {
-            const docKey = docType === 'analysis' ? 'analysisDoc' : 'testScenarios';
+            const docKey = docType === 'analysis' ? 'analysisDoc' : docType === 'test' ? 'testScenarios' : 'traceabilityMatrix';
+            const currentDoc = activeConversation.documents.find(d => d.document_type === keyToDocumentTypeMap[docKey]);
             const currentContent = activeConversation.generatedDocs[docKey];
             const reason = "Şablon Değişikliği Öncesi Arşivlendi";
-            saveDocumentVersion(docKey, currentContent, reason);
+            saveDocumentVersion(docKey, currentContent, reason, currentDoc?.template_id);
         }
         
         setSelectedTemplates(prev => ({ ...prev, [docType]: newTemplateId }));
@@ -1382,7 +1559,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         await supabase.from('conversation_details').insert([userMessage, assistantMessage]);
 
         // Optimistic UI updates
-        saveDocumentVersion('analysisDoc', updatedDoc, `AI Önerisi: '${targetSection}' Güncellendi`);
+        const currentAnalysisDoc = activeConversation.documents.find(d => d.document_type === 'analysis');
+        saveDocumentVersion('analysisDoc', updatedDoc, `AI Önerisi: '${targetSection}' Güncellendi`, currentAnalysisDoc?.template_id);
         setConversations(prev => prev.map(c => {
             if (c.id === activeConversation.id) {
                 return {
@@ -1406,6 +1584,9 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         setIsDeepAnalysisMode(isOn);
     };
 
+    const analysisTemplates = useMemo(() => allTemplates.filter(t => t.document_type === 'analysis'), [allTemplates]);
+    const testTemplates = useMemo(() => allTemplates.filter(t => t.document_type === 'test'), [allTemplates]);
+    const traceabilityTemplates = useMemo(() => allTemplates.filter(t => t.document_type === 'traceability'), [allTemplates]);
 
     if (isDataLoading) {
         return (
@@ -1491,11 +1672,12 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                                         onModifyDiagram={handleModifyDiagram}
                                         onGenerateDoc={handleGenerateDoc}
                                         inlineModificationState={inlineModificationState}
-                                        templates={{ analysis: ANALYSIS_TEMPLATES, test: TEST_SCENARIO_TEMPLATES }}
+                                        templates={{ analysis: analysisTemplates, test: testTemplates, traceability: traceabilityTemplates }}
                                         selectedTemplates={selectedTemplates}
                                         onTemplateChange={{
                                             analysis: handleTemplateChange('analysis'),
                                             test: handleTemplateChange('test'),
+                                            traceability: handleTemplateChange('traceability'),
                                         }}
                                         activeDocTab={activeDocTab}
                                         setActiveDocTab={setActiveDocTab}
@@ -1521,9 +1703,9 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                     isOpen={isRegenerateModalOpen}
                     onClose={() => setIsRegenerateModalOpen(false)}
                     onConfirm={handleConfirmRegenerate}
-                    documentName={regenerateModalData.current.docType === 'analysis' ? 'Analiz Dokümanı' : 'Test Senaryoları'}
+                    documentName={regenerateModalData.current.docType === 'analysis' ? 'Analiz Dokümanı' : regenerateModalData.current.docType === 'test' ? 'Test Senaryoları' : 'İzlenebilirlik Matrisi'}
                     // FIX: The 'templates' variable was not defined. Use the imported constants instead.
-                    templateName={(regenerateModalData.current.docType === 'analysis' ? ANALYSIS_TEMPLATES : TEST_SCENARIO_TEMPLATES).find(t => t.id === regenerateModalData.current!.newTemplateId)?.name || ''}
+                    templateName={(regenerateModalData.current.docType === 'analysis' ? analysisTemplates : regenerateModalData.current.docType === 'test' ? testTemplates : traceabilityTemplates).find(t => t.id === regenerateModalData.current!.newTemplateId)?.name || ''}
                 />
             )}
              {isDeveloperPanelOpen && (

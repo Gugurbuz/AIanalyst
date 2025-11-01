@@ -1,7 +1,6 @@
 // services/promptService.ts
 
 import type { PromptData, Prompt, PromptVersion } from '../types';
-import { ANALYSIS_TEMPLATES, TEST_SCENARIO_TEMPLATES } from '../templates';
 
 const PROMPT_STORAGE_KEY = 'ai_business_analyst_prompts';
 
@@ -38,7 +37,8 @@ const defaultPrompts: PromptData = [
              {
                 id: 'proactiveAnalystSystemInstruction',
                 name: 'Proaktif Analist Sistem Yönergesi',
-                description: 'AI\'nın yeni bilgileri tespit edip güncelleme için onay istemesini sağlayan ana sistem promptu.',
+// FIX: Corrected invalid string literal by using double quotes to enclose a string containing a single quote.
+                description: "AI'nın yeni bilgileri tespit edip güncelleme için onay istemesini sağlayan ana sistem promptu.",
                 versions: [createDefaultVersion(`
                     **GÖREV:** Sen, proaktif ve akıllı bir Kıdemli İş Analisti yapay zekasısın. Öncelikli hedefin, konuşma boyunca iş analizi dokümanını doğru ve güncel tutmaktır.
 
@@ -120,7 +120,7 @@ const defaultPrompts: PromptData = [
 
                     **DEĞERLENDİRME KRİTERLERİ (Her birini 0-100 arası puanla):**
                     1.  **Kapsam (scope):** Projenin amacı, sınırları (içeride/dışarıda olanlar) ve iş hedefleri ne kadar net?
-                    2.  **Teknik Detay (technical):** Teknik fizibilite, sistem entegrasyonları, veri modelleri, kısıtlar ve bağımlılıklar ne kadar belirgin?
+                    2.  **Teknik Detay (technical):** Teknik fizibilite, sistem entegrasyonları, veri modelleri, kısıtlar ve bağımsızlıklar ne kadar belirgin?
                     3.  **Kullanıcı Akışı (userFlow):** Hedef kullanıcılar, rolleri ve temel senaryolar (pozitif/negatif) ne kadar iyi tanımlanmış?
                     4.  **Fonksiyonel Olmayan Gereksinimler (nonFunctional):** Performans, güvenlik, ölçeklenebilirlik gibi kalite nitelikleri ne kadar ele alınmış?
 
@@ -145,7 +145,8 @@ const defaultPrompts: PromptData = [
             {
                 id: 'generateSectionSuggestions',
                 name: 'Bölüm Önerileri Oluşturma',
-                description: 'AI\'nın bir doküman bölümünü iyileştirmek için öneriler sunmasını sağlar.',
+// FIX: Corrected invalid string literal by using double quotes to enclose a string containing a single quote.
+                description: "AI'nın bir doküman bölümünü iyileştirmek için öneriler sunmasını sağlar.",
                 versions: [createDefaultVersion(`
                     **GÖREV:** Sen, bir iş analizi dokümanını iyileştirmekle görevli, yaratıcı ve stratejik bir Kıdemli İş Analistisin. Kullanıcının bir talebi ve dokümanın mevcut hali sana verilecek. Amacın, bu talebi karşılamak için somut, eyleme geçirilebilir ve değerli öneriler sunmaktır.
 
@@ -168,109 +169,17 @@ const defaultPrompts: PromptData = [
                 `)],
                 activeVersionId: 'default',
             },
-            ...ANALYSIS_TEMPLATES.map(template => ({
-                id: template.id,
-                name: `Analiz Şablonu: ${template.name}`,
-                description: 'Belirli bir formata göre analiz dokümanı oluşturur.',
-                versions: [createDefaultVersion(template.prompt)],
-                activeVersionId: 'default' as string,
-            })),
-             {
-                id: 'generateTraceabilityMatrix',
-                name: 'İzlenebilirlik Matrisi Oluşturma',
-                description: 'Analiz dokümanındaki fonksiyonel gereksinimleri, test senaryoları dokümanındaki ilgili test durumlarıyla eşleştirir.',
-                versions: [createDefaultVersion(`
-                    **GÖREV:** Titiz bir Kıdemli Kalite Güvence (QA) Analisti olarak hareket et. Sana sunulan İş Analizi Dokümanı ve Test Senaryoları Dokümanını kullanarak bir İzlenebilirlik Matrisi (Traceability Matrix) oluştur.
-
-                    **FORMATLAMA KURALLARI:**
-                    - Çıktı, **yalnızca** aşağıda belirtilen sütunları içeren bir Markdown tablosu olmalıdır. Tablo dışında hiçbir metin (giriş, açıklama, sonuç vb.) ekleme.
-
-                    **İŞLEM ADIMLARI:**
-                    1.  İş Analizi Dokümanındaki her bir Fonksiyonel Gereksinimi (örn. "FR-001", "FR-002") ve açıklamasını bul.
-                    2.  Test Senaryoları Dokümanındaki her bir test senaryosunu ("Senaryo ID" sütunu, örn. "TC-FR001-01") ve açıklamasını ("Test Durumu Açıklaması" sütunu) bul.
-                    3.  Her bir gereksinimi, ilgili test senaryosu/senaryolarıyla eşleştir. Eşleştirmeyi "FR-001" ve "TC-FR001-xx" gibi ID'ler üzerinden yap.
-                    4.  Bir gereksinimin birden fazla test senaryosu varsa, her eşleşme için tabloda ayrı bir satır oluştur.
-
-                    **TABLO YAPISI:**
-
-                    | Gereksinim ID | Gereksinim Açıklaması | Test Senaryo ID | Test Durumu Açıklaması |
-                    |---------------|-------------------------|-----------------|--------------------------|
-                    | FR-001        | [Gereksinimin kısa açıklaması] | TC-FR001-01     | [Test senaryosunun açıklaması] |
-                    | FR-001        | [Gereksinimin kısa açıklaması] | TC-FR001-02     | [İkinci test senaryosunun açıklaması] |
-                    | FR-002        | [Diğer gereksinimin açıklaması] | TC-FR002-01     | [İlgili testin açıklaması] |
-                `)],
-                activeVersionId: 'default',
-            },
         ]
     },
     {
         id: 'testing',
         name: 'Test Senaryoları',
-        prompts: TEST_SCENARIO_TEMPLATES.map(template => ({
-            id: template.id,
-            name: `Test Şablonu: ${template.name}`,
-            description: 'Belirli bir formata göre test senaryoları oluşturur.',
-            versions: [createDefaultVersion(template.prompt)],
-            activeVersionId: 'default' as string,
-        }))
+        prompts: []
     },
     {
         id: 'visualization',
         name: 'Görselleştirme',
         prompts: [
-            {
-                id: 'generateVisualization',
-                name: 'Süreç Akış Diyagramı Oluşturma (Mermaid)',
-                description: 'Analiz dokümanındaki süreçleri Mermaid.js diyagramı olarak görselleştirir.',
-                versions: [createDefaultVersion(`
-                    **GÖREV:** Profesyonel ve standartlara uygun bir Mermaid.js akış şeması (flowchart) kodu oluştur.
-
-                    **ÇOK ÖNEMLİ - KOD YAPISI VE SIRALAMASI:**
-                    Oluşturacağın kod **KESİNLİKLE** aşağıdaki yapıya ve sıralamaya uymalıdır:
-
-                    1.  **Diyagram Yönü (ZORUNLU):** Kod, \`graph TD;\` satırıyla başlamalıdır.
-                    2.  **Stil Sınıfı Tanımları (ZORUNLU):** \`graph TD;\` satırından **HEMEN SONRA**, aşağıdaki \`classDef\` bloklarını **DEĞİŞTİRMEDEN** ekle.
-                    3.  **Düğümler ve Bağlantılar:** Stil tanımlarından sonra, diyagramın düğümlerini ve bağlantılarını tanımla.
-
-                    **STİL ve FORMATLAMA KURALLARI:**
-                    - **YORUM KESİNLİKLE YASAK:** Kod bloğunun içine \`//\`, \`#\`, veya \`%%\` gibi **HİÇBİR YORUM SATIRI EKLEME**. Çıktı sadece ve sadece saf Mermaid.js kodu olmalıdır.
-                    - **STİL UYGULAMA:** Oluşturduğun her düğüme, anlamını en iyi yansıtan stili uygula. Kullanılacak stiller:
-                        - **\`system\`**: Otomatik sistem işlemleri.
-                        - **\`actor\`**: Son kullanıcı veya insan aktör.
-                        - **\`decision\`**: Karar veya koşul bloğu (genellikle \`{}\` şekliyle).
-                        - **\`warn\`**: Hata durumu veya uyarı.
-                        - **Uygulama Yöntemi:** Düğüm tanımından sonra \`:::\` ve stil adını ekle. Örnek: \`A["Kullanıcı Giriş Yapar"]:::actor\`.
-                    - **DÜĞÜM METİNLERİ:**
-                        - Tüm düğüm metinleri **KESİNLİKLE** çift tırnak \`""\` içine alınmalıdır.
-                        - Çok satırlı metin için **SADECE** \`<br/>\` HTML etiketini kullan.
-
-                    ---
-                    **DOĞRU YAPIDA ÖRNEK:**
-                    \`\`\`mermaid
-                    graph TD;
-                        classDef system fill:#e0e7ff,stroke:#a5b4fc,color:#3730a3,stroke-width:2px;
-                        classDef actor fill:#fef3c7,stroke:#fcd34d,color:#92400e,stroke-width:2px;
-                        classDef decision fill:#dcfce7,stroke:#86efac,color:#166534,stroke-width:2px;
-                        classDef warn fill:#fee2e2,stroke:#fca5a5,color:#991b1b,stroke-width:2px;
-
-                        A["Kullanıcı sipariş<br/>sayfasını açar"]:::actor;
-                        B["Sipariş Detaylarını Girer"]:::actor;
-                        C{"Stok Yeterli mi?"}:::decision;
-                        D["Ödeme İşlemini Başlat"]:::system;
-                        E["Stok Yetersiz<br/>Uyarısı Göster"]:::warn;
-                        
-                        A --> B;
-                        B --> C;
-                        C -- Evet --> D;
-                        C -- Hayır --> E;
-                    \`\`\`
-                    ---
-
-                    **ZORUNLU ÇIKTI FORMATI:**
-                    - Çıktı olarak **SADECE** ve **SADECE** \`\`\`mermaid\n...\n\`\`\` kod bloğunu ver. Başka hiçbir giriş, açıklama veya sonuç metni ekleme.
-                `)],
-                activeVersionId: 'default',
-            },
             {
                 id: 'modifyVisualization',
                 name: 'Süreç Akışını Değiştirme (Mermaid)',
@@ -289,47 +198,6 @@ const defaultPrompts: PromptData = [
 
                     **ÇIKTI FORMATI:**
                     - Çıktı olarak **SADECE** ve **SADECE** \`\`\`mermaid\n...\n\`\`\` kod bloğunu ver. Başka hiçbir giriş, açıklama veya sonuç metni ekleme.
-                `)],
-                activeVersionId: 'default',
-            },
-            {
-                id: 'generateBPMN',
-                name: 'Süreç Akış Diyagramı Oluşturma (BPMN)',
-                description: 'Analiz dokümanındaki süreçleri BPMN 2.0 XML formatında modeller.',
-                versions: [createDefaultVersion(`
-                    **GÖREV:** Uzman bir BPMN 2.0 modelleyicisi olarak hareket et. Sağlanan İş Analizi Dokümanını temel alarak, standartlara uygun ve geçerli bir BPMN 2.0 XML dosyası oluştur.
-                    
-                    **KURALLAR:**
-                    1.  **Tam ve Geçerli XML:** Ürettiğin XML, bir BPMN modelleme aracında açılabilecek şekilde tam ve geçerli olmalıdır. Çıktı, **KESİNLİKLE** aşağıda verilen örnek yapıdaki gibi bir \`<bpmn:definitions>\` kök elemanıyla başlamalı ve tüm namespace tanımlamalarını içermelidir.
-                    2.  **Elementler:** Süreci modellemek için standart BPMN elemanlarını kullan:
-                        - \`<bpmn:startEvent>\`
-                        - \`<bpmn:task>\` (Kullanıcı görevleri için \`<bpmn:userTask>\`, sistem görevleri için \`<bpmn:serviceTask>\` kullanabilirsin)
-                        - \`<bpmn:exclusiveGateway>\` (Karar noktaları için)
-                        - \`<bpmn:endEvent>\`
-                        - \`<bpmn:sequenceFlow>\` (Akış okları için)
-                    3.  **Diyagram Bilgisi (DI):** Her bir şekil (\`<bpmndi:BPMNShape>\`) ve ok (\`<bpmndi:BPMNEdge>\`) için pozisyon ve boyut bilgilerini içeren \`<bpmndi:BPMNPlane>\` bölümünü **MUTLAKA** oluştur. Bu, diyagramın görsel olarak oluşturulabilmesi için kritiktir. Tahmini koordinatlar (x, y, width, height) kullanabilirsin.
-                    4.  **ID'ler:** Tüm elemanlara (process, task, event, gateway, flow, shape, edge) benzersiz ID'ler ata.
-                    5.  **Etiketler:** \`name\` attribute'unu kullanarak görevleri, olayları ve geçitleri İş Analizi Dokümanındaki adımlara göre etiketle.
-                    6.  **Self-Closing Tags:** XML elemanlarından \`<dc:Bounds>\` ve \`<omgdi:waypoint>\` **MUTLAKA** self-closing (kendiliğinden kapanan) formatta olmalıdır. Örnek: \`<dc:Bounds ... />\`. **ASLA** \`<dc:Bounds ...></dc:Bounds>\` şeklinde bir kapanış etiketi kullanma.
-
-                    **ÖRNEK YAPI (ZORUNLU):**
-                    Aşağıdaki temel yapıyı ve namespace tanımlamalarını KESİNLİKLE kullan:
-                    \`\`\`xml
-                    <?xml version="1.0" encoding="UTF-8"?>
-                    <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_Generated" targetNamespace="http://bpmn.io/schema/bpmn">
-                      <bpmn:process id="Process_Generated" isExecutable="false">
-                        <!-- Süreç elementleri (startEvent, task, gateway, endEvent, sequenceFlow) buraya gelecek -->
-                      </bpmn:process>
-                      <bpmndi:BPMNDiagram id="BPMNDiagram_1">
-                        <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_Generated">
-                          <!-- Görsel elementler (BPMNShape, BPMNEdge) buraya gelecek -->
-                        </bpmndi:BPMNPlane>
-                      </bpmndi:BPMNDiagram>
-                    </bpmn:definitions>
-                    \`\`\`
-                    
-                    **ZORUNLU ÇIKTI FORMATI:**
-                    - Çıktı olarak **SADECE** ve **SADECE** \`\`\`xml\n<?xml ...?>\n...\n</bpmn:definitions>\n\`\`\` kod bloğunu ver. XML bloğunun dışına başka hiçbir giriş, açıklama veya sonuç metni ekleme.
                 `)],
                 activeVersionId: 'default',
             },
@@ -484,7 +352,7 @@ const defaultPrompts: PromptData = [
                     **GÖREV:** Sen, metinler arasındaki farkları analiz eden bir "değişiklik kontrol" sistemisin. Sana bir dokümanın "ESKİ" ve "YENİ" versiyonları verilecek. Görevin, bu iki versiyon arasındaki anlamsal değişiklikleri tespit etmek ve bunları birleştiren, insan tarafından okunabilir, kısa ve tek bir cümlelik bir versiyon notu oluşturmaktır.
 
                     **ANALİZ ADIMLARI:**
-                    1.  **Eklenen/Silinen Maddeleri Bul:** \`FR-XXX\`, \`R-XXX\` gibi numaralandırılmış maddelerden eklenen veya silinen var mı?
+                    1.  **Eklenen/Silinen Maddeleri Bul:** \`FR-XXX\`, \`R-XXX\`, \`BR-XXX\`, \`US-XXX\`, \`TC-XXX\` gibi numaralandırılmış maddelerden eklenen veya silinen var mı?
                     2.  **Değiştirilen Maddeleri Bul:** Hangi numaralı maddelerin içeriği önemli ölçüde değişti?
                     3.  **Genel Metin Değişikliklerini Bul:** Başlıklar, proje adı gibi genel metinlerde değişiklik var mı?
                     4.  **Özetle:** Bulduğun en önemli 1-2 değişikliği birleştirerek tek bir cümle oluştur.
