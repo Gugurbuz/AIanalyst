@@ -6,7 +6,7 @@ import { Visualizations } from './Visualizations';
 import { MaturityCheckReport } from './MaturityCheckReport';
 import { TemplateSelector } from './TemplateSelector';
 import { ExportDropdown } from './ExportDropdown';
-import { GanttChartSquare, Projector, RefreshCw } from 'lucide-react';
+import { GanttChartSquare, Projector, RefreshCw, PlusCircle, Check, FileText, Beaker, GitBranch } from 'lucide-react';
 import { BacklogGenerationView } from './BacklogGenerationView';
 import { geminiService } from '../services/geminiService';
 import type { DocumentImpactAnalysis } from '../services/geminiService';
@@ -103,6 +103,8 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     const [isVisualizing, setIsVisualizing] = useState(false);
     const [vizError, setVizError] = useState<string | null>(null);
     const [isAnalyzingChange, setIsAnalyzingChange] = useState(false);
+    const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
+    const createMenuRef = useRef<HTMLDivElement>(null);
     
     const { generatedDocs, id: conversationId } = conversation;
     const prevAnalysisDoc = usePrevious(generatedDocs.analysisDoc);
@@ -123,6 +125,17 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             console.error(`Failed to update staleness for ${docType}:`, error);
         }
     };
+
+    // Close create menu on click outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (createMenuRef.current && !createMenuRef.current.contains(event.target as Node)) {
+                setIsCreateMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
 
     // --- AI-Powered Impact Analysis Effect ---
@@ -161,21 +174,9 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
         }
     }, [generatedDocs.analysisDoc, prevAnalysisDoc, conversationId, isProcessing, onAddTokens]);
 
-
-    const docTabs = [
-        { id: 'analysis', name: 'İş Analizi', isStale: false },
-        { id: 'viz', name: 'Görselleştirme', isStale: generatedDocs.isVizStale },
-        { id: 'test', name: 'Test Senaryoları', isStale: generatedDocs.isTestStale },
-        { id: 'traceability', name: 'İzlenebilirlik', isStale: generatedDocs.isTraceabilityStale },
-        { id: 'backlog-generation', name: 'Backlog Oluşturma', isStale: generatedDocs.isBacklogStale },
-        { id: 'maturity', name: 'Olgunluk', isStale: false },
-    ];
-    
     const vizContent = diagramType === 'bpmn'
         ? generatedDocs.bpmnViz?.code ?? (generatedDocs.visualizationType === 'bpmn' ? generatedDocs.visualization : '')
         : generatedDocs.mermaidViz?.code ?? (generatedDocs.visualizationType !== 'bpmn' ? generatedDocs.visualization : '');
-
-    const isAnalysisDocReady = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
 
     const testScenariosContent = typeof generatedDocs.testScenarios === 'object' 
         ? generatedDocs.testScenarios.content 
@@ -184,6 +185,30 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     const traceabilityMatrixContent = typeof generatedDocs.traceabilityMatrix === 'object'
         ? generatedDocs.traceabilityMatrix.content
         : generatedDocs.traceabilityMatrix;
+
+    const allTabs = [
+        { id: 'analysis', name: 'İş Analizi', isStale: false, content: generatedDocs.analysisDoc, icon: <FileText className="h-4 w-4 mr-2" /> },
+        { id: 'viz', name: 'Görselleştirme', isStale: generatedDocs.isVizStale, content: vizContent, icon: <GanttChartSquare className="h-4 w-4 mr-2" /> },
+        { id: 'test', name: 'Test Senaryoları', isStale: generatedDocs.isTestStale, content: testScenariosContent, icon: <Beaker className="h-4 w-4 mr-2" /> },
+        { id: 'traceability', name: 'İzlenebilirlik', isStale: generatedDocs.isTraceabilityStale, content: traceabilityMatrixContent, icon: <GitBranch className="h-4 w-4 mr-2" /> },
+        { id: 'backlog-generation', name: 'Backlog Oluşturma', isStale: generatedDocs.isBacklogStale, content: (generatedDocs.backlogSuggestions || []).length > 0, icon: <Check className="h-4 w-4 mr-2" /> },
+        { id: 'maturity', name: 'Olgunluk', isStale: false, content: true, icon: <Check className="h-4 w-4 mr-2" /> }, // Always has content
+    ];
+
+    const visibleTabs = useMemo(() => {
+        return allTabs.filter(tab => tab.id === 'analysis' || tab.id === 'maturity' || !!tab.content);
+    }, [generatedDocs, vizContent]);
+
+    const creatableDocs = useMemo(() => {
+        return allTabs.filter(tab => (tab.id !== 'analysis' && tab.id !== 'maturity') && !tab.content);
+    }, [generatedDocs, vizContent]);
+    
+    const handleCreateClick = (type: 'viz' | 'test' | 'traceability' | 'backlog-generation') => {
+        onGenerateDoc(type);
+        setIsCreateMenuOpen(false);
+    };
+
+    const isAnalysisDocReady = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
 
     const handleGenerateOrModifyViz = async (prompt?: string) => {
         setIsVisualizing(true);
@@ -248,9 +273,9 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     return (
         <div className="flex flex-col h-full w-full">
             {/* Tabs Navigation */}
-            <div className="px-4 flex-shrink-0 border-b border-slate-200 dark:border-slate-700">
+            <div className="px-4 flex-shrink-0 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
                 <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Tabs">
-                    {docTabs.map(tab => (
+                    {visibleTabs.map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveDocTab(tab.id as any)}
@@ -265,6 +290,44 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                         </button>
                     ))}
                 </nav>
+                
+                 {creatableDocs.length > 0 && (
+                    <div className="relative" ref={createMenuRef}>
+                        <button 
+                            onClick={() => setIsCreateMenuOpen(!isCreateMenuOpen)}
+                            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-100 dark:focus:ring-offset-slate-800 focus:ring-indigo-500 transition"
+                        >
+                            <PlusCircle className="h-4 w-4" />
+                            Yeni Oluştur
+                        </button>
+                        {isCreateMenuOpen && (
+                            <div className="origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white dark:bg-slate-800 ring-1 ring-black ring-opacity-5 focus:outline-none z-20 animate-fade-in-up" style={{animationDuration: '0.1s'}}>
+                                <div className="py-1" role="menu">
+                                    {creatableDocs.map(doc => (
+                                         <button
+                                            key={doc.id}
+                                            onClick={() => handleCreateClick(doc.id as any)}
+                                            disabled={
+                                                (doc.id === 'test' && !isAnalysisDocReady) ||
+                                                (doc.id === 'traceability' && (!isAnalysisDocReady || !testScenariosContent)) ||
+                                                (doc.id === 'backlog-generation' && (!isAnalysisDocReady || !testScenariosContent || !traceabilityMatrixContent))
+                                            }
+                                            title={
+                                                 (doc.id === 'test' && !isAnalysisDocReady) ? "Önce analiz dokümanı oluşturulmalı." :
+                                                 (doc.id === 'traceability' && (!isAnalysisDocReady || !testScenariosContent)) ? "Önce analiz ve test dokümanları oluşturulmalı." : ""
+                                            }
+                                            className="w-full text-left flex items-center px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            role="menuitem"
+                                        >
+                                           {doc.icon}
+                                           {doc.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
             
             {/* Content Area */}

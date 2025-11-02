@@ -30,6 +30,8 @@ function createMockClient(): SupabaseClient {
         eq: () => fromMock,
         order: () => fromMock,
         single: () => thenable,
+        upsert: () => fromMock, // FIX: Add missing 'upsert' method
+        in: () => fromMock,     // FIX: Add missing 'in' method
         ...thenable,
     };
     

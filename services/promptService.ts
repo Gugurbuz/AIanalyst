@@ -1,6 +1,6 @@
 // services/promptService.ts
 
-import type { PromptData, Prompt, PromptVersion } from '../types';
+import type { PromptData, Prompt, PromptVersion, Template } from '../types';
 
 const PROMPT_STORAGE_KEY = 'ai_business_analyst_prompts';
 
@@ -26,7 +26,7 @@ const defaultPrompts: PromptData = [
 
                     **KESİNLİKLE UYULMASI GEREKEN KURALLAR:**
                     1.  **DÜŞÜN, SONRA CEVAP VER:** Cevabını vermeden önce, düşünce sürecini \`<dusunce>...\</dusunce>\` etiketleri içinde açıkla. Bu etiketleri bitirdikten sonra, **iki satır boşluk bırak (\n\n)** ve ardından kullanıcıya yönelik asıl cevabını etiket olmadan yaz.
-                    2.  **SADECE SORU SOR:** İlk birkaç mesaj boyunca senin TEK görevin, ihtiyacı anlamak için netleştirici sorular sormaktır.
+                    2.  **ÖNCELİKLE SORU SOR:** Senin öncelikli görevin, ihtiyacı anlamak için netleştirici sorular sormaktır. Kullanıcının talebini anladığından emin olana kadar soru sormaya devam et. Eğer bir sonraki adımı netleştirecek bir soru formüle edemiyorsan, o ana kadar anladıklarını kısaca özetleyebilir ve "Başka eklemek istediğiniz bir detay var mı?" gibi genel bir soru sorabilirsin.
                         - Örnek Sorular: "Bu özelliğe kimlerin ihtiyacı olacak?", "Bu bilgi hangi iş süreçlerinde kullanılacak?", "Bu özelliğin çözmesini beklediğiniz ana sorun nedir?"
                     3.  **ASLA DOKÜMAN TEKLİF ETME:** Konuşmanın bu erken aşamasında, "dokümana ekleyeyim mi?", "analizi güncelleyeyim mi?" gibi cümleler **KESİNLİKLE KURMA**. Senin görevin dokümantasyon değil, SADECE bilgi toplamaktır.
                     4.  **İSTİSNA:** Sadece ve sadece kullanıcı "doküman oluştur", "analiz yaz", "rapor hazırla" gibi açık bir komut verirse, o zaman ilgili aracı kullanabilirsin. Kullanıcının talebini teyit eden "Anladım, ... konusunu not aldım" gibi cümleler kurup doküman teklif etme.
@@ -116,6 +116,59 @@ const defaultPrompts: PromptData = [
         id: 'analysis',
         name: 'Analiz ve Dokümantasyon',
         prompts: [
+            {
+                id: 'enerjisaAnalysisTemplate',
+                name: 'Enerjisa',
+                description: 'Enerjisa kurumsal standartlarına uygun, detaylı iş analizi şablonu.',
+                is_system_template: true, // Mark as the default system template
+                versions: [createDefaultVersion(`
+                    **GÖREV:** Sen, Enerjisa standartlarına hakim bir Kıdemli İş Analisti yapay zekasısın. Görevin, sana verilen konuşma geçmişini kullanarak, aşağıda belirtilen yapı ve kurallara harfiyen uyan, kapsamlı bir iş analizi dokümanı oluşturmaktır.
+
+                    ## 🔹 ANALİZ DOKÜMANI YAPISI
+
+                    Oluşturacağın veya iyileştireceğin içerik mutlaka şu bölümleri içermelidir:
+
+                    İÇİNDEKİLER
+                    1. ANALİZ KAPSAMI
+                    2. KISALTMALAR
+                    3. İŞ GEREKSİNİMLERİ
+                    3.1. Detay İş Kuralları
+                    3.2. İş Modeli ve Kullanıcı Gereksinimleri
+                    4. FONKSİYONEL GEREKSİNİMLER (FR)
+                    4.1. Fonksiyonel Gereksinim Maddeleri
+                    4.2. Süreç Akışı
+                    5. FONKSİYONEL OLMAYAN GEREKSİNİMLER (NFR)
+                    5.1. Güvenlik ve Yetkilendirme Gereksinimleri
+                    6. SÜREÇ RİSK ANALİZİ
+                    6.1. Kısıtlar ve Varsayımlar
+                    6.2. Bağlılıklar
+                    6.3. Süreç Etkileri
+                    7. ONAY
+                    7.1. İş Analizi
+                    7.2. Değişiklik Kayıtları
+                    7.3. Doküman Onay
+                    7.4. Referans Dokümanlar
+                    8. FONKSİYONEL TASARIM DOKÜMANLARI
+
+                    ---
+
+                    ## 🔹 HER BÖLÜMDE YER ALMASI GEREKENLER
+
+                    **1. ANALİZ KAPSAMI** – Proje adı, iş amacı, kapsam (In-Scope / Out-of-Scope), ilgili sistemler (CRM, C4C, IS-U, ETRM), hedeflenen iş değeri ve kısıtlar.
+                    **2. KISALTMALAR** – Tüm teknik ve iş kısaltmaları tanımlanmalı (ör. KPI, SLA, BRF+, IYS vb).
+                    **3. İŞ GEREKSİNİMLERİ** – “Neden bu analiz yapılıyor?” sorusuna yanıt ver; talebe göre net iş kuralları ve iş modeli detayları oluştur.
+                    **4. FONKSİYONEL GEREKSİNİMLER (FR)** – “As a [rol], I want to [ihtiyaç], so that [fayda]” formatında; her FR için kabul kriterleri ve CRM–C4C–ISU veri akışı dokunma noktaları belirt.
+                    **5. FONKSİYONEL OLMAYAN GEREKSİNİMLER (NFR)** – Performans, güvenlik, KVKK, SLA ve erişilebilirlik kuralları; CHECKTELVALID gibi yetkilendirme kontrolleri.
+                    **6. SÜREÇ RİSK ANALİZİ** – Riskler, etki seviyeleri, mitigasyon planları, kısıtlar ve varsayımlar.
+                    **7. ONAY & REFERANSLAR** – Onaylayan birimler, değişiklik kayıtları, referans dokümanlar (Talep ID, Proje BRD No vb).
+                    **8. FONKSİYONEL TASARIM DOKÜMANLARI** – Wireframe, mock-up, veri modeli, API dokümanları vb.
+
+                    ---
+                    **TALİMAT:**
+                    Dokümanı yalnızca ve yalnızca aşağıda sağlanan konuşma geçmişine dayanarak, yukarıdaki yapı ve kurallara birebir uyarak oluştur. Eksik bilgiler için yer tutucu metinler kullanabilirsin.
+                `)],
+                activeVersionId: 'default',
+            },
             {
                 id: 'checkAnalysisMaturity',
                 name: 'Olgunluk Kontrolü',
@@ -537,6 +590,30 @@ class PromptService {
         return '';
     }
     
+    public getSystemDocumentTemplates(): Template[] {
+        const docTemplates: Template[] = [];
+        const docCategories = ['analysis', 'test', 'traceability', 'visualization'];
+
+        for (const category of this.prompts) {
+            if (docCategories.includes(category.id)) {
+                for (const prompt of category.prompts) {
+                    const activeVersion = prompt.versions.find(v => v.versionId === prompt.activeVersionId) || prompt.versions[0];
+                    if (activeVersion) {
+                        docTemplates.push({
+                            id: prompt.id,
+                            user_id: null, // Indicates it's a system template
+                            name: prompt.name,
+                            document_type: category.id as Template['document_type'],
+                            prompt: activeVersion.prompt,
+                            is_system_template: (prompt as any).is_system_template || false,
+                        });
+                    }
+                }
+            }
+        }
+        return docTemplates;
+    }
+
     public resetToDefaults(): PromptData {
         localStorage.removeItem(PROMPT_STORAGE_KEY);
         const newDefaults = JSON.parse(JSON.stringify(defaultPrompts));

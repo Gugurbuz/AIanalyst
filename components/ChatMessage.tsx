@@ -123,8 +123,7 @@ const ChatMessageComponent: React.FC<ChatMessageProps> = ({ msg, user, onFeedbac
                 </div>
                 {msg.role === 'assistant' && !msg.generativeSuggestion && !isEmptyAssistantMessage && (
                      <Feedback 
-                        messageId={msg.id}
-                        feedback={msg.feedback}
+                        msg={msg}
                         onUpdate={(feedbackData) => onFeedbackUpdate(msg.id, feedbackData)}
                     />
                 )}

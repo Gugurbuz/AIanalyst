@@ -3,12 +3,15 @@ import React from 'react';
 
 export const StreamingIndicator: React.FC = () => {
     return (
-        <div className="inline-block ml-1">
-            <span className="streaming-indicator">
-                <span className="w-1.5 h-1.5 bg-slate-500 dark:bg-slate-400 rounded-full inline-block"></span>
-                <span className="w-1.5 h-1.5 bg-slate-500 dark:bg-slate-400 rounded-full inline-block"></span>
-                <span className="w-1.5 h-1.5 bg-slate-500 dark:bg-slate-400 rounded-full inline-block"></span>
-            </span>
+        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+            <div className="inline-block">
+                <span className="streaming-indicator">
+                    <span className="w-1.5 h-1.5 bg-current rounded-full inline-block"></span>
+                    <span className="w-1.5 h-1.5 bg-current rounded-full inline-block"></span>
+                    <span className="w-1.5 h-1.5 bg-current rounded-full inline-block"></span>
+                </span>
+            </div>
+            <span className="text-sm">Yazıyor...</span>
         </div>
     );
 };

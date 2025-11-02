@@ -3,7 +3,7 @@
 import { GoogleGenAI, Type, Content, FunctionDeclaration, GenerateContentResponse } from "@google/genai";
 import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep, GenerativeSuggestion, LintingIssue, SourcedDocument } from '../types';
 import { promptService } from './promptService'; // Import the new prompt service
-import { v4 as uuidvv4 } from 'uuid';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Gets the effective API key from environment variables.
@@ -207,8 +207,10 @@ export const geminiService = {
             const ai = new GoogleGenAI({ apiKey });
 
             const analysisDocContent = generatedDocs.analysisDoc || "Henüz bir doküman oluşturulmadı.";
-            const isNewConversation = history.filter(m => m.role === 'user' || m.role === 'assistant').length <= 1;
-            const systemInstruction = isNewConversation
+            
+            // Check if a real analysis document exists to decide which system prompt to use.
+            const hasRealAnalysisDoc = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
+            const systemInstruction = !hasRealAnalysisDoc
                 ? promptService.getPrompt('continueConversation')
                 : promptService.getPrompt('proactiveAnalystSystemInstruction').replace('{analysis_document_content}', analysisDocContent);
             

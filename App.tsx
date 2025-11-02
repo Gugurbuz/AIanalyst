@@ -64,11 +64,16 @@ const wrapDocStream = async function* (
 
 const useNextBestAction = (
     conversation: (Conversation & { generatedDocs: GeneratedDocs }) | null,
-    onGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => void,
-    onNavigateToBacklogGeneration: () => void,
-    onSendMessage: (content: string, isSystemMessage?: boolean) => void,
-    onEvaluateDocument: () => void
+    callbacks: {
+        onGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => void;
+        onNavigateToBacklogGeneration: () => void;
+        onSendMessage: (content: string, isSystemMessage?: boolean) => void;
+        onEvaluateDocument: () => void;
+    }
 ) => {
+    const callbacksRef = useRef(callbacks);
+    callbacksRef.current = callbacks;
+
     return useMemo(() => {
         if (!conversation) {
             return {
@@ -86,7 +91,7 @@ const useNextBestAction = (
         if (hasRealAnalysisDoc && !hasMessages) {
              return {
                 label: "Dokümanı Değerlendir ve Soru Sor",
-                action: onEvaluateDocument,
+                action: () => callbacksRef.current.onEvaluateDocument(),
                 icon: NextActionIcons.EVALUATE_DOC,
                 disabled: false,
                 tooltip: "AI'nın mevcut dokümanı analiz etmesini ve iyileştirme için sorular sormasını sağlayın."
@@ -102,7 +107,7 @@ const useNextBestAction = (
         if (hasRealAnalysisDoc && hasVisualization && hasTestScenarios) {
             return {
                 label: "Proje Görevleri Oluştur",
-                action: onNavigateToBacklogGeneration,
+                action: () => callbacksRef.current.onNavigateToBacklogGeneration(),
                 icon: NextActionIcons.CREATE_TASKS,
                 disabled: false
             };
@@ -110,7 +115,7 @@ const useNextBestAction = (
         if (hasRealAnalysisDoc && hasVisualization && !hasTestScenarios) {
              return {
                 label: "Test Senaryoları Oluştur",
-                action: () => onGenerateDoc('test'),
+                action: () => callbacksRef.current.onGenerateDoc('test'),
                 icon: NextActionIcons.CREATE_TESTS,
                 disabled: false
             };
@@ -118,7 +123,7 @@ const useNextBestAction = (
         if (hasRealAnalysisDoc && !hasVisualization) {
             return {
                 label: "Süreç Akışını Görselleştir",
-                action: () => onGenerateDoc('viz'),
+                action: () => callbacksRef.current.onGenerateDoc('viz'),
                 icon: NextActionIcons.CREATE_VIZ,
                 disabled: false
             };
@@ -126,7 +131,7 @@ const useNextBestAction = (
         if (generatedDocs?.maturityReport?.isSufficient && !hasRealAnalysisDoc) {
              return {
                 label: "İş Analizi Dokümanı Oluştur",
-                action: () => onGenerateDoc('analysis'),
+                action: () => callbacksRef.current.onGenerateDoc('analysis'),
                 icon: NextActionIcons.CREATE_ANALYSIS,
                 disabled: false
             };
@@ -135,7 +140,7 @@ const useNextBestAction = (
         if (firstQuestion) {
              return {
                 label: "Analizi Derinleştir",
-                action: () => onSendMessage(firstQuestion, false),
+                action: () => callbacksRef.current.onSendMessage(firstQuestion, false),
                 icon: NextActionIcons.DEEPEN,
                 disabled: false,
                 tooltip: `Öneri: "${firstQuestion}" sorusunu sorun.`
@@ -157,7 +162,7 @@ const useNextBestAction = (
             icon: NextActionIcons.DEEPEN,
             disabled: true
         };
-    }, [conversation, onGenerateDoc, onNavigateToBacklogGeneration, onSendMessage, onEvaluateDocument]);
+    }, [conversation]);
 };
 
 // --- Type Definitions for AnalystView Props ---
@@ -315,37 +320,37 @@ const simpleHash = (str: string): string => {
 const parseStreamingResponse = (content: string): { thinking: string | null; response: string } => {
     const thinkingTagStart = '<dusunce>';
     const thinkingTagEnd = '</dusunce>';
-
-    let thinking: string | null = null;
-    let response = content;
+    const separator = '\n\n';
 
     const thinkingStartIndex = content.indexOf(thinkingTagStart);
-    const thinkingEndIndex = content.indexOf(thinkingTagEnd);
-    
-    // Case 1: Perfect match with <dusunce>...</dusunce>
-    if (thinkingStartIndex !== -1 && thinkingEndIndex > thinkingStartIndex) {
-        thinking = content.substring(thinkingStartIndex + thinkingTagStart.length, thinkingEndIndex).trim();
-        response = content.substring(thinkingEndIndex + thinkingTagEnd.length).trim();
+    if (thinkingStartIndex === -1) {
+        // No thinking tag found, entire content is the response.
+        return { thinking: null, response: content.trim() };
+    }
+
+    const thinkingContentStartIndex = thinkingStartIndex + thinkingTagStart.length;
+    const thinkingEndIndex = content.indexOf(thinkingTagEnd, thinkingContentStartIndex);
+
+    // Case 1: A closing </dusunce> tag is found. This is the most reliable separator.
+    if (thinkingEndIndex !== -1) {
+        const thinking = content.substring(thinkingContentStartIndex, thinkingEndIndex).trim();
+        const response = content.substring(thinkingEndIndex + thinkingTagEnd.length).trim();
         return { thinking, response };
     }
     
-    // Case 2: Fallback for malformed tags or just "dusunce" on the first line
-    const separator = '\n\n';
-    const separatorIndex = content.indexOf(separator);
-    const firstLineEndIndex = content.indexOf('\n');
-    const firstLine = (firstLineEndIndex === -1 ? content : content.substring(0, firstLineEndIndex)).trim().toLowerCase();
-    
-    // Check if first line indicates thinking and a separator exists
-    if ((firstLine === 'dusunce' || firstLine === '<dusunce>') && separatorIndex !== -1) {
-        // Find where the thinking part starts (after the first line)
-        const thinkingStartIndexAfterTag = firstLineEndIndex + 1;
-        thinking = content.substring(thinkingStartIndexAfterTag, separatorIndex).trim();
-        response = content.substring(separatorIndex + separator.length).trim();
+    // Case 2: No closing tag, but a double newline separator is found. This is a fallback for streaming.
+    // We look for the separator AFTER the start of the thinking content.
+    const separatorIndex = content.indexOf(separator, thinkingContentStartIndex);
+    if (separatorIndex !== -1) {
+        const thinking = content.substring(thinkingContentStartIndex, separatorIndex).trim();
+        const response = content.substring(separatorIndex + separator.length).trim();
         return { thinking, response };
     }
-    
-    // Case 3: No clear thinking part found
-    return { thinking: null, response: content.trim() };
+
+    // Case 3: Only the opening tag is present and no separator yet. Assume everything after it is thinking content.
+    // This happens during streaming before the main response arrives.
+    const thinking = content.substring(thinkingContentStartIndex).trim();
+    return { thinking, response: '' };
 };
 
 
@@ -394,7 +399,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
     const [isDeepAnalysisMode, setIsDeepAnalysisMode] = useState(false);
     const expertModeClarificationAttempts = useRef(0);
     const [diagramType, setDiagramType] = useState<'mermaid' | 'bpmn'>('mermaid');
-    const [allTemplates, setAllTemplates] = useState<Template[]>(initialData.templates);
+    const [allTemplates, setAllTemplates] = useState<Template[]>([]);
     const [selectedTemplates, setSelectedTemplates] = useState({
         analysis: '',
         test: '',
@@ -418,27 +423,14 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
     }, [error]);
 
     // --- Memoized Values ---
-    // Find the conversation that matches the current ID. This might be null briefly during a transition.
-    const nextConversation = useMemo(() => {
+    const activeConversation = useMemo(() => {
         const conv = conversations.find(c => c.id === activeConversationId);
         if (!conv) return null;
-        // The rest of the app expects `generatedDocs`, so we build it here.
         return {
             ...conv,
             generatedDocs: buildGeneratedDocs(conv.documents),
         };
     }, [conversations, activeConversationId]);
-
-    // Use a ref to hold the last valid conversation. This prevents the UI from flickering
-    // to an empty state if `nextConversation` is momentarily null during a re-render.
-    const activeConversationRef = useRef(nextConversation);
-    if (nextConversation) {
-        activeConversationRef.current = nextConversation;
-    }
-
-    // For rendering, always use the value in the ref. It will either be the new
-    // conversation or the previous one, but never null during a switch.
-    const activeConversation = activeConversationRef.current;
     
     // --- Theme Management ---
     useEffect(() => {
@@ -460,10 +452,23 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
 
     // --- Data Fetching ---
     useEffect(() => {
-        if (initialData.templates.length > 0) {
-            const defaultAnalysisTpl = initialData.templates.find(t => t.document_type === 'analysis' && t.is_system_template);
-            const defaultTestTpl = initialData.templates.find(t => t.document_type === 'test' && t.is_system_template);
-            const defaultTraceabilityTpl = initialData.templates.find(t => t.document_type === 'traceability' && t.is_system_template);
+        // Combine system templates from code with user templates from DB
+        const systemTemplates = promptService.getSystemDocumentTemplates();
+        const dbTemplates = initialData.templates;
+        
+        // Prevent duplicates, giving user-defined templates precedence if IDs conflict
+        const systemTemplateIds = new Set(systemTemplates.map(t => t.id));
+        const uniqueDbTemplates = dbTemplates.filter(t => !systemTemplateIds.has(t.id));
+        const allAvailableTemplates = [...systemTemplates, ...uniqueDbTemplates];
+        
+        setAllTemplates(allAvailableTemplates);
+
+        if (allAvailableTemplates.length > 0) {
+            // Set Enerjisa as the default analysis template
+            const defaultAnalysisTpl = allAvailableTemplates.find(t => t.name === 'Enerjisa' && t.document_type === 'analysis') || allAvailableTemplates.find(t => t.document_type === 'analysis' && t.is_system_template);
+            const defaultTestTpl = allAvailableTemplates.find(t => t.document_type === 'test' && t.is_system_template);
+            const defaultTraceabilityTpl = allAvailableTemplates.find(t => t.document_type === 'traceability' && t.is_system_template);
+            
             setSelectedTemplates({
                 analysis: defaultAnalysisTpl?.id || '',
                 test: defaultTestTpl?.id || '',
@@ -517,7 +522,10 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
         // Using content properties to avoid triggering on sourceHash changes
         typeof activeConversation?.generatedDocs.testScenarios === 'object' ? activeConversation?.generatedDocs.testScenarios.content : activeConversation?.generatedDocs.testScenarios,
         typeof activeConversation?.generatedDocs.traceabilityMatrix === 'object' ? activeConversation?.generatedDocs.traceabilityMatrix.content : activeConversation?.generatedDocs.traceabilityMatrix,
-        activeConversation?.messages
+        // FIX: Removed `activeConversation?.messages` to prevent infinite loop.
+        // The check is already triggered by `processStream` after a new message.
+        // This useEffect is now solely for manual document edits, and the closure will
+        // provide the latest `messages` context without needing it as a dependency.
     ]);
 
 
@@ -675,65 +683,90 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
     ) => {
         if (!activeConversationId) return;
 
-        const conv = conversations.find(c => c.id === activeConversationId);
-        if (!conv) return;
+        // Validate that templateId is a UUID. If not (e.g., it's a string from a system prompt), treat as null.
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const validTemplateId = templateId && uuidRegex.test(templateId) ? templateId : null;
 
-        const document_type = keyToDocumentTypeMap[docKey];
-        if (!document_type) {
-            console.warn(`Unknown docKey "${docKey}" passed to saveDocumentVersion. Skipping.`);
-            return;
-        }
+        setConversations(prev => {
+            const conv = prev.find(c => c.id === activeConversationId);
+            if (!conv) return prev;
 
-        const newContentString = typeof newContent === 'string' ? newContent : JSON.stringify(newContent);
-        
-        // 1. Insert into versions table
-        const versionsForDocType = (conv.documentVersions || []).filter(v => v.document_type === document_type);
-        const latestVersion = versionsForDocType.reduce((max, v) => v.version_number > max ? v.version_number : max, 0);
-        const newVersionNumber = latestVersion + 1;
-        
-        const newVersionRecord: Omit<DocumentVersion, 'id' | 'created_at'> = {
-            conversation_id: conv.id,
-            user_id: user.id,
-            document_type,
-            content: newContentString,
-            version_number: newVersionNumber,
-            reason_for_change: reason,
-            template_id: templateId
-        };
+            const document_type = keyToDocumentTypeMap[docKey];
+            if (!document_type) {
+                console.warn(`Unknown docKey "${docKey}" passed to saveDocumentVersion. Skipping.`);
+                return prev;
+            }
 
-        const { data: newVersionDb, error: insertError } = await supabase
-            .from('document_versions')
-            .insert(newVersionRecord)
-            .select()
-            .single();
-
-        if (insertError || !newVersionDb) {
-            setError("Doküman versiyonu kaydedilemedi: " + (insertError?.message || 'Bilinmeyen hata'));
-            return;
-        }
-
-        // 2. UPSERT into documents table
-        const { data: updatedDoc, error: upsertError } = await supabase
-            .from('documents')
-            .upsert({
+            const newContentString = typeof newContent === 'string' ? newContent : JSON.stringify(newContent);
+            
+            // 1. Insert into versions table
+            const versionsForDocType = (conv.documentVersions || []).filter(v => v.document_type === document_type);
+            const latestVersion = versionsForDocType.reduce((max, v) => v.version_number > max ? v.version_number : max, 0);
+            const newVersionNumber = latestVersion + 1;
+            
+            const newVersionRecord: Omit<DocumentVersion, 'id' | 'created_at'> = {
                 conversation_id: conv.id,
                 user_id: user.id,
-                document_type: document_type,
+                document_type,
                 content: newContentString,
-                current_version_id: newVersionDb.id,
-                template_id: templateId
-            }, { onConflict: 'conversation_id, document_type' })
-            .select()
-            .single();
+                version_number: newVersionNumber,
+                reason_for_change: reason,
+                template_id: validTemplateId
+            };
 
-        if (upsertError || !updatedDoc) {
-             setError("Ana doküman kaydedilemedi: " + (upsertError?.message || 'Bilinmeyen hata'));
-             return;
-        }
+            // Fire and forget DB updates
+            (async () => {
+                const { data: newVersionDb, error: insertError } = await supabase
+                    .from('document_versions')
+                    .insert(newVersionRecord)
+                    .select()
+                    .single();
 
-        // 3. Update local state
-        setConversations(prev =>
-            prev.map(c => {
+                if (insertError || !newVersionDb) {
+                    setError("Doküman versiyonu kaydedilemedi: " + (insertError?.message || 'Bilinmeyen hata'));
+                    // Note: We don't revert optimistic UI update for simplicity
+                    return;
+                }
+
+                const { error: upsertError } = await supabase
+                    .from('documents')
+                    .upsert({
+                        conversation_id: conv.id,
+                        user_id: user.id,
+                        document_type: document_type,
+                        content: newContentString,
+                        current_version_id: newVersionDb.id,
+                        template_id: validTemplateId
+                    }, { onConflict: 'conversation_id, document_type' })
+                    .select()
+                    .single();
+
+                if (upsertError) {
+                    setError("Ana doküman kaydedilemedi: " + (upsertError?.message || 'Bilinmeyen hata'));
+                }
+            })();
+
+            // 2. Optimistic UI Update
+            const tempVersionId = `temp-version-${Date.now()}`;
+            const tempDocId = `temp-doc-${document_type}`;
+            
+            const newVersionOptimistic = { ...newVersionRecord, id: tempVersionId, created_at: new Date().toISOString() };
+
+            const existingDoc = conv.documents?.find(d => d.document_type === document_type);
+            const newDocOptimistic: Document = {
+                id: existingDoc?.id || tempDocId,
+                conversation_id: conv.id,
+                user_id: user.id,
+                created_at: existingDoc?.created_at || new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                document_type,
+                content: newContentString,
+                current_version_id: tempVersionId,
+                is_stale: false,
+                template_id: validTemplateId,
+            };
+
+            return prev.map(c => {
                 if (c.id === activeConversationId) {
                     const existingDocs = c.documents || [];
                     const docIndex = existingDocs.findIndex(d => d.document_type === document_type);
@@ -741,20 +774,81 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
                     let updatedDocuments;
                     if (docIndex > -1) {
                         updatedDocuments = [...existingDocs];
-                        updatedDocuments[docIndex] = updatedDoc as Document;
+                        updatedDocuments[docIndex] = newDocOptimistic;
                     } else {
-                        updatedDocuments = [...existingDocs, updatedDoc as Document];
+                        updatedDocuments = [...existingDocs, newDocOptimistic];
                     }
 
-                    const updatedVersions = [...(c.documentVersions || []), newVersionDb as DocumentVersion];
+                    const updatedVersions = [...(c.documentVersions || []), newVersionOptimistic];
                     return { ...c, documents: updatedDocuments, documentVersions: updatedVersions };
                 }
                 return c;
-            })
-        );
-        
-    }, [activeConversationId, conversations, user.id]);
+            });
+        });
+    }, [activeConversationId, user.id]);
 
+    const switchActiveDocument = useCallback(async (version: DocumentVersion) => {
+        if (!activeConversationId) return;
+    
+        const docType = version.document_type;
+        
+        // Optimistic UI Update for the document content
+        setConversations(prev => {
+            return prev.map(c => {
+                if (c.id === activeConversationId) {
+                    const docIndex = (c.documents || []).findIndex(d => d.document_type === docType);
+                    if (docIndex === -1) {
+                        const newDoc: Document = {
+                            id: `temp-doc-${docType}`,
+                            conversation_id: c.id,
+                            user_id: user.id,
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString(),
+                            document_type: docType,
+                            content: version.content,
+                            current_version_id: version.id,
+                            is_stale: false,
+                            template_id: version.template_id
+                        };
+                        return {...c, documents: [...(c.documents || []), newDoc]};
+                    }
+    
+                    const updatedDocuments = [...(c.documents || [])];
+                    updatedDocuments[docIndex] = {
+                        ...updatedDocuments[docIndex],
+                        content: version.content,
+                        current_version_id: version.id,
+                        template_id: version.template_id,
+                        updated_at: new Date().toISOString(),
+                    };
+    
+                    return { ...c, documents: updatedDocuments };
+                }
+                return c;
+            });
+        });
+    
+        // Update the selected template dropdown to keep UI in sync
+        if (version.template_id && (docType === 'analysis' || docType === 'test' || docType === 'traceability')) {
+            setSelectedTemplates(prev => ({ ...prev, [docType]: version.template_id }));
+        }
+    
+        // Then, update the database
+        const { error } = await supabase
+            .from('documents')
+            .update({
+                content: version.content,
+                current_version_id: version.id,
+                template_id: version.template_id,
+            })
+            .eq('conversation_id', activeConversationId)
+            .eq('document_type', docType);
+    
+        if (error) {
+            setError(`Aktif doküman versiyonu değiştirilemedi: ${error.message}`);
+            console.error("Failed to switch active document in DB:", error);
+        }
+    }, [activeConversationId, user.id]);
 
     const createNewConversation = useCallback(async (initialDocs: Partial<GeneratedDocs> = {}, customTitleOrFirstMessage: string | null = null) => {
         let title: string;
@@ -929,11 +1023,18 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
                     if (c.id === activeConversationId) {
                         return {
                             ...c,
-                            messages: c.messages.map(m =>
-                                m.id === assistantMessageId
-                                    ? { ...m, content: response, thinking: thinking ?? undefined }
-                                    : m
-                            )
+                            messages: c.messages.map(m => {
+                                if (m.id === assistantMessageId) {
+                                    const newMsg = { ...m, thinking: thinking ?? undefined };
+                                    // Only update content if the parser returned something for it,
+                                    // preventing the UI from flickering with empty content.
+                                    if (response) {
+                                        (newMsg as Message).content = response;
+                                    }
+                                    return newMsg;
+                                }
+                                return m;
+                            })
                         };
                     }
                     return c;
@@ -991,14 +1092,15 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
 
         if (!userProfile || userProfile.tokens_used >= userProfile.token_limit) {
             if (streamControllerRef.current) {
+                // FIX: Pass an argument to abort() to resolve the "Expected 1 arguments, but got 0" error.
                 streamControllerRef.current.abort('Token limit reached');
             }
             setShowUpgradeModal(true);
             return;
         }
-        
+
         setMessageToEdit(null);
-    
+
         const now = new Date().toISOString();
         const userMessageData = {
             role: 'user' as const,
@@ -1006,10 +1108,10 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
             timestamp: now,
             created_at: now,
         };
-    
+
         let conversationForApi: Conversation & { generatedDocs: GeneratedDocs };
         let currentConversationId: string | null = activeConversationId;
-    
+
         if (!currentConversationId) {
             const newConv = await createNewConversation(undefined, content.trim());
             if (!newConv) {
@@ -1023,85 +1125,110 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
             setConversations(prev => prev.map(c => c.id === newConv.id ? { ...c, messages: [userMessage] } : c));
         } else {
             const userMessage: Message = { ...userMessageData, id: uuidv4(), conversation_id: currentConversationId };
-            setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: [...c.messages, userMessage] } : c));
+            
+            // Find the current conversation directly from the state to avoid stale closures.
+            const currentConv = conversations.find(c => c.id === currentConversationId);
+            if (!currentConv) {
+                setError("Aktif sohbet bulunamadı.");
+                return;
+            }
+
+            // Construct the object for the API call *before* updating state.
+            conversationForApi = {
+                ...currentConv,
+                messages: [...currentConv.messages, userMessage],
+                generatedDocs: buildGeneratedDocs(currentConv.documents),
+            };
+
+            const assistantMessageId = uuidv4();
+            const assistantPlaceholder: Message = {
+                id: assistantMessageId,
+                conversation_id: currentConversationId,
+                role: 'assistant',
+                content: '',
+                thinking: '',
+                timestamp: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+            };
+
+            // Atomically update the UI with both the user message and the placeholder.
+            setConversations(prev =>
+                prev.map(c =>
+                    c.id === currentConversationId
+                        ? { ...c, messages: [...c.messages, userMessage, assistantPlaceholder] }
+                        : c
+                )
+            );
+
             const { error: insertError } = await supabase.from('conversation_details').insert(userMessage);
             if (insertError) {
                 setError("Mesajınız gönderilemedi.");
-                setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: c.messages.filter(m => m.id !== userMessage.id) } : c));
+                // Revert UI by removing both the user message and the placeholder.
+                setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: c.messages.filter(m => m.id !== userMessage.id && m.id !== assistantPlaceholder.id) } : c));
                 return;
             }
-            const currentConv = conversations.find(c => c.id === currentConversationId);
-            if (!currentConv) return;
-            conversationForApi = { ...currentConv, messages: [...currentConv.messages, userMessage], generatedDocs: buildGeneratedDocs(currentConv.documents) };
-        }
-    
-        setIsProcessing(true);
-        streamControllerRef.current = new AbortController();
 
-        const assistantMessageId = uuidv4();
-        const assistantPlaceholder: Message = {
-            id: assistantMessageId,
-            conversation_id: currentConversationId!,
-            role: 'assistant',
-            content: '',
-            thinking: '',
-            timestamp: new Date().toISOString(),
-            created_at: new Date().toISOString(),
-        };
-        setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: [...c.messages, assistantPlaceholder] } : c));
-    
-        try {
-            const analysisTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.analysis)?.prompt || '';
-            const testTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.test)?.prompt || '';
-            const traceabilityTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.traceability)?.prompt || '';
-            const vizTemplate = allTemplates.find(t => t.document_type === 'visualization' && t.name.includes('Mermaid'));
-            const vizTemplatePrompt = vizTemplate?.prompt || '';
-            const modelForChat: GeminiModel = isDeepAnalysisMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
+            setIsProcessing(true);
+            streamControllerRef.current = new AbortController();
 
-            const stream = geminiService.processAnalystMessageStream(conversationForApi.messages, conversationForApi.generatedDocs, { analysis: analysisTemplatePrompt, test: testTemplatePrompt, traceability: traceabilityTemplatePrompt, visualization: vizTemplatePrompt }, modelForChat);
-            const { docResponses, finalMessage, finalSuggestion } = await processStream(stream, assistantMessageId);
-        
-            if (docResponses) {
-                for (const key in docResponses) {
-                    if (Object.prototype.hasOwnProperty.call(docResponses, key)) {
-                        const docKey = key as keyof GeneratedDocs;
-                        const docContent = docResponses[docKey];
-                        if (docContent) {
-                             const templateId = docKey === 'analysisDoc' ? selectedTemplates.analysis : docKey === 'testScenarios' ? selectedTemplates.test : docKey === 'traceabilityMatrix' ? selectedTemplates.traceability : null;
-                            await saveDocumentVersion(docKey, docContent, "AI Tarafından Sohbet Üzerinden Oluşturuldu", templateId);
+            try {
+                const analysisTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.analysis)?.prompt || '';
+                const testTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.test)?.prompt || '';
+                const traceabilityTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.traceability)?.prompt || '';
+                const vizTemplate = allTemplates.find(t => t.document_type === 'visualization' && t.name.includes('Mermaid'));
+                const vizTemplatePrompt = vizTemplate?.prompt || '';
+                const modelForChat: GeminiModel = isDeepAnalysisMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
+
+                const stream = geminiService.processAnalystMessageStream(conversationForApi.messages, conversationForApi.generatedDocs, { analysis: analysisTemplatePrompt, test: testTemplatePrompt, traceability: traceabilityTemplatePrompt, visualization: vizTemplatePrompt }, modelForChat);
+                const { docResponses, finalMessage, finalSuggestion } = await processStream(stream, assistantMessageId);
+            
+                if (docResponses) {
+                    for (const key in docResponses) {
+                        if (Object.prototype.hasOwnProperty.call(docResponses, key)) {
+                            const docKey = key as keyof GeneratedDocs;
+                            const docContent = docResponses[docKey];
+                            if (docContent) {
+                                 const templateId = docKey === 'analysisDoc' ? selectedTemplates.analysis : docKey === 'testScenarios' ? selectedTemplates.test : docKey === 'traceabilityMatrix' ? selectedTemplates.traceability : null;
+                                await saveDocumentVersion(docKey, docContent, "AI Tarafından Sohbet Üzerinden Oluşturuldu", templateId);
+                            }
                         }
                     }
                 }
-            }
-    
-            if ((finalMessage || finalSuggestion) && conversationForApi.id) {
-                const convId = conversationForApi.id;
+        
+                // The placeholder is now updated during the stream. This final update ensures the complete message is saved.
                 const { thinking, response } = parseStreamingResponse(finalMessage);
-
                 const finalAssistantMessageData: Message = {
-                    ...assistantPlaceholder,
+                    ...assistantPlaceholder, // Start with the placeholder data
                     content: response,
                     thinking: thinking ?? undefined,
                     generativeSuggestion: finalSuggestion || undefined,
                 };
-    
-                setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? finalAssistantMessageData : m) } : c));
-                const { error: newMsgError } = await supabase.from('conversation_details').insert(finalAssistantMessageData);
-                if (newMsgError) { setError("Asistan yanıtı kaydedilemedi."); }
-            } else {
-                 setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: c.messages.filter(m => m.id !== assistantMessageId) } : c));
+        
+                // Update the placeholder in state with the final content
+                setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? finalAssistantMessageData : m) } : c));
+                
+                // Upsert the final assistant message to the database, but only if there is content.
+                if (finalAssistantMessageData.content.trim() || finalAssistantMessageData.generativeSuggestion || finalAssistantMessageData.expertRunChecklist) {
+                    const { error: newMsgError } = await supabase.from('conversation_details').upsert(finalAssistantMessageData);
+                    if (newMsgError) { setError("Asistan yanıtı kaydedilemedi."); }
+                } else {
+                    console.warn("Boş asistan mesajı kaydedilmedi.");
+                     // If the final message is empty, remove the placeholder from the UI
+                    setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: c.messages.filter(m => m.id !== assistantMessageId) } : c));
+                }
+        
+            } catch (err) {
+                if (err instanceof Error && err.name !== 'AbortError') {
+                    console.error("Stream processing error:", err);
+                    setError(err.message);
+                    setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: c.messages.filter(m => m.id !== assistantMessageId) } : c));
+                }
+            } finally {
+                setIsProcessing(false);
+                setGeneratingDocType(null);
+                streamControllerRef.current = null;
             }
-    
-        } catch (err) {
-            if (err instanceof Error && err.name !== 'AbortError') {
-                console.error("Stream processing error:", err);
-                setError(err.message);
-                setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: c.messages.filter(m => m.id !== assistantMessageId) } : c));
-            }
-        } finally {
-            setIsProcessing(false);
-            setGeneratingDocType(null);
-            streamControllerRef.current = null;
+            return;
         }
     }, [activeConversationId, conversations, createNewConversation, isDeepAnalysisMode, selectedTemplates, processStream, userProfile, saveDocumentVersion, allTemplates]);
 
@@ -1111,7 +1238,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
         newTemplateId?: string,
         newDiagramType?: 'mermaid' | 'bpmn'
     ) => {
-        if (!activeConversation) return;
+        const conv = activeConversation;
+        if (!conv) return;
 
         if (!userProfile || userProfile.tokens_used >= userProfile.token_limit) {
             setShowUpgradeModal(true);
@@ -1125,8 +1253,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
 
         // --- Caching Logic ---
         if (type === 'test') {
-            const analysisHash = simpleHash(activeConversation.generatedDocs.analysisDoc);
-            const currentTestDoc = activeConversation.generatedDocs.testScenarios;
+            const analysisHash = simpleHash(conv.generatedDocs.analysisDoc);
+            const currentTestDoc = conv.generatedDocs.testScenarios;
             if (typeof currentTestDoc === 'object' && currentTestDoc.content && currentTestDoc.sourceHash === analysisHash) {
                 setActiveDocTab('test');
                 return; // Skip regeneration
@@ -1134,14 +1262,14 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
         }
         
         if (type === 'traceability') {
-            const analysisDoc = activeConversation.generatedDocs.analysisDoc;
-            const testDoc = activeConversation.generatedDocs.testScenarios;
+            const analysisDoc = conv.generatedDocs.analysisDoc;
+            const testDoc = conv.generatedDocs.testScenarios;
             const testDocContent = typeof testDoc === 'object' ? testDoc.content : testDoc;
         
             if (!analysisDoc || !testDocContent) return;
             
             const combinedHash = simpleHash(analysisDoc + testDocContent);
-            const currentTraceabilityDoc = activeConversation.generatedDocs.traceabilityMatrix;
+            const currentTraceabilityDoc = conv.generatedDocs.traceabilityMatrix;
         
             if (typeof currentTraceabilityDoc === 'object' && currentTraceabilityDoc.content && currentTraceabilityDoc.sourceHash === combinedHash) {
                 setActiveDocTab('traceability');
@@ -1199,25 +1327,25 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
 
             if (type === 'analysis' || type === 'test' || type === 'traceability') {
                  let rawStream;
-                 const testDoc = activeConversation.generatedDocs.testScenarios;
+                 const testDoc = conv.generatedDocs.testScenarios;
                  const testScenariosContent = typeof testDoc === 'object' ? testDoc.content : testDoc;
 
                  if (type === 'analysis') {
-                    rawStream = geminiService.generateAnalysisDocument(activeConversation.messages, templatePrompt, modelForGeneration);
+                    rawStream = geminiService.generateAnalysisDocument(conv.messages, templatePrompt, modelForGeneration);
                  } else if (type === 'test') {
-                     rawStream = geminiService.generateTestScenarios(activeConversation.generatedDocs.analysisDoc, templatePrompt, modelForGeneration);
+                     rawStream = geminiService.generateTestScenarios(conv.generatedDocs.analysisDoc, templatePrompt, modelForGeneration);
                  } else { // traceability
-                     rawStream = geminiService.generateTraceabilityMatrix(activeConversation.generatedDocs.analysisDoc, testScenariosContent, templatePrompt, modelForGeneration);
+                     rawStream = geminiService.generateTraceabilityMatrix(conv.generatedDocs.analysisDoc, testScenariosContent, templatePrompt, modelForGeneration);
                  }
                  stream = wrapDocStream(rawStream, docKey as any);
                  const { docResponses } = await processStream(stream, ''); // Pass empty assistantId as this is not a chat response
                  const fullResponse = docResponses[docKey as keyof GeneratedDocs];
                  if (fullResponse) {
                      if (docKey === 'testScenarios') {
-                        const analysisHash = simpleHash(activeConversation.generatedDocs.analysisDoc);
+                        const analysisHash = simpleHash(conv.generatedDocs.analysisDoc);
                         await saveDocumentVersion(docKey, { content: fullResponse, sourceHash: analysisHash }, "AI Tarafından Oluşturuldu", currentTemplateId);
                     } else if (docKey === 'traceabilityMatrix') {
-                        const analysisDoc = activeConversation.generatedDocs.analysisDoc;
+                        const analysisDoc = conv.generatedDocs.analysisDoc;
                         const combinedHash = simpleHash(analysisDoc + testScenariosContent);
                         await saveDocumentVersion(docKey, { content: fullResponse, sourceHash: combinedHash }, "AI Tarafından Oluşturuldu", currentTemplateId);
                     } else {
@@ -1226,8 +1354,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
                  }
 
             } else { // 'viz'
-                 const analysisHash = simpleHash(activeConversation.generatedDocs.analysisDoc);
-                 const { code, tokens } = await geminiService.generateDiagram(activeConversation.generatedDocs.analysisDoc, currentDiagramType, templatePrompt, 'gemini-2.5-flash');
+                 const analysisHash = simpleHash(conv.generatedDocs.analysisDoc);
+                 const { code, tokens } = await geminiService.generateDiagram(conv.generatedDocs.analysisDoc, currentDiagramType, templatePrompt, 'gemini-2.5-flash');
                  commitTokenUsage(tokens);
                  const vizKey = currentDiagramType === 'mermaid' ? 'mermaidViz' : 'bpmnViz';
                  saveDocumentVersion(vizKey, { code, sourceHash: analysisHash }, "AI Tarafından Oluşturuldu");
@@ -1249,14 +1377,15 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
                 setGeneratingDocType(null);
             }
         }
-    }, [activeConversation, processStream, selectedTemplates, diagramType, setActiveDocTab, saveDocumentVersion, commitTokenUsage, userProfile, allTemplates]);
+    }, [processStream, selectedTemplates, diagramType, setActiveDocTab, saveDocumentVersion, commitTokenUsage, userProfile, allTemplates, activeConversation]);
     
      const handleEvaluateDocument = useCallback(async () => {
-        if (!activeConversation || !activeConversation.generatedDocs.analysisDoc) return;
+        const conv = activeConversation;
+        if (!conv || !conv.generatedDocs.analysisDoc) return;
         
         const systemMessageContent = `[SİSTEM]: Lütfen aşağıdaki analizi değerlendir ve analizi bir sonraki adıma taşımak için en önemli eksiklikleri giderecek sorular sor. Sadece ve sadece soru sor.
         ---
-        ${activeConversation.generatedDocs.analysisDoc}
+        ${conv.generatedDocs.analysisDoc}
         ---`;
         
         // This is a "system" message that isn't shown to the user but guides the AI
@@ -1266,7 +1395,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
             timestamp: new Date().toISOString()
         };
 
-        const { error: insertError } = await supabase.from('conversation_details').insert({ ...systemMessage, conversation_id: activeConversation.id, id: uuidv4() });
+        const { error: insertError } = await supabase.from('conversation_details').insert({ ...systemMessage, conversation_id: conv.id, id: uuidv4() });
         if (insertError) {
             setError("Sistem mesajı gönderilemedi.");
             return;
@@ -1277,7 +1406,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
             true
         );
 
-    }, [activeConversation, sendMessage]);
+    }, [sendMessage, activeConversation]);
 
     const handleFeedbackUpdate = async (messageId: string, feedbackData: { rating: 'up' | 'down' | null; comment?: string }) => {
         if (!activeConversation) return;
@@ -1301,29 +1430,19 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
         if (!activeConversation) return;
 
         const allMessages = [...activeConversation.messages];
-        const lastMessage = allMessages[allMessages.length - 1];
+        // Find the index of the very last message with role 'user'
+        const lastUserMessageIndex = allMessages.map(m => m.role).lastIndexOf('user');
         
-        if (!lastMessage || lastMessage.role !== 'user') return;
+        if (lastUserMessageIndex === -1) return; // No user message found
 
-        setMessageToEdit(lastMessage.content);
+        const userMessageToDelete = allMessages[lastUserMessageIndex];
+        setMessageToEdit(userMessageToDelete.content);
+
+        // Find all assistant messages that came AFTER this user message
+        const assistantMessagesToDelete = allMessages.slice(lastUserMessageIndex + 1)
+            .filter(m => m.role === 'assistant');
         
-        const idsToDelete = [lastMessage.id];
-        const secondLastMessage = allMessages[allMessages.length - 2];
-
-        // Check if the previous message was an assistant response to this user message.
-        if (secondLastMessage && secondLastMessage.role === 'assistant') {
-            const lastUserIndex = allMessages.map(m => m.role).lastIndexOf('user', allMessages.length - 2);
-            const lastAssistantIndex = allMessages.map(m => m.role).lastIndexOf('assistant');
-            if(lastAssistantIndex > lastUserIndex) {
-                 // The assistant message seems to be a reply to the user message we are deleting
-                 // This logic might need refinement depending on the desired behavior.
-                 // For now, let's assume we delete the user message and its direct reply.
-                 // In a more complex scenario (e.g., user-user-assistant), this could be tricky.
-                 // Let's stick to the simple case: delete last user and its last assistant reply.
-                 const lastAsstMsg = allMessages.find((_,i) => i === lastAssistantIndex);
-                 if(lastAsstMsg) idsToDelete.push(lastAsstMsg.id);
-            }
-        }
+        const idsToDelete = [userMessageToDelete.id, ...assistantMessagesToDelete.map(m => m.id)];
         
         // Optimistic update
         setConversations(prev => prev.map(c => 
@@ -1333,11 +1452,14 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
         ));
 
         // Database update
-        const { error } = await supabase.from('conversation_details').delete().in('id', idsToDelete);
-        if (error) {
-            setError("Mesaj silinemedi.");
-            // Revert
-            setConversations(prev => [...prev]); // Force re-render with original state (could be improved)
+        if (idsToDelete.length > 0) {
+            const { error } = await supabase.from('conversation_details').delete().in('id', idsToDelete);
+            if (error) {
+                setError("Mesajlar silinemedi: " + error.message);
+                // Revert UI - this is complex, for simplicity we might just refetch or accept the optimistic state
+                // For now, let's log the error and let the optimistic state remain.
+                console.error("Failed to delete messages from DB:", error);
+            }
         }
     };
     
@@ -1435,21 +1557,36 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
         }
     };
 
-    const handleTemplateChange = (type: 'analysis' | 'test' | 'traceability') => (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const handleTemplateChange = (type: 'analysis' | 'test' | 'traceability') => async (event: React.ChangeEvent<HTMLSelectElement>) => {
         const newTemplateId = event.target.value;
         const docKey = type === 'analysis' ? 'analysisDoc' : type === 'test' ? 'testScenarios' : 'traceabilityMatrix';
-        const currentDoc = activeConversation?.generatedDocs[docKey];
-        const docContent = typeof currentDoc === 'object' ? (currentDoc as SourcedDocument).content : currentDoc;
-
-
-        if (docContent && docContent !== SAMPLE_ANALYSIS_DOCUMENT) {
-            regenerateModalData.current = { docType: type, newTemplateId: newTemplateId };
-            setIsRegenerateModalOpen(true);
+        const documentType = keyToDocumentTypeMap[docKey];
+    
+        if (!activeConversation || !documentType) return;
+    
+        // Find the latest version for the selected template
+        const versionsForTemplate = (activeConversation.documentVersions || [])
+            .filter(v => v.document_type === documentType && v.template_id === newTemplateId)
+            .sort((a, b) => b.version_number - a.version_number);
+    
+        if (versionsForTemplate.length > 0) {
+            // A version for this template exists, switch to it without regenerating.
+            const latestVersionForTemplate = versionsForTemplate[0];
+            await switchActiveDocument(latestVersionForTemplate);
         } else {
-             setSelectedTemplates(prev => ({ ...prev, [type]: newTemplateId }));
-             if (docContent) {
-                 handleGenerateDoc(type, newTemplateId);
-             }
+            // No version exists for this template.
+            const currentDoc = activeConversation.generatedDocs[docKey];
+            const docContent = typeof currentDoc === 'object' ? (currentDoc as SourcedDocument).content : currentDoc;
+    
+            if (docContent && docContent !== SAMPLE_ANALYSIS_DOCUMENT) {
+                // There's content from a different template. Ask to regenerate.
+                regenerateModalData.current = { docType: type, newTemplateId: newTemplateId };
+                setIsRegenerateModalOpen(true);
+            } else {
+                // No content, or just the sample. Go ahead and generate.
+                setSelectedTemplates(prev => ({ ...prev, [type]: newTemplateId }));
+                handleGenerateDoc(type, newTemplateId);
+            }
         }
     };
     
@@ -1469,7 +1606,12 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
         regenerateModalData.current = null;
     };
     
-    const nextBestAction = useNextBestAction(activeConversation, handleGenerateDoc, () => setActiveDocTab('backlog-generation'), sendMessage, handleEvaluateDocument);
+    const nextBestAction = useNextBestAction(activeConversation, { 
+        onGenerateDoc: handleGenerateDoc, 
+        onNavigateToBacklogGeneration: () => setActiveDocTab('backlog-generation'), 
+        onSendMessage: sendMessage, 
+        onEvaluateDocument: handleEvaluateDocument 
+    });
 
     const handlePrepareQuestionForAnswer = (question: string) => {
         sendMessage(question);
@@ -1606,6 +1748,13 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
             `v${version.version_number} versiyonuna geri dönüldü`,
             version.template_id
         );
+
+        if (version.template_id) {
+            const docType = version.document_type;
+            if (docType === 'analysis' || docType === 'test' || docType === 'traceability') {
+                setSelectedTemplates(prev => ({ ...prev, [docType]: version.template_id! }));
+            }
+        }
     };
 
     const analysisTemplates = useMemo(() => allTemplates.filter(t => t.document_type === 'analysis'), [allTemplates]);

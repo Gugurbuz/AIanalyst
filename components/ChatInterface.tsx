@@ -266,6 +266,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     accept=".txt,.md"
                  />
                  <div className="flex-1 flex flex-col border border-slate-300 dark:border-slate-600 rounded-lg focus-within:ring-2 focus-within:ring-indigo-500 bg-slate-100 dark:bg-slate-700 transition-shadow">
+                    {isDeepAnalysisMode && (
+                        <div className="text-center text-xs p-1.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-200 font-semibold border-b border-indigo-200 dark:border-indigo-800">
+                            Derin Analiz Modu Aktif (Yanıtlar daha yavaş olabilir)
+                        </div>
+                    )}
                     {(isConversationStarted || !nextAction.disabled) && (
                         <div className="flex flex-wrap items-center justify-center gap-2 p-2 border-b border-slate-200 dark:border-slate-600">
                              <div className="flex items-center gap-1 border-r border-slate-300 dark:border-slate-600 pr-2">

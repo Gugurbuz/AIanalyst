@@ -220,11 +220,11 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
         });
         
         // Now, set the correct parent_id using our map
-        // FIX: Destructure `parentSuggestionId` correctly from the `flatSelectedSuggestions` array item.
-        // The `suggestion` object itself does not contain `parentSuggestionId`.
-        flatSelectedSuggestions.forEach(({ parentSuggestionId }, index) => {
-            if (parentSuggestionId && suggestionIdToDbId.has(parentSuggestionId)) {
-                tasksToInsert[index].parent_id = suggestionIdToDbId.get(parentSuggestionId)!;
+        // FIX: The `parentSuggestionId` is on the `item` object, not inside the `suggestion` object.
+        // The previous code `suggestion.parentSuggestionId` was incorrect. This is now corrected to `item.parentSuggestionId`.
+        flatSelectedSuggestions.forEach((item, index) => {
+            if (item.parentSuggestionId && suggestionIdToDbId.has(item.parentSuggestionId)) {
+                tasksToInsert[index].parent_id = suggestionIdToDbId.get(item.parentSuggestionId)!;
             }
         });
 

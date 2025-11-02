@@ -103,13 +103,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeConversat
                 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                 <div className="flex flex-col flex-1 overflow-hidden">
                     <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700 h-16 flex-shrink-0">
-                        <div className="flex items-center gap-2">
-                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className="h-6 w-6" aria-hidden="true">
-                              <path className="fill-indigo-600 dark:fill-indigo-500" d="M50 5L0 95h25l25-50 25 50h25L50 5z"/>
-                              <circle className="fill-indigo-300 dark:fill-indigo-400" cx="50" cy="58" r="10"/>
-                            </svg>
-                            <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200 truncate">Sohbetler</h2>
-                        </div>
+                        <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200 truncate">Sohbetler</h2>
                         {/* Close button for mobile sidebar */}
                         <button onClick={() => setIsOpen(false)} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none md:hidden" aria-label="Kenar çubuğunu kapat">
                            <X className="h-6 w-6 text-slate-600 dark:text-slate-400" />
