@@ -326,7 +326,7 @@ export const geminiService = {
         } finally {
             if (responseGenerated) {
                 try {
-                    const { report, tokens } = await geminiService.checkAnalysisMaturity(history, 'gemini-2.5-flash-lite'); 
+                    const { report, tokens } = await geminiService.checkAnalysisMaturity(history, generatedDocs, 'gemini-2.5-flash-lite'); 
                     yield { type: 'usage_update', tokens };
                     yield { type: 'maturity_update', report };
                 } catch (maturityError) {
@@ -418,7 +418,7 @@ export const geminiService = {
         };
     },
     
-    checkAnalysisMaturity: async (history: Message[], model: GeminiModel, modelConfig?: object): Promise<{ report: MaturityReport, tokens: number }> => {
+    checkAnalysisMaturity: async (history: Message[], generatedDocs: GeneratedDocs, model: GeminiModel, modelConfig?: object): Promise<{ report: MaturityReport, tokens: number }> => {
         const schema = {
             type: Type.OBJECT,
             properties: {
@@ -444,7 +444,30 @@ export const geminiService = {
         };
         
         const basePrompt = promptService.getPrompt('checkAnalysisMaturity');
-        const prompt = `${basePrompt}\n\nKonuşma Geçmişi:\n${formatHistory(history)}`;
+        
+        const testScenariosContent = typeof generatedDocs.testScenarios === 'object' 
+            ? generatedDocs.testScenarios.content 
+            : generatedDocs.testScenarios;
+
+        const traceabilityMatrixContent = typeof generatedDocs.traceabilityMatrix === 'object'
+            ? generatedDocs.traceabilityMatrix.content
+            : generatedDocs.traceabilityMatrix;
+            
+        const documentsContext = `
+            **Mevcut Proje Dokümanları:**
+            ---
+            **1. İş Analizi Dokümanı:**
+            ${generatedDocs.analysisDoc || "Henüz oluşturulmadı."}
+            ---
+            **2. Test Senaryoları:**
+            ${testScenariosContent || "Henüz oluşturulmadı."}
+            ---
+            **3. İzlenebilirlik Matrisi:**
+            ${traceabilityMatrixContent || "Henüz oluşturulmadı."}
+            ---
+        `;
+
+        const prompt = `${basePrompt}\n\n${documentsContext}\n\n**Değerlendirilecek Konuşma Geçmişi:**\n${formatHistory(history)}`;
         
         const config = { responseMimeType: "application/json", responseSchema: schema, ...modelConfig };
 

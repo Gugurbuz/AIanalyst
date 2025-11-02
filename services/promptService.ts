@@ -121,7 +121,7 @@ const defaultPrompts: PromptData = [
                 name: 'Olgunluk Kontrolü',
                 description: 'Konuşmanın doküman oluşturmak için yeterli olup olmadığını değerlendirir.',
                 versions: [createDefaultVersion(`
-                    **GÖREV:** Sen, bir iş analizi sürecini denetleyen, son derece yetenekli ve objektif bir Kıdemli İş Analistisin. Sağlanan konuşma geçmişini dikkatlice inceleyerek, analizin çok boyutlu olgunluğunu değerlendir. Amacın, analizin her bir kritik alandaki mevcut durumunu puanlamak ve bu puanların arkasındaki mantığı, özellikle kullanıcının son katkılarını dikkate alarak açıklamaktır.
+                    **GÖREV:** Sen, bir iş analizi sürecini denetleyen, son derece yetenekli ve objektif bir Kıdemli İş Analistisin. Sana sağlanan **konuşma geçmişini VE mevcut proje dokümanlarını** dikkatlice inceleyerek, analizin çok boyutlu olgunluğunu değerlendir. Amacın, analizin her bir kritik alandaki mevcut durumunu puanlamak ve bu puanların arkasındaki mantığı açıklamaktır.
 
                     **DEĞERLENDİRME KRİTERLERİ (Her birini 0-100 arası puanla):**
                     1.  **Kapsam (scope):** Projenin amacı, sınırları (içeride/dışarıda olanlar) ve iş hedefleri ne kadar net?
@@ -138,7 +138,7 @@ const defaultPrompts: PromptData = [
                         - **70-89:** 'İyi'
                         - **90-100:** 'Mükemmel'
                     4.  \`isSufficient\` değerini, \`overallScore\` 70'in üzerindeyse \`true\`, değilse \`false\` olarak ayarla.
-                    5.  **En Önemli Adım - Bağlamsal Özet:** \`summary\` alanında, puanların neden bu şekilde olduğunu açıkla. Özellikle kullanıcının **son mesajıyla eklediği bilgilerin** analizi nasıl etkilediğini vurgula. Örneğin: "Kullanıcının eklediği teknik fizibilite detayları sayesinde Teknik puan önemli ölçüde arttı. Bu, projenin ayaklarının daha sağlam yere basmasını sağladı. Ancak bu yeni bilgiler, veri kalitesi ve hata yönetimiyle ilgili yeni soruları (NFR) gündeme getirdi. Bu nedenle şimdi bu konulara odaklanmalıyız." gibi bir açıklama yap.
+                    5.  **En Önemli Adım - Bağlamsal Özet:** \`summary\` alanında, puanların neden bu şekilde olduğunu açıkla. Sadece konuşma geçmişini değil, **dokümanların mevcut içeriğini de** göz önünde bulundurarak bütünsel bir değerlendirme yap. Örneğin: "Analiz dokümanındaki teknik detayların netleşmesiyle Teknik puan arttı. Ancak, test senaryolarının hala yüzeysel olması ve kullanıcı akışlarını tam kapsamamaması nedeniyle Kullanıcı Akışı puanı düşük kaldı. Bu nedenle şimdi bu konulara odaklanmalıyız." gibi bir açıklama yap.
                     6.  Analizi bir sonraki adıma taşımak için en kritik eksiklikleri \`missingTopics\` olarak listele ve bu eksiklikleri giderecek en önemli soruları \`suggestedQuestions\` olarak öner.
                     7.  \`justification\` alanında, genel durumu tek bir cümleyle özetle. (Örn: "Teknik altyapı netleşti, ancak kullanıcı senaryoları hala belirsiz.")
 
