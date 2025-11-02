@@ -10,7 +10,7 @@ import { Visualizations } from './Visualizations';
 import { ThemeSwitcher } from './ThemeSwitcher';
 
 interface PublicViewProps {
-    shareId: string;
+    conversation: Conversation;
 }
 
 const LoadingScreen: React.FC = () => (
@@ -80,10 +80,7 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
 };
 
 
-export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
-    const [conversation, setConversation] = useState<Conversation | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
     const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'system');
     
     // --- Theme Management ---
@@ -103,44 +100,6 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
         setTheme(newTheme);
         localStorage.setItem('theme', newTheme);
     };
-
-    useEffect(() => {
-        const fetchSharedConversation = async () => {
-            setIsLoading(true);
-            setError(null);
-            
-            // FIX: Fetch documents and document_versions along with the conversation.
-            const { data, error } = await supabase
-                .from('conversations')
-                .select('*, conversation_details(*), documents(*), document_versions(*)')
-                .eq('share_id', shareId)
-                .eq('is_shared', true)
-                .single();
-
-            if (error) {
-                console.error('Error fetching shared conversation:', error);
-                setError('Bu analize erişilemiyor. Linkin doğru olduğundan emin olun veya paylaşım ayarları değiştirilmiş olabilir.');
-            } else if (data) {
-                // FIX: Populate documents and documentVersions in the conversation object.
-                const convWithDetails = {
-                    ...data,
-                    messages: (data.conversation_details || []).sort(
-                        (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                    ),
-                    documents: data.documents || [],
-                    documentVersions: (data.document_versions || []).sort(
-                        (a: DocumentVersion, b: DocumentVersion) => a.version_number - b.version_number
-                    )
-                };
-                setConversation(convWithDetails as Conversation);
-            } else {
-                 setError('Paylaşılan analiz bulunamadı.');
-            }
-            setIsLoading(false);
-        };
-
-        fetchSharedConversation();
-    }, [shareId]);
     
     // Create a mock user object for the ChatMessageHistory component
     const mockUser: User = {
@@ -150,14 +109,6 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
       aud: 'authenticated',
       created_at: new Date().toISOString(),
     };
-
-    if (isLoading) {
-        return <LoadingScreen />;
-    }
-
-    if (error) {
-        return <ErrorScreen message={error} />;
-    }
 
     if (!conversation) {
         return <ErrorScreen message="Paylaşılan analiz bulunamadı." />;
@@ -205,8 +156,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                         <div className="max-w-4xl mx-auto w-full">
                              <ChatMessageHistory
                                 user={mockUser}
-                                chatHistory={messages} 
-                                isLoading={false}
+                                chatHistory={messages}
                                 onFeedbackUpdate={noOpWithArgs}
                                 onEditLastUserMessage={noOpWithArgs}
                                 onApplySuggestion={noOpWithArgs}
@@ -218,66 +168,4 @@ export const PublicView: React.FC<PublicViewProps> = ({ shareId }) => {
                              {generatedDocs.analysisDoc && (
                                 <div className="max-w-4xl mx-auto w-full bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700">
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-                                        <h3 className="text-md font-bold">Analiz Dokümanı</h3>
-                                    </div>
-                                    {/* FIX: Pass required 'documentVersions' prop. */}
-                                    <DocumentCanvas content={generatedDocs.analysisDoc} onContentChange={noOpWithArgs} docKey='analysisDoc' onModifySelection={noOp} inlineModificationState={null} isGenerating={false} filename={`${conversation.title}-analiz`} onAddTokens={noOpWithArgs} documentVersions={conversation.documentVersions} />
-                                </div>
-                            )}
-
-                             {vizContent && (
-                                <div className="max-w-4xl mx-auto w-full bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700">
-                                    <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-                                        <h3 className="text-md font-bold">Süreç Akış Diyagramı</h3>
-                                    </div>
-                                    <Visualizations 
-                                        content={vizContent}
-                                        onModifyDiagram={noOp}
-                                        onGenerateDiagram={noOpWithArgs}
-                                        isLoading={false}
-                                        error={null}
-                                        diagramType={diagramType}
-                                        isAnalysisDocReady={!!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini")}
-                                    />
-                                </div>
-                             )}
-
-                            {generatedDocs.testScenarios && (
-                                <div className="max-w-4xl mx-auto w-full bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700">
-                                    <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-                                        <h3 className="text-md font-bold">Test Senaryoları</h3>
-                                    </div>
-                                    {/* FIX: Pass required 'documentVersions' prop. */}
-                                    {/* FIX: The 'content' prop for DocumentCanvas expects a string, but 'testScenarios' can be an object. Extract the 'content' property if it is an object. */}
-                                    <DocumentCanvas content={testScenariosContent} onContentChange={noOpWithArgs} docKey='testScenarios' onModifySelection={noOp} inlineModificationState={null} isGenerating={false} filename={`${conversation.title}-test-senaryolari`} isTable onAddTokens={noOpWithArgs} documentVersions={conversation.documentVersions} />
-                                </div>
-                            )}
-
-                            {generatedDocs.traceabilityMatrix && (
-                                <div className="max-w-4xl mx-auto w-full bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700">
-                                    <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-                                        <h3 className="text-md font-bold">İzlenebilirlik Matrisi</h3>
-                                    </div>
-                                    {/* FIX: Pass required 'documentVersions' prop. */}
-                                    {/* FIX: The 'content' prop for DocumentCanvas expects a string, but 'traceabilityMatrix' can be an object. Extract the 'content' property if it is an object. */}
-                                    <DocumentCanvas 
-                                        content={traceabilityMatrixContent} 
-                                        onContentChange={noOpWithArgs} 
-                                        docKey="traceabilityMatrix" 
-                                        onModifySelection={noOp} 
-                                        inlineModificationState={null}
-                                        isGenerating={false}
-                                        filename={`${conversation.title}-izlenebilirlik`}
-                                        isTable
-                                        onAddTokens={noOpWithArgs}
-                                        documentVersions={conversation.documentVersions}
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-            </main>
-        </div>
-    );
-};
+                                        <h3 className="text

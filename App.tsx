@@ -25,10 +25,12 @@ import { SAMPLE_ANALYSIS_DOCUMENT } from './templates';
 import type { User, Conversation, Message, Theme, AppMode, GeminiModel, GeneratedDocs, FeedbackItem, Template, VizData, ExpertStep, GenerativeSuggestion, DocumentVersion, Document, DocumentType, UserProfile, SourcedDocument } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import { FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, X, AlertTriangle } from 'lucide-react';
+import type { AppData } from './index';
 
 interface AppProps {
   user: User;
   onLogout: () => void;
+  initialData: AppData;
 }
 
 // --- Icons for the new smart button ---
@@ -347,12 +349,13 @@ const parseStreamingResponse = (content: string): { thinking: string | null; res
 };
 
 
-export const App: React.FC<AppProps> = ({ user, onLogout }) => {
+export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
     // --- Core State ---
-    const [conversations, setConversations] = useState<Conversation[]>([]);
-    const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-    const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-    const [isDataLoading, setIsDataLoading] = useState(true);
+    const [conversations, setConversations] = useState<Conversation[]>(initialData.conversations);
+    const [activeConversationId, setActiveConversationId] = useState<string | null>(
+        initialData.conversations.length > 0 ? initialData.conversations[0].id : null
+    );
+    const [userProfile, setUserProfile] = useState<UserProfile | null>(initialData.profile);
     const [isProcessing, setIsProcessing] = useState(false);
     const [generatingDocType, setGeneratingDocType] = useState<'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -391,7 +394,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     const [isDeepAnalysisMode, setIsDeepAnalysisMode] = useState(false);
     const expertModeClarificationAttempts = useRef(0);
     const [diagramType, setDiagramType] = useState<'mermaid' | 'bpmn'>('mermaid');
-    const [allTemplates, setAllTemplates] = useState<Template[]>([]);
+    const [allTemplates, setAllTemplates] = useState<Template[]>(initialData.templates);
     const [selectedTemplates, setSelectedTemplates] = useState({
         analysis: '',
         test: '',
@@ -415,7 +418,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     }, [error]);
 
     // --- Memoized Values ---
-    const activeConversation = useMemo(() => {
+    // Find the conversation that matches the current ID. This might be null briefly during a transition.
+    const nextConversation = useMemo(() => {
         const conv = conversations.find(c => c.id === activeConversationId);
         if (!conv) return null;
         // The rest of the app expects `generatedDocs`, so we build it here.
@@ -424,6 +428,17 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             generatedDocs: buildGeneratedDocs(conv.documents),
         };
     }, [conversations, activeConversationId]);
+
+    // Use a ref to hold the last valid conversation. This prevents the UI from flickering
+    // to an empty state if `nextConversation` is momentarily null during a re-render.
+    const activeConversationRef = useRef(nextConversation);
+    if (nextConversation) {
+        activeConversationRef.current = nextConversation;
+    }
+
+    // For rendering, always use the value in the ref. It will either be the new
+    // conversation or the previous one, but never null during a switch.
+    const activeConversation = activeConversationRef.current;
     
     // --- Theme Management ---
     useEffect(() => {
@@ -445,64 +460,17 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
 
     // --- Data Fetching ---
     useEffect(() => {
-        const fetchInitialData = async () => {
-            setIsDataLoading(true);
-            
-            // Fetch profile, conversations, and templates in parallel
-            const [profileResult, conversationsResult, templatesResult] = await Promise.all([
-                authService.getProfile(user.id),
-                supabase
-                    .from('conversations')
-                    .select('*, conversation_details(*), document_versions(*), documents(*)')
-                    .eq('user_id', user.id)
-                    .order('created_at', { ascending: false }),
-                authService.fetchTemplates(user.id)
-            ]);
-
-            // Process profile
-            if (profileResult) {
-                setUserProfile(profileResult);
-            } else {
-                setError("Kullanıcı profili yüklenemedi. Lütfen tekrar giriş yapmayı deneyin.");
-            }
-            
-            // Process templates
-            setAllTemplates(templatesResult);
-            const defaultAnalysisTpl = templatesResult.find(t => t.document_type === 'analysis' && t.is_system_template);
-            const defaultTestTpl = templatesResult.find(t => t.document_type === 'test' && t.is_system_template);
-            const defaultTraceabilityTpl = templatesResult.find(t => t.document_type === 'traceability' && t.is_system_template);
+        if (initialData.templates.length > 0) {
+            const defaultAnalysisTpl = initialData.templates.find(t => t.document_type === 'analysis' && t.is_system_template);
+            const defaultTestTpl = initialData.templates.find(t => t.document_type === 'test' && t.is_system_template);
+            const defaultTraceabilityTpl = initialData.templates.find(t => t.document_type === 'traceability' && t.is_system_template);
             setSelectedTemplates({
                 analysis: defaultAnalysisTpl?.id || '',
                 test: defaultTestTpl?.id || '',
                 traceability: defaultTraceabilityTpl?.id || '',
             });
-
-            // Process conversations
-            if (conversationsResult.error) {
-                console.error(conversationsResult.error);
-                setError("Sohbetler yüklenirken bir hata oluştu.");
-                setConversations([]);
-            } else if (conversationsResult.data) {
-                const conversationsWithDetails = conversationsResult.data.map((conv: any) => ({
-                    ...conv,
-                    messages: (conv.conversation_details || []).sort(
-                        (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                    ),
-                    documentVersions: (conv.document_versions || []).sort(
-                        (a: DocumentVersion, b: DocumentVersion) => a.version_number - b.version_number
-                    ),
-                    documents: conv.documents || [],
-                }));
-                setConversations(conversationsWithDetails as Conversation[]);
-                if (!activeConversationId && conversationsWithDetails.length > 0) {
-                    setActiveConversationId(conversationsWithDetails[0].id);
-                }
-            }
-            setIsDataLoading(false);
-        };
-
-        fetchInitialData();
-    }, [user.id, activeConversationId]);
+        }
+    }, [initialData.templates]);
     
     // Reset expert mode attempt counter when switching conversations
     useEffect(() => {
@@ -1643,18 +1611,6 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
     const analysisTemplates = useMemo(() => allTemplates.filter(t => t.document_type === 'analysis'), [allTemplates]);
     const testTemplates = useMemo(() => allTemplates.filter(t => t.document_type === 'test'), [allTemplates]);
     const traceabilityTemplates = useMemo(() => allTemplates.filter(t => t.document_type === 'traceability'), [allTemplates]);
-
-    if (isDataLoading) {
-        return (
-            <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-900">
-                <svg className="animate-spin h-8 w-8 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8
- 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-            </div>
-        );
-    }
 
     return (
         <div className="font-sans bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 h-screen flex flex-col overflow-hidden">
