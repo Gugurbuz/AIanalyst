@@ -1,6 +1,6 @@
 // components/DocumentWorkspace.tsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import type { Conversation, Template, MaturityReport, GeneratedDocs, Document, DocumentType, SourcedDocument } from '../types';
+import type { Conversation, Template, MaturityReport, GeneratedDocs, Document, DocumentType, SourcedDocument, DocumentVersion } from '../types';
 import { DocumentCanvas } from './DocumentCanvas'; // Changed from GeneratedDocument
 import { Visualizations } from './Visualizations';
 import { MaturityCheckReport } from './MaturityCheckReport';
@@ -65,6 +65,7 @@ interface DocumentWorkspaceProps {
     diagramType: 'mermaid' | 'bpmn';
     setDiagramType: (type: 'mermaid' | 'bpmn') => void;
     onAddTokens: (tokens: number) => void;
+    onRestoreVersion: (version: DocumentVersion) => void;
 }
 
 const StaleIndicator = ({ isStale }: { isStale?: boolean }) => {
@@ -95,6 +96,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     diagramType,
     setDiagramType,
     onAddTokens,
+    onRestoreVersion,
 }) => {
     
     // Local state for visualization to make it non-blocking
@@ -285,6 +287,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             filename={`${conversation.title}-analiz`}
                             documentVersions={conversation.documentVersions}
                             onAddTokens={onAddTokens}
+                            onRestoreVersion={onRestoreVersion}
                         />
                     </div>
                 )}
@@ -348,6 +351,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             generateButtonText="Test Senaryoları Oluştur"
                             isGenerationDisabled={isProcessing || !isAnalysisDocReady}
                             generationDisabledTooltip={!isAnalysisDocReady ? "Senaryo oluşturmak için önce geçerli bir analiz dokümanı oluşturmalısınız." : ""}
+                            onRestoreVersion={onRestoreVersion}
                         />
                     </div>
                 )}
@@ -373,6 +377,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             templates={templates.traceability}
                             selectedTemplate={selectedTemplates.traceability}
                             onTemplateChange={onTemplateChange.traceability}
+                            onRestoreVersion={onRestoreVersion}
                         />
                     </div>
                 )}

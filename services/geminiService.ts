@@ -26,6 +26,7 @@ export type StreamChunk =
     | { type: 'doc_stream_chunk'; docKey: 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix'; chunk: string; updatedReport?: MaturityReport | null }
     | { type: 'visualization_update'; content: string; }
     | { type: 'chat_response'; content: string }
+    | { type: 'chat_stream_chunk'; chunk: string }
     | { type: 'status_update'; message: string }
     | { type: 'maturity_update'; report: MaturityReport }
     | { type: 'expert_run_update'; checklist: ExpertStep[]; isComplete: boolean; finalMessage?: string; }
@@ -206,19 +207,14 @@ export const geminiService = {
             const ai = new GoogleGenAI({ apiKey });
 
             const analysisDocContent = generatedDocs.analysisDoc || "Henüz bir doküman oluşturulmadı.";
-            // Heuristic to determine if it's the start of a conversation.
-            // If there's only one message (the user's first), it's a new conversation.
             const isNewConversation = history.filter(m => m.role === 'user' || m.role === 'assistant').length <= 1;
-
-            // If it's a new conversation, always use the initial prompt to ask clarifying questions.
-            // Otherwise, use the proactive prompt that knows about the document context.
             const systemInstruction = isNewConversation
                 ? promptService.getPrompt('continueConversation')
                 : promptService.getPrompt('proactiveAnalystSystemInstruction').replace('{analysis_document_content}', analysisDocContent);
             
             const geminiHistory = convertMessagesToGeminiFormat(history);
 
-            const response = await ai.models.generateContent({
+            const responseStream = await ai.models.generateContentStream({
                 model: model,
                 contents: geminiHistory,
                 config: {
@@ -227,94 +223,100 @@ export const geminiService = {
                 }
             });
 
-            if (response.usageMetadata?.totalTokenCount) {
-                yield { type: 'usage_update', tokens: response.usageMetadata.totalTokenCount };
-            }
-            
-            const functionCalls = response.functionCalls;
-            
-            if (functionCalls && functionCalls.length > 0) {
-                for (const fc of functionCalls) {
-                    const functionName = fc.name;
-                    if (functionName === 'performGenerativeTask') {
-                        const args = fc.args as { task_description: string, target_section: string };
-                        yield { type: 'status_update', message: `"${args.target_section}" bölümü için öneriler hazırlanıyor...` };
-                        
-                        const suggestionPrompt = promptService.getPrompt('generateSectionSuggestions')
-                            .replace('{task_description}', args.task_description)
-                            .replace('{target_section_name}', args.target_section)
-                            .replace('{analysis_document}', analysisDocContent);
-                        
-                        const schema = {
-                            type: Type.OBJECT,
-                            properties: {
-                                new_content_suggestions: {
-                                    type: Type.ARRAY,
-                                    items: { type: Type.STRING }
-                                },
-                            },
-                            required: ['new_content_suggestions']
-                        };
-                        const config = { responseMimeType: "application/json", responseSchema: schema };
+            let firstChunk = true;
+            let hasFunctionCall = false;
+            let totalTokens = 0;
 
-                        const { text: jsonString, tokens } = await generateContent(suggestionPrompt, 'gemini-2.5-pro', config);
-                        yield { type: 'usage_update', tokens };
-                        const result = JSON.parse(jsonString);
+            for await (const chunk of responseStream) {
+                if (chunk.usageMetadata?.totalTokenCount) {
+                    totalTokens = chunk.usageMetadata.totalTokenCount;
+                }
 
-                        const suggestionPayload: GenerativeSuggestion = {
-                            title: `"${args.target_section}" Bölümünü Geliştirmek İçin Önerilerim`,
-                            suggestions: result.new_content_suggestions,
-                            targetSection: args.target_section,
-                            context: args.task_description
-                        };
-                        
-                        yield { type: 'generative_suggestion', suggestion: suggestionPayload };
-                        responseGenerated = true;
+                if (firstChunk) {
+                    firstChunk = false;
+                    const functionCalls = chunk.functionCalls;
 
-                    } else if (functionName === 'generateAnalysisDocument') {
-                        // ... (rest of the logic is the same, just need to handle streams now)
-                        for await (const chunk of geminiService.generateAnalysisDocument(history, templates.analysis, model)) {
-                            yield chunk;
+                    if (functionCalls && functionCalls.length > 0) {
+                        hasFunctionCall = true;
+                        for (const fc of functionCalls) {
+                            const functionName = fc.name;
+                            if (functionName === 'performGenerativeTask') {
+                                const args = fc.args as { task_description: string, target_section: string };
+                                yield { type: 'status_update', message: `"${args.target_section}" bölümü için öneriler hazırlanıyor...` };
+                                
+                                const suggestionPrompt = promptService.getPrompt('generateSectionSuggestions')
+                                    .replace('{task_description}', args.task_description)
+                                    .replace('{target_section_name}', args.target_section)
+                                    .replace('{analysis_document}', analysisDocContent);
+                                
+                                const schema = {
+                                    type: Type.OBJECT,
+                                    properties: { new_content_suggestions: { type: Type.ARRAY, items: { type: Type.STRING } } },
+                                    required: ['new_content_suggestions']
+                                };
+                                const config = { responseMimeType: "application/json", responseSchema: schema };
+
+                                const { text: jsonString, tokens } = await generateContent(suggestionPrompt, 'gemini-2.5-pro', config);
+                                yield { type: 'usage_update', tokens };
+                                const result = JSON.parse(jsonString);
+
+                                const suggestionPayload: GenerativeSuggestion = {
+                                    title: `"${args.target_section}" Bölümünü Geliştirmek İçin Önerilerim`,
+                                    suggestions: result.new_content_suggestions,
+                                    targetSection: args.target_section,
+                                    context: args.task_description
+                                };
+                                
+                                yield { type: 'generative_suggestion', suggestion: suggestionPayload };
+                                responseGenerated = true;
+
+                            } else if (functionName === 'generateAnalysisDocument') {
+                                responseGenerated = true;
+                                for await (const docChunk of geminiService.generateAnalysisDocument(history, templates.analysis, model)) {
+                                    yield docChunk;
+                                }
+                                yield { type: 'chat_stream_chunk', chunk: "İş analizi dokümanını oluşturdum. Çalışma alanından inceleyebilirsiniz." };
+
+                            } else if (functionName === 'generateTestScenarios') {
+                                responseGenerated = true;
+                                yield { type: 'status_update', message: 'Test senaryoları hazırlanıyor...' };
+                                for await (const docChunk of geminiService.generateTestScenarios(generatedDocs.analysisDoc, templates.test, model)) {
+                                   yield docChunk;
+                                }
+                                yield { type: 'chat_stream_chunk', chunk: "Test senaryolarını oluşturdum. Çalışma alanından inceleyebilirsiniz." };
+                            } else if (functionName === 'generateTraceabilityMatrix') {
+                                responseGenerated = true;
+                                yield { type: 'status_update', message: 'İzlenebilirlik matrisi oluşturuluyor...' };
+                                const testScenariosContent = typeof generatedDocs.testScenarios === 'object' ? generatedDocs.testScenarios.content : generatedDocs.testScenarios;
+                                for await (const docChunk of geminiService.generateTraceabilityMatrix(generatedDocs.analysisDoc, testScenariosContent, templates.traceability, model)) {
+                                   yield docChunk;
+                                }
+                                yield { type: 'chat_stream_chunk', chunk: "İzlenebilirlik matrisini oluşturdum. Çalışma alanından inceleyebilirsiniz." };
+                            } else if (functionName === 'generateVisualization') {
+                                responseGenerated = true;
+                                yield { type: 'status_update', message: 'Süreç akışı görselleştiriliyor...' };
+                                const { code: vizCode, tokens } = await geminiService.generateDiagram(generatedDocs.analysisDoc, 'mermaid', templates.visualization, model);
+                                yield { type: 'usage_update', tokens };
+                                yield { type: 'visualization_update', content: vizCode };
+                                yield { type: 'chat_stream_chunk', chunk: "Süreç akış diyagramını oluşturdum. Çalışma alanından inceleyebilirsiniz." };
+                            }
                         }
-                        yield { type: 'chat_response', content: "İş analizi dokümanını oluşturdum. Çalışma alanından inceleyebilirsiniz." };
-                        responseGenerated = true;
-
-                    } else if (functionName === 'generateTestScenarios') {
-                        yield { type: 'status_update', message: 'Test senaryoları hazırlanıyor...' };
-                        for await (const chunk of geminiService.generateTestScenarios(generatedDocs.analysisDoc, templates.test, model)) {
-                           yield chunk;
-                        }
-                        yield { type: 'chat_response', content: "Test senaryolarını oluşturdum. Çalışma alanından inceleyebilirsiniz." };
-                        responseGenerated = true;
-                    } else if (functionName === 'generateTraceabilityMatrix') {
-                        yield { type: 'status_update', message: 'İzlenebilirlik matrisi oluşturuluyor...' };
-                        // FIX: Extract the string content from testScenarios, which can be a string or a SourcedDocument object.
-                        const testScenariosContent = typeof generatedDocs.testScenarios === 'object' ? generatedDocs.testScenarios.content : generatedDocs.testScenarios;
-                        for await (const chunk of geminiService.generateTraceabilityMatrix(generatedDocs.analysisDoc, testScenariosContent, templates.traceability, model)) {
-                           yield chunk;
-                        }
-                        yield { type: 'chat_response', content: "İzlenebilirlik matrisini oluşturdum. Çalışma alanından inceleyebilirsiniz." };
-                        responseGenerated = true;
-                    } else if (functionName === 'generateVisualization') {
-                        yield { type: 'status_update', message: 'Süreç akışı görselleştiriliyor...' };
-                        const { code: vizCode, tokens } = await geminiService.generateDiagram(generatedDocs.analysisDoc, 'mermaid', templates.visualization, model);
-                        yield { type: 'usage_update', tokens };
-                        yield { type: 'visualization_update', content: vizCode };
-                        yield { type: 'chat_response', content: "Süreç akış diyagramını oluşturdum. Çalışma alanından inceleyebilirsiniz." };
-                        responseGenerated = true;
                     }
                 }
-            } else {
-                 // No function calls, handle text response
-                const textResponse = response.text;
-                if (textResponse) {
-                    yield { type: 'chat_response', content: textResponse };
-                    responseGenerated = true;
-                } else {
-                    // Fallback if model returns neither text nor function call
-                    yield { type: 'chat_response', content: "Ne demek istediğinizi anlayamadım, farklı bir şekilde ifade edebilir misiniz?" };
+
+                if (hasFunctionCall) {
+                    if (totalTokens > 0) { yield { type: 'usage_update', tokens: totalTokens }; }
+                    break;
+                }
+
+                if (chunk.text) {
+                    yield { type: 'chat_stream_chunk', chunk: chunk.text };
                     responseGenerated = true;
                 }
+            }
+            
+            if (totalTokens > 0 && !hasFunctionCall) {
+                yield { type: 'usage_update', tokens: totalTokens };
             }
 
         } catch (error) {
@@ -323,15 +325,12 @@ export const geminiService = {
             handleGeminiError(error);
         } finally {
             if (responseGenerated) {
-                // After any successful response, run a background maturity check.
                 try {
-                    // Use a 'lite' model for speed and cost-effectiveness
                     const { report, tokens } = await geminiService.checkAnalysisMaturity(history, 'gemini-2.5-flash-lite'); 
                     yield { type: 'usage_update', tokens };
                     yield { type: 'maturity_update', report };
                 } catch (maturityError) {
                     console.warn("Arka plan olgunluk kontrolü başarısız oldu:", maturityError);
-                    // Do not yield an error to the user, as this is a background task.
                 }
             }
         }

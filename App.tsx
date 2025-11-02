@@ -208,7 +208,6 @@ const AnalystView: React.FC<AnalystViewProps> = ({
                         <ChatMessageHistory
                             user={user}
                             chatHistory={activeConversation.messages}
-                            isLoading={isProcessing && !generatingDocType}
                             onFeedbackUpdate={onFeedbackUpdate}
                             onEditLastUserMessage={onEditLastUserMessage}
                             onApplySuggestion={onApplySuggestion}
@@ -309,6 +308,42 @@ const simpleHash = (str: string): string => {
         hash |= 0; // Convert to 32bit integer
     }
     return hash.toString();
+};
+
+const parseStreamingResponse = (content: string): { thinking: string | null; response: string } => {
+    const thinkingTagStart = '<dusunce>';
+    const thinkingTagEnd = '</dusunce>';
+
+    let thinking: string | null = null;
+    let response = content;
+
+    const thinkingStartIndex = content.indexOf(thinkingTagStart);
+    const thinkingEndIndex = content.indexOf(thinkingTagEnd);
+    
+    // Case 1: Perfect match with <dusunce>...</dusunce>
+    if (thinkingStartIndex !== -1 && thinkingEndIndex > thinkingStartIndex) {
+        thinking = content.substring(thinkingStartIndex + thinkingTagStart.length, thinkingEndIndex).trim();
+        response = content.substring(thinkingEndIndex + thinkingTagEnd.length).trim();
+        return { thinking, response };
+    }
+    
+    // Case 2: Fallback for malformed tags or just "dusunce" on the first line
+    const separator = '\n\n';
+    const separatorIndex = content.indexOf(separator);
+    const firstLineEndIndex = content.indexOf('\n');
+    const firstLine = (firstLineEndIndex === -1 ? content : content.substring(0, firstLineEndIndex)).trim().toLowerCase();
+    
+    // Check if first line indicates thinking and a separator exists
+    if ((firstLine === 'dusunce' || firstLine === '<dusunce>') && separatorIndex !== -1) {
+        // Find where the thinking part starts (after the first line)
+        const thinkingStartIndexAfterTag = firstLineEndIndex + 1;
+        thinking = content.substring(thinkingStartIndexAfterTag, separatorIndex).trim();
+        response = content.substring(separatorIndex + separator.length).trim();
+        return { thinking, response };
+    }
+    
+    // Case 3: No clear thinking part found
+    return { thinking: null, response: content.trim() };
 };
 
 
@@ -827,9 +862,9 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         }
     };
     
-    const processStream = useCallback(async (stream: AsyncGenerator<StreamChunk>) => {
+    const processStream = useCallback(async (stream: AsyncGenerator<StreamChunk>, assistantMessageId: string) => {
         let docResponses: { [key in keyof GeneratedDocs]?: string } = {};
-        let finalMessage = "";
+        let accumulatedMessage = "";
         let finalSuggestion: GenerativeSuggestion | null = null;
     
         for await (const chunk of stream) {
@@ -875,10 +910,41 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             } else if (chunk.type === 'visualization_update' && activeConversationId) {
                 const vizKey = diagramType === 'mermaid' ? 'mermaidViz' : 'bpmnViz';
                 saveDocumentVersion(vizKey, { code: chunk.content, sourceHash: '' }, "AI Tarafından Oluşturuldu");
+            } else if (chunk.type === 'chat_stream_chunk' && activeConversationId) {
+                accumulatedMessage += chunk.chunk;
+                const { thinking, response } = parseStreamingResponse(accumulatedMessage);
+                
+                setConversations(prev => prev.map(c => {
+                    if (c.id === activeConversationId) {
+                        return {
+                            ...c,
+                            messages: c.messages.map(m =>
+                                m.id === assistantMessageId
+                                    ? { ...m, content: response, thinking: thinking ?? undefined }
+                                    : m
+                            )
+                        };
+                    }
+                    return c;
+                }));
+
             } else if (chunk.type === 'chat_response' && activeConversationId) {
-                finalMessage = chunk.content;
+                accumulatedMessage = chunk.content;
+                const { thinking, response } = parseStreamingResponse(accumulatedMessage);
+                setConversations(prev => prev.map(c => {
+                    if (c.id === activeConversationId) {
+                        return { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? { ...m, content: response, thinking: thinking ?? undefined } : m) };
+                    }
+                    return c;
+                }));
             } else if (chunk.type === 'generative_suggestion' && activeConversationId) {
                 finalSuggestion = chunk.suggestion;
+                setConversations(prev => prev.map(c => {
+                    if (c.id === activeConversationId) {
+                        return { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? { ...m, generativeSuggestion: finalSuggestion! } : m) };
+                    }
+                    return c;
+                }));
             } else if (chunk.type === 'usage_update' && activeConversationId) {
                 commitTokenUsage(chunk.tokens);
             } else if (chunk.type === 'maturity_update' && activeConversationId) {
@@ -891,19 +957,13 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                     if (c.id === activeConversationId) {
                         const lastMessage = c.messages[c.messages.length - 1];
                         if (lastMessage && lastMessage.role === 'assistant') {
-                            return {
-                                ...c,
-                                messages: [
-                                    ...c.messages.slice(0, -1),
-                                    { ...lastMessage, expertRunChecklist: chunk.checklist }
-                                ]
-                            };
+                            return { ...c, messages: [ ...c.messages.slice(0, -1), { ...lastMessage, expertRunChecklist: chunk.checklist } ] };
                         }
                     }
                     return c;
                 }));
                 if (chunk.isComplete) {
-                    finalMessage = chunk.finalMessage || "Süreç tamamlandı.";
+                    accumulatedMessage = chunk.finalMessage || "Süreç tamamlandı.";
                 }
             } else if (chunk.type === 'error') {
                 setError(chunk.message);
@@ -911,7 +971,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
             }
         }
     
-        return { docResponses, finalMessage, finalSuggestion };
+        return { docResponses, finalMessage: accumulatedMessage, finalSuggestion };
     }, [activeConversationId, diagramType, commitTokenUsage, saveDocumentVersion, user.id]);
 
 
@@ -920,7 +980,6 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
 
         if (!userProfile || userProfile.tokens_used >= userProfile.token_limit) {
             if (streamControllerRef.current) {
-                // FIX: Pass an argument to abort() to resolve the "Expected 1 arguments, but got 0" error.
                 streamControllerRef.current.abort('Token limit reached');
             }
             setShowUpgradeModal(true);
@@ -941,176 +1000,92 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         let currentConversationId: string | null = activeConversationId;
     
         if (!currentConversationId) {
-            // --- NEW CONVERSATION ---
             const newConv = await createNewConversation(undefined, content.trim());
             if (!newConv) {
                 setError("Sohbet oluşturulamadı.");
                 return;
             }
             currentConversationId = newConv.id;
-            
-            // At this point, newConv is in state, but may not have messages yet.
-            // We'll add the message to the state and then call the API.
             const userMessage: Message = { ...userMessageData, id: uuidv4(), conversation_id: newConv.id };
-             const { error: insertError } = await supabase.from('conversation_details').insert(userMessage);
-            if (insertError) {
-                setError("Mesajınız kaydedilemedi.");
-                return;
-            }
-            
-            // Construct the conversation object for the API call
-            conversationForApi = {
-                ...newConv,
-                messages: [userMessage],
-                generatedDocs: buildGeneratedDocs(newConv.documents),
-            };
-    
-            // Update the global state to include the new message
+            await supabase.from('conversation_details').insert(userMessage);
+            conversationForApi = { ...newConv, messages: [userMessage], generatedDocs: buildGeneratedDocs(newConv.documents) };
             setConversations(prev => prev.map(c => c.id === newConv.id ? { ...c, messages: [userMessage] } : c));
-    
         } else {
-            // --- EXISTING CONVERSATION ---
             const userMessage: Message = { ...userMessageData, id: uuidv4(), conversation_id: currentConversationId };
-            
-            // Immediately update UI for responsiveness
-            setConversations(prev => prev.map(c => 
-                c.id === currentConversationId 
-                ? { ...c, messages: [...c.messages, userMessage] } 
-                : c
-            ));
-            
+            setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: [...c.messages, userMessage] } : c));
             const { error: insertError } = await supabase.from('conversation_details').insert(userMessage);
             if (insertError) {
                 setError("Mesajınız gönderilemedi.");
-                // Revert UI update
-                setConversations(prev => prev.map(c => 
-                    c.id === currentConversationId
-                    ? { ...c, messages: c.messages.filter(m => m.id !== userMessage.id) }
-                    : c
-                ));
+                setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: c.messages.filter(m => m.id !== userMessage.id) } : c));
                 return;
             }
-    
-            // Construct the conversation object for the API call from the *updated* state
             const currentConv = conversations.find(c => c.id === currentConversationId);
-            if (!currentConv) return; // Should not happen
-            
-            conversationForApi = {
-                ...currentConv,
-                messages: [...currentConv.messages, userMessage],
-                generatedDocs: buildGeneratedDocs(currentConv.documents)
-            };
+            if (!currentConv) return;
+            conversationForApi = { ...currentConv, messages: [...currentConv.messages, userMessage], generatedDocs: buildGeneratedDocs(currentConv.documents) };
         }
     
         setIsProcessing(true);
         streamControllerRef.current = new AbortController();
+
+        const assistantMessageId = uuidv4();
+        const assistantPlaceholder: Message = {
+            id: assistantMessageId,
+            conversation_id: currentConversationId!,
+            role: 'assistant',
+            content: '',
+            thinking: '',
+            timestamp: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+        };
+        setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: [...c.messages, assistantPlaceholder] } : c));
     
         try {
-            let stream;
-            let finalMessageContent = "";
-            let finalSuggestion: GenerativeSuggestion | null = null;
-            let newChecklist: ExpertStep[] | undefined;
-
+            const analysisTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.analysis)?.prompt || '';
+            const testTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.test)?.prompt || '';
+            const traceabilityTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.traceability)?.prompt || '';
+            const vizTemplate = allTemplates.find(t => t.document_type === 'visualization' && t.name.includes('Mermaid'));
+            const vizTemplatePrompt = vizTemplate?.prompt || '';
             const modelForChat: GeminiModel = isDeepAnalysisMode ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
-    
-            if (false) { // TODO: Re-evaluate expert mode logic
-                 const MAX_CLARIFICATION_ATTEMPTS = 2;
-                
-                const { needsClarification, questions, confirmationRequest, checklist, tokens } = await geminiService.clarifyAndConfirmExpertMode(conversationForApi.messages, 'gemini-2.5-flash');
-                commitTokenUsage(tokens);
-    
-                if (needsClarification && questions && expertModeClarificationAttempts.current < MAX_CLARIFICATION_ATTEMPTS) {
-                    finalMessageContent = questions;
-                    expertModeClarificationAttempts.current++;
-                } else {
-                    expertModeClarificationAttempts.current = 0;
-                    const convId = conversationForApi.id;
-    
-                    const assistantPlaceholder: Omit<Message, 'conversation_id'> = {
-                        id: uuidv4(), role: 'assistant', content: confirmationRequest || "Onay bekleniyor...", timestamp: new Date().toISOString(), created_at: new Date().toISOString(), expertRunChecklist: checklist
-                    };
-                    const placeholderToInsert = { ...assistantPlaceholder, conversation_id: convId! };
-                    await supabase.from('conversation_details').insert(placeholderToInsert);
-    
-                    const messagesForExpertRun = [...conversationForApi.messages, placeholderToInsert as Message];
-                    setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: messagesForExpertRun } : c));
-                    newChecklist = checklist;
-    
-                    const userConfirmed = await new Promise(resolve => resolve(true)); // Simplified
-    
-                    if (userConfirmed) {
-                        const analysisTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.analysis)?.prompt || '';
-                        const testTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.test)?.prompt || '';
-                        const traceabilityTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.traceability)?.prompt || '';
-                        const vizTemplate = allTemplates.find(t => t.document_type === 'visualization' && t.name.includes('Mermaid'));
-                        const vizTemplatePrompt = vizTemplate?.prompt || '';
-                        
-                        stream = geminiService.executeExpertRun(messagesForExpertRun, { analysis: analysisTemplatePrompt, test: testTemplatePrompt, traceability: traceabilityTemplatePrompt, visualization: vizTemplatePrompt }, 'gemini-2.5-pro');
-                        const { finalMessage } = await processStream(stream);
-                        finalMessageContent = finalMessage;
-                    } else {
-                        finalMessageContent = "Anladım, devam etmeden önce eklemek istediğiniz başka bir detay var mı?";
-                    }
-                }
-            } else {
-                const analysisTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.analysis)?.prompt || '';
-                const testTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.test)?.prompt || '';
-                const traceabilityTemplatePrompt = allTemplates.find(t => t.id === selectedTemplates.traceability)?.prompt || '';
-                const vizTemplate = allTemplates.find(t => t.document_type === 'visualization' && t.name.includes('Mermaid'));
-                const vizTemplatePrompt = vizTemplate?.prompt || '';
 
-                stream = geminiService.processAnalystMessageStream(conversationForApi.messages, conversationForApi.generatedDocs, { analysis: analysisTemplatePrompt, test: testTemplatePrompt, traceability: traceabilityTemplatePrompt, visualization: vizTemplatePrompt }, modelForChat);
-                const { docResponses, finalMessage, finalSuggestion: suggestion } = await processStream(stream);
-                finalMessageContent = finalMessage;
-                finalSuggestion = suggestion;
-            
-                // Save any generated documents from the function call
-                if (docResponses) {
-                    for (const key in docResponses) {
-                        if (Object.prototype.hasOwnProperty.call(docResponses, key)) {
-                            const docKey = key as keyof GeneratedDocs;
-                            const docContent = docResponses[docKey];
-                            if (docContent) {
-                                 const templateId = docKey === 'analysisDoc' ? selectedTemplates.analysis : docKey === 'testScenarios' ? selectedTemplates.test : docKey === 'traceabilityMatrix' ? selectedTemplates.traceability : null;
-                                await saveDocumentVersion(docKey, docContent, "AI Tarafından Sohbet Üzerinden Oluşturuldu", templateId);
-                            }
+            const stream = geminiService.processAnalystMessageStream(conversationForApi.messages, conversationForApi.generatedDocs, { analysis: analysisTemplatePrompt, test: testTemplatePrompt, traceability: traceabilityTemplatePrompt, visualization: vizTemplatePrompt }, modelForChat);
+            const { docResponses, finalMessage, finalSuggestion } = await processStream(stream, assistantMessageId);
+        
+            if (docResponses) {
+                for (const key in docResponses) {
+                    if (Object.prototype.hasOwnProperty.call(docResponses, key)) {
+                        const docKey = key as keyof GeneratedDocs;
+                        const docContent = docResponses[docKey];
+                        if (docContent) {
+                             const templateId = docKey === 'analysisDoc' ? selectedTemplates.analysis : docKey === 'testScenarios' ? selectedTemplates.test : docKey === 'traceabilityMatrix' ? selectedTemplates.traceability : null;
+                            await saveDocumentVersion(docKey, docContent, "AI Tarafından Sohbet Üzerinden Oluşturuldu", templateId);
                         }
                     }
                 }
             }
     
-            if ((finalMessageContent || finalSuggestion) && conversationForApi.id) {
+            if ((finalMessage || finalSuggestion) && conversationForApi.id) {
                 const convId = conversationForApi.id;
-                const assistantMessageData = {
-                    id: uuidv4(),
-                    conversation_id: convId,
-                    role: 'assistant' as const,
-                    content: finalMessageContent,
-                    timestamp: new Date().toISOString(),
-                    expertRunChecklist: newChecklist,
+                const { thinking, response } = parseStreamingResponse(finalMessage);
+
+                const finalAssistantMessageData: Message = {
+                    ...assistantPlaceholder,
+                    content: response,
+                    thinking: thinking ?? undefined,
                     generativeSuggestion: finalSuggestion || undefined,
-                    created_at: new Date().toISOString(),
                 };
     
-                const { data: newMsgData, error: newMsgError } = await supabase.from('conversation_details').insert(assistantMessageData).select().single();
-                
-                if (newMsgError) {
-                    setError("Asistan yanıtı kaydedilemedi.");
-                } else {
-                    setConversations(prev => prev.map(c => {
-                        if (c.id === convId) {
-                            const existingMessages = c.messages.filter(m => !(m.expertRunChecklist && m.content.includes("Onay bekleniyor")));
-                            return { ...c, messages: [...existingMessages, newMsgData as Message] };
-                        }
-                        return c;
-                    }));
-                }
+                setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? finalAssistantMessageData : m) } : c));
+                const { error: newMsgError } = await supabase.from('conversation_details').insert(finalAssistantMessageData);
+                if (newMsgError) { setError("Asistan yanıtı kaydedilemedi."); }
+            } else {
+                 setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: c.messages.filter(m => m.id !== assistantMessageId) } : c));
             }
     
         } catch (err) {
             if (err instanceof Error && err.name !== 'AbortError') {
                 console.error("Stream processing error:", err);
                 setError(err.message);
+                setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: c.messages.filter(m => m.id !== assistantMessageId) } : c));
             }
         } finally {
             setIsProcessing(false);
@@ -1170,12 +1145,22 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
 
         let currentTemplateId;
         let template;
+        let templatePrompt: string | undefined;
 
         if (type === 'viz') {
             const currentDiagramType = newDiagramType || diagramType;
+            if (newDiagramType) setDiagramType(newDiagramType);
             const templateIdentifier = currentDiagramType === 'bpmn' ? 'BPMN' : 'Mermaid';
             template = allTemplates.find(t => t.document_type === 'visualization' && t.name.includes(templateIdentifier));
-            currentTemplateId = template?.id;
+            
+            if (template) {
+                currentTemplateId = template.id;
+                templatePrompt = template.prompt;
+            } else {
+                const fallbackPromptId = currentDiagramType === 'bpmn' ? 'generateBPMN' : 'generateVisualization';
+                templatePrompt = promptService.getPrompt(fallbackPromptId);
+                if(!templatePrompt) console.error(`Fallback prompt not found for ID: ${fallbackPromptId}`);
+            }
         } else {
             switch (type) {
                 case 'analysis': currentTemplateId = newTemplateId || selectedTemplates.analysis; break;
@@ -1184,9 +1169,10 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                 default: currentTemplateId = '';
             }
             template = allTemplates.find(t => t.id === currentTemplateId);
+            templatePrompt = template?.prompt;
         }
 
-        if ((type === 'analysis' || type === 'test' || type === 'traceability' || type === 'viz') && !template) {
+        if (!templatePrompt) {
             setError(`${type} için geçerli şablon bulunamadı.`);
             setIsProcessing(false);
             setGeneratingDocType(null);
@@ -1206,14 +1192,14 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                  const testScenariosContent = typeof testDoc === 'object' ? testDoc.content : testDoc;
 
                  if (type === 'analysis') {
-                    rawStream = geminiService.generateAnalysisDocument(activeConversation.messages, template!.prompt, modelForGeneration);
+                    rawStream = geminiService.generateAnalysisDocument(activeConversation.messages, templatePrompt, modelForGeneration);
                  } else if (type === 'test') {
-                     rawStream = geminiService.generateTestScenarios(activeConversation.generatedDocs.analysisDoc, template!.prompt, modelForGeneration);
+                     rawStream = geminiService.generateTestScenarios(activeConversation.generatedDocs.analysisDoc, templatePrompt, modelForGeneration);
                  } else { // traceability
-                     rawStream = geminiService.generateTraceabilityMatrix(activeConversation.generatedDocs.analysisDoc, testScenariosContent, template!.prompt, modelForGeneration);
+                     rawStream = geminiService.generateTraceabilityMatrix(activeConversation.generatedDocs.analysisDoc, testScenariosContent, templatePrompt, modelForGeneration);
                  }
                  stream = wrapDocStream(rawStream, docKey as any);
-                 const { docResponses } = await processStream(stream);
+                 const { docResponses } = await processStream(stream, ''); // Pass empty assistantId as this is not a chat response
                  const fullResponse = docResponses[docKey as keyof GeneratedDocs];
                  if (fullResponse) {
                      if (docKey === 'testScenarios') {
@@ -1230,7 +1216,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
 
             } else { // 'viz'
                  const analysisHash = simpleHash(activeConversation.generatedDocs.analysisDoc);
-                 const { code, tokens } = await geminiService.generateDiagram(activeConversation.generatedDocs.analysisDoc, currentDiagramType, template!.prompt, 'gemini-2.5-flash');
+                 const { code, tokens } = await geminiService.generateDiagram(activeConversation.generatedDocs.analysisDoc, currentDiagramType, templatePrompt, 'gemini-2.5-flash');
                  commitTokenUsage(tokens);
                  const vizKey = currentDiagramType === 'mermaid' ? 'mermaidViz' : 'bpmnViz';
                  saveDocumentVersion(vizKey, { code, sourceHash: analysisHash }, "AI Tarafından Oluşturuldu");
@@ -1580,6 +1566,37 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         setIsDeepAnalysisMode(isOn);
     };
 
+    const handleRestoreVersion = async (version: DocumentVersion) => {
+        if (!activeConversationId) return;
+        
+        const docKey = Object.keys(documentTypeToKeyMap).find(
+            key => documentTypeToKeyMap[key as keyof GeneratedDocs] === version.document_type
+        ) as keyof GeneratedDocs | undefined;
+
+        if (!docKey) {
+            setError(`Bilinmeyen doküman tipi: ${version.document_type}`);
+            return;
+        }
+
+        let contentToRestore: string | object = version.content;
+        // Try to parse if it's a type that is stored as a JSON string
+        const jsonDocKeys: (keyof GeneratedDocs)[] = ['testScenarios', 'traceabilityMatrix', 'mermaidViz', 'bpmnViz', 'maturityReport'];
+        if (jsonDocKeys.includes(docKey)) {
+            try {
+                contentToRestore = JSON.parse(version.content);
+            } catch (e) {
+                console.warn(`Could not parse version content for ${docKey}, using as raw string.`);
+            }
+        }
+        
+        await saveDocumentVersion(
+            docKey,
+            contentToRestore,
+            `v${version.version_number} versiyonuna geri dönüldü`,
+            version.template_id
+        );
+    };
+
     const analysisTemplates = useMemo(() => allTemplates.filter(t => t.document_type === 'analysis'), [allTemplates]);
     const testTemplates = useMemo(() => allTemplates.filter(t => t.document_type === 'test'), [allTemplates]);
     const traceabilityTemplates = useMemo(() => allTemplates.filter(t => t.document_type === 'traceability'), [allTemplates]);
@@ -1681,6 +1698,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
                                         diagramType={diagramType}
                                         setDiagramType={setDiagramType}
                                         onAddTokens={commitTokenUsage}
+                                        onRestoreVersion={handleRestoreVersion}
                                      />
                                  </div>
                              )}

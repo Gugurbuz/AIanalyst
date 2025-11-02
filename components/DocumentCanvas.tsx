@@ -5,8 +5,9 @@ import { StreamingIndicator } from './StreamingIndicator';
 import { TemplateSelector } from './TemplateSelector';
 import { ExportDropdown } from './ExportDropdown';
 import { Template, DocumentVersion, LintingIssue } from '../types';
-import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, Edit, Eye, Wrench, X } from 'lucide-react';
+import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, Edit, Eye, Wrench, X, History } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
+import { VersionHistoryModal } from './VersionHistoryModal';
 
 interface DocumentCanvasProps {
     content: string;
@@ -28,6 +29,7 @@ interface DocumentCanvasProps {
     generationDisabledTooltip?: string;
     documentVersions: DocumentVersion[];
     onAddTokens: (tokens: number) => void;
+    onRestoreVersion: (version: DocumentVersion) => void;
 }
 
 const AiAssistantModal: React.FC<{
@@ -130,7 +132,8 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         content, onContentChange, docKey, onModifySelection, inlineModificationState,
         isGenerating, isStreaming = false, placeholder, templates, selectedTemplate,
         onTemplateChange, filename, isTable, onGenerate, generateButtonText,
-        isGenerationDisabled, generationDisabledTooltip, documentVersions, onAddTokens
+        isGenerationDisabled, generationDisabledTooltip, documentVersions, onAddTokens,
+        onRestoreVersion
     } = props;
 
     const [localContent, setLocalContent] = useState(content);
@@ -140,6 +143,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const [isSummarizing, setIsSummarizing] = useState(false);
     const [lintIssues, setLintIssues] = useState<LintingIssue[]>([]);
     const [isFixing, setIsFixing] = useState(false);
+    const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const isModifyingRef = useRef(false);
@@ -151,6 +155,13 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         traceabilityMatrix: 'traceability',
     };
     const currentDocType = documentTypeMap[docKey];
+    
+    const docNameMap: Record<string, string> = {
+         analysisDoc: 'Analiz Dokümanı',
+        testScenarios: 'Test Senaryoları',
+        traceabilityMatrix: 'İzlenebilirlik Matrisi',
+    };
+    const documentName = docNameMap[docKey] || 'Doküman';
 
     // Sync local content when parent content changes
     useEffect(() => {
@@ -266,23 +277,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         return (documentVersions || []).filter(v => v.document_type === currentDocType);
     }, [documentVersions, currentDocType]);
 
-    const displayContent = useMemo(() => {
-        if (isEditing) {
-            return localContent;
-        }
-        let fullContent = localContent;
-        if (filteredHistory && filteredHistory.length > 0) {
-            let notes = '\n\n---\n\n## Versiyon Geçmişi\n';
-            const reversedHistory = [...filteredHistory].reverse();
-
-            reversedHistory.forEach((version) => {
-                notes += `### v${version.version_number} (${new Date(version.created_at).toLocaleDateString('tr-TR')}) - *${version.reason_for_change}*\n`;
-            });
-            fullContent += notes;
-        }
-        return fullContent;
-    }, [localContent, filteredHistory, isEditing]);
-
     
     // View for documents that can be generated from within the canvas (e.g., Traceability Matrix)
     if (!content && !isStreaming && onGenerate) {
@@ -343,16 +337,32 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                     </button>
                 </div>
                 <div className="flex items-center gap-4">
-                     <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded-md">
-                        v{currentVersion}
-                    </span>
+                     <div className="flex items-center gap-1">
+                        <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded-md">
+                            v{currentVersion}
+                        </span>
+                        <button 
+                            onClick={() => setIsHistoryModalOpen(true)} 
+                            title="Versiyon Geçmişi"
+                            className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400"
+                            disabled={filteredHistory.length === 0}
+                        >
+                            <History className="h-4 w-4"/>
+                        </button>
+                    </div>
                     {templates && selectedTemplate && onTemplateChange &&
                         <TemplateSelector label="Şablon" templates={templates} selectedValue={selectedTemplate} onChange={onTemplateChange} disabled={isGenerating} />
                     }
+                     {isStreaming && (
+                        <div className="flex items-center gap-2">
+                            <LoaderCircle className="animate-spin h-5 w-5 text-indigo-500" />
+                            <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Oluşturuluyor</span>
+                        </div>
+                    )}
                      {!isTable && (
                          <button 
                             onClick={handleToggleEditing}
-                            disabled={isSummarizing}
+                            disabled={isSummarizing || isStreaming}
                             className="px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-2 disabled:opacity-50"
                         >
                             {isSummarizing ? (
@@ -379,7 +389,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                 ) : (
                     <div className="h-full overflow-y-auto p-2">
                         <MarkdownRenderer
-                            content={displayContent}
+                            content={localContent}
                             rephrasingText={
                                 inlineModificationState && inlineModificationState.docKey === docKey
                                     ? inlineModificationState.originalText
@@ -387,12 +397,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                             }
                             highlightedUserSelectionText={selection?.text || null}
                         />
-                         {isStreaming && (
-                            <div className="flex items-center gap-2 mt-4">
-                                <LoaderCircle className="animate-spin h-5 w-5 text-indigo-500" />
-                                <span className="text-sm text-slate-500 dark:text-slate-400">Oluşturuluyor...</span>
-                            </div>
-                        )}
                     </div>
                 )}
             </div>
@@ -402,6 +406,15 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                     onGenerate={handleAiModify}
                     onClose={() => { setIsAiModalOpen(false); setSelection(null); }}
                     isLoading={!!inlineModificationState}
+                />
+            )}
+            {isHistoryModalOpen && (
+                <VersionHistoryModal
+                    isOpen={isHistoryModalOpen}
+                    onClose={() => setIsHistoryModalOpen(false)}
+                    versions={filteredHistory}
+                    documentName={documentName}
+                    onRestore={onRestoreVersion}
                 />
             )}
         </div>

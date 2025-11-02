@@ -1,25 +1,16 @@
 import React from 'react';
 import type { Message, User, GenerativeSuggestion } from '../types';
-import { LoadingSpinner } from './LoadingSpinner';
-import { ChatMessage } from './ChatMessage'; // Import the new component
-import { Bot } from 'lucide-react';
+import { ChatMessage } from './ChatMessage';
 
 interface ChatMessageHistoryProps {
     user: User;
     chatHistory: Message[];
-    isLoading: boolean;
     onFeedbackUpdate: (messageId: string, feedbackData: { rating: 'up' | 'down' | null; comment?: string }) => void;
     onEditLastUserMessage: () => void;
     onApplySuggestion: (suggestion: GenerativeSuggestion, messageId: string) => void;
 }
 
-const AssistantAvatar = () => (
-    <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
-        <Bot className="w-5 h-5 text-indigo-600 dark:text-indigo-500" />
-    </div>
-);
-
-export const ChatMessageHistory: React.FC<ChatMessageHistoryProps> = ({ user, chatHistory, isLoading, onFeedbackUpdate, onEditLastUserMessage, onApplySuggestion }) => {
+export const ChatMessageHistory: React.FC<ChatMessageHistoryProps> = ({ user, chatHistory, onFeedbackUpdate, onEditLastUserMessage, onApplySuggestion }) => {
     const visibleMessages = chatHistory.filter(msg => msg.role !== 'system');
     
     return (
@@ -51,14 +42,6 @@ export const ChatMessageHistory: React.FC<ChatMessageHistoryProps> = ({ user, ch
                     />
                 );
             })}
-            {isLoading && (
-                <div className="flex items-start gap-3.5 justify-start">
-                    <AssistantAvatar />
-                    <div className="bg-slate-200 dark:bg-slate-700 rounded-2xl p-4 shadow-sm rounded-bl-none">
-                       <LoadingSpinner />
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

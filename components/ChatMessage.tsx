@@ -4,6 +4,8 @@ import type { Message, User, GenerativeSuggestion } from '../types';
 import { Feedback } from './Feedback';
 import { ExpertRunChecklist } from './ExpertRunChecklist';
 import { Bot, Edit, Sparkles, Check, X } from 'lucide-react';
+import { ThinkingProcess } from './ThinkingProcess';
+import { StreamingIndicator } from './StreamingIndicator';
 
 interface ChatMessageProps {
     msg: Message;
@@ -73,6 +75,8 @@ const ChatMessageComponent: React.FC<ChatMessageProps> = ({ msg, user, onFeedbac
         // The card will be removed once the next message comes in.
         // A more robust solution would involve updating the message state to remove the suggestion.
     };
+    
+    const isEmptyAssistantMessage = msg.role === 'assistant' && !msg.content?.trim() && !msg.thinking && !msg.expertRunChecklist && !msg.generativeSuggestion;
 
     return (
         <div className={`group flex items-start gap-3.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -96,7 +100,13 @@ const ChatMessageComponent: React.FC<ChatMessageProps> = ({ msg, user, onFeedbac
                         ? 'bg-indigo-600 text-white rounded-br-none' 
                         : 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-bl-none'
                 }`}>
-                    {msg.expertRunChecklist ? (
+                    {msg.thinking && <ThinkingProcess content={msg.thinking} />}
+                    
+                    {isEmptyAssistantMessage ? (
+                        <div className="px-4 py-3">
+                            <StreamingIndicator />
+                        </div>
+                    ) : msg.expertRunChecklist ? (
                         <ExpertRunChecklist
                             steps={msg.expertRunChecklist}
                             initialMessage={msg.content}
@@ -108,10 +118,10 @@ const ChatMessageComponent: React.FC<ChatMessageProps> = ({ msg, user, onFeedbac
                             onReject={handleReject}
                         />
                     ) : (
-                        <div className="px-4 py-3 whitespace-pre-wrap">{msg.content}</div>
+                        msg.content.trim() ? <div className="px-4 py-3 whitespace-pre-wrap">{msg.content}</div> : null
                     )}
                 </div>
-                {msg.role === 'assistant' && !msg.generativeSuggestion && (
+                {msg.role === 'assistant' && !msg.generativeSuggestion && !isEmptyAssistantMessage && (
                      <Feedback 
                         messageId={msg.id}
                         feedback={msg.feedback}
