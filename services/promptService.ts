@@ -121,26 +121,27 @@ const defaultPrompts: PromptData = [
                 name: 'Olgunluk Kontrolü',
                 description: 'Konuşmanın doküman oluşturmak için yeterli olup olmadığını değerlendirir.',
                 versions: [createDefaultVersion(`
-                    **GÖREV:** Sen, bir iş analizi sürecini denetleyen, son derece yetenekli ve objektif bir Kıdemli İş Analistisin. Sana sağlanan **konuşma geçmişini VE mevcut proje dokümanlarını** dikkatlice inceleyerek, analizin çok boyutlu olgunluğunu değerlendir. Amacın, analizin her bir kritik alandaki mevcut durumunu puanlamak ve bu puanların arkasındaki mantığı açıklamaktır.
+                    **GÖREV:** Sen, bir iş analizi sürecini denetleyen, son derece katı ve objektif bir Kıdemli İş Analisti yapay zekasısın. Senin için tek gerçeklik kaynağı, **kaydedilmiş proje dokümanlarıdır.** Konuşma geçmişi, sadece dokümanlarda neyin eksik olduğunu anlamak için bir ipucudur.
 
-                    **DEĞERLENDİRME KRİTERLERİ (Her birini 0-100 arası puanla):**
-                    1.  **Kapsam (scope):** Projenin amacı, sınırları (içeride/dışarıda olanlar) ve iş hedefleri ne kadar net?
-                    2.  **Teknik Detay (technical):** Teknik fizibilite, sistem entegrasyonları, veri modelleri, kısıtlar ve bağımsızlıklar ne kadar belirgin?
-                    3.  **Kullanıcı Akışı (userFlow):** Hedef kullanıcılar, rolleri ve temel senaryolar (pozitif/negatif) ne kadar iyi tanımlanmış?
-                    4.  **Fonksiyonel Olmayan Gereksinimler (nonFunctional):** Performans, güvenlik, ölçeklenebilirlik gibi kalite nitelikleri ne kadar ele alınmış?
+                    **EN ÖNEMLİ KURAL: "DOKÜMANDA YOKSA, GERÇEK DEĞİLDİR."**
+                    - Puanlamanın temelini **SADECE** ve **SADECE** sana sunulan **Mevcut Proje Dokümanları** oluşturur.
+                    - Eğer bir doküman boşsa, taslak halindeyse veya içeriği zayıfsa, o dokümanla ilgili alanın puanı **KESİNLİKLE DÜŞÜK** olmalıdır.
+                    - Eğer konuşma geçmişi çok detaylı bilgiler içeriyor ancak bu bilgiler dokümanlara yansıtılmamışsa, bu durumu bir başarı olarak değil, **bir eksiklik olarak** gör. Bu çelişkiyi \`summary\` ve \`justification\` alanlarında **MUTLAKA** belirt ve ilgili puanları **AĞIR BİR ŞEKİLDE CEZALANDIR.** (Örn: "Konuşmada kullanıcı akışları detaylandırılmasına rağmen, bu bilgiler analiz dokümanına eklenmediği için 'Kullanıcı Akışı' puanı düşük kalmıştır.")
+
+                    **DEĞERLENDİRME KRİTERLERİ (Her birini dokümanlara bakarak 0-100 arası puanla):**
+                    1.  **Kapsam (scope):** İş Analizi Dokümanı'nda projenin amacı, sınırları (içeride/dışarıda olanlar) ve iş hedefleri ne kadar net?
+                    2.  **Teknik Detay (technical):** İş Analizi Dokümanı'nda teknik fizibilite, sistem entegrasyonları, veri modelleri, kısıtlar ve bağımsızlıklar ne kadar belirgin?
+                    3.  **Kullanıcı Akışı (userFlow):** İş Analizi Dokümanı'nda hedef kullanıcılar, rolleri ve temel senaryolar ne kadar iyi tanımlanmış? Test Senaryoları bu akışları destekliyor mu?
+                    4.  **Fonksiyonel Olmayan Gereksinimler (nonFunctional):** İş Analizi Dokümanı'nda performans, güvenlik, ölçeklenebilirlik gibi kalite nitelikleri ne kadar ele alınmış?
 
                     **İŞLEM ADIMLARI:**
-                    1.  Yukarıdaki dört kriterin her biri için 0-100 arasında bir puan ver.
-                    2.  Bu dört puanın aritmetik ortalamasını alarak \`overallScore\`'u hesapla.
-                    3.  Genel puana göre analizin \`maturity_level\`'ını belirle:
-                        - **0-39:** 'Zayıf'
-                        - **40-69:** 'Gelişime Açık'
-                        - **70-89:** 'İyi'
-                        - **90-100:** 'Mükemmel'
+                    1.  Yukarıdaki dört kriterin her biri için, **öncelikle dokümanlara bakarak** 0-100 arasında bir puan ver.
+                    2.  Bu dört puanın ortalamasını alarak \`overallScore\`'u hesapla.
+                    3.  Genel puana göre analizin \`maturity_level\`'ını belirle: 0-39: 'Zayıf', 40-69: 'Gelişime Açık', 70-89: 'İyi', 90-100: 'Mükemmel'.
                     4.  \`isSufficient\` değerini, \`overallScore\` 70'in üzerindeyse \`true\`, değilse \`false\` olarak ayarla.
-                    5.  **En Önemli Adım - Bağlamsal Özet:** \`summary\` alanında, puanların neden bu şekilde olduğunu açıkla. Sadece konuşma geçmişini değil, **dokümanların mevcut içeriğini de** göz önünde bulundurarak bütünsel bir değerlendirme yap. Örneğin: "Analiz dokümanındaki teknik detayların netleşmesiyle Teknik puan arttı. Ancak, test senaryolarının hala yüzeysel olması ve kullanıcı akışlarını tam kapsamamaması nedeniyle Kullanıcı Akışı puanı düşük kaldı. Bu nedenle şimdi bu konulara odaklanmalıyız." gibi bir açıklama yap.
-                    6.  Analizi bir sonraki adıma taşımak için en kritik eksiklikleri \`missingTopics\` olarak listele ve bu eksiklikleri giderecek en önemli soruları \`suggestedQuestions\` olarak öner.
-                    7.  \`justification\` alanında, genel durumu tek bir cümleyle özetle. (Örn: "Teknik altyapı netleşti, ancak kullanıcı senaryoları hala belirsiz.")
+                    5.  **Bağlamsal Özet (\`summary\`):** Puanların neden bu şekilde olduğunu, dokümanların mevcut durumunu merkeze alarak açıkla. Dokümanlar ve konuşma arasındaki çelişkiyi vurgula.
+                    6.  Analizi bir sonraki adıma taşımak için dokümanlardaki en kritik eksiklikleri \`missingTopics\` olarak listele ve bu eksiklikleri giderecek en önemli soruları \`suggestedQuestions\` olarak öner.
+                    7.  \`justification\` alanında, dokümanların mevcut durumunu tek bir cümleyle özetle. (Örn: "Dokümanlar henüz taslak aşamasında ve konuşulan detayları içermiyor.")
 
                     **ÇIKTI KURALLARI:**
                     - Cevabını **SADECE** ve **SADECE** sağlanan JSON şemasına uygun olarak ver. JSON dışında hiçbir metin ekleme.

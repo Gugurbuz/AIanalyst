@@ -509,6 +509,49 @@ export const App: React.FC<AppProps> = ({ user, onLogout }) => {
         expertModeClarificationAttempts.current = 0;
     }, [activeConversationId]);
 
+    const isInitialRender = useRef(true);
+
+    // Effect to re-run maturity check when documents change (e.g., after manual save)
+    useEffect(() => {
+        if (isInitialRender.current) {
+            isInitialRender.current = false;
+            return;
+        }
+
+        const runMaturityCheck = async () => {
+            if (!activeConversation) return;
+
+            // Only run if there's been some interaction
+            const hasInteraction = activeConversation.messages.filter(m => m.role !== 'system').length > 0 ||
+                                   activeConversation.documents.length > 0;
+            if (!hasInteraction) return;
+
+            try {
+                console.log("Document change detected, re-running maturity check...");
+                const { report, tokens } = await geminiService.checkAnalysisMaturity(
+                    activeConversation.messages,
+                    activeConversation.generatedDocs,
+                    'gemini-2.5-flash-lite'
+                );
+                commitTokenUsage(tokens);
+                saveDocumentVersion('maturityReport', report, "Doküman değişikliği sonrası otomatik değerlendirme");
+            } catch (maturityError) {
+                console.warn("Arka plan olgunluk kontrolü (doküman değişikliği sonrası) başarısız oldu:", maturityError);
+            }
+        };
+
+        // Debounce the check slightly to avoid running it multiple times for rapid saves
+        const timer = setTimeout(runMaturityCheck, 1000);
+        return () => clearTimeout(timer);
+
+    }, [
+        activeConversation?.generatedDocs.analysisDoc,
+        // Using content properties to avoid triggering on sourceHash changes
+        typeof activeConversation?.generatedDocs.testScenarios === 'object' ? activeConversation?.generatedDocs.testScenarios.content : activeConversation?.generatedDocs.testScenarios,
+        typeof activeConversation?.generatedDocs.traceabilityMatrix === 'object' ? activeConversation?.generatedDocs.traceabilityMatrix.content : activeConversation?.generatedDocs.traceabilityMatrix,
+        activeConversation?.messages
+    ]);
+
 
     // --- Developer & Feedback Panel Logic ---
     const handleToggleDeveloperPanel = () => {
