@@ -301,9 +301,7 @@ graph TD;
                     8.  **KENDİLİĞİNDEN KAPANAN ETİKETLER (SELF-CLOSING TAGS):** \`<dc:Bounds>\` ve \`<omgdi:waypoint>\` etiketleri **DAİMA** kendiliğinden kapanan formatta olmalıdır.
                         - **DOĞRU:** \`<dc:Bounds x="100" y="80" width="100" height="80" />\`
                         - **YANLIŞ:** \`<dc:Bounds x="100" y="80" width="100" height="80">\`</dc:Bounds>\`
-                    9.  **LANE ELEMANLARI:** Aktörleri temsil eden \`<bpmn:lane>\` etiketleri içinde, o lane'e ait elemanları referans gösteren \`<bpmn:flowNodeRef>\` etiketleri **KESİNLİKLE** kendiliğinden kapanan formatta **OLMAMALIDIR**. İçerik olarak eleman ID'sini barındırmalıdırlar.
-                        - **DOĞRU:** \`<bpmn:flowNodeRef>Task_123</bpmn:flowNodeRef>\`
-                        - **YANLIŞ:** \`<bpmn:flowNodeRef id="Task_123" />\`
+                        - **YANLIŞ:** \`<dc:Bounds x="100" y="80" width="100" height="80">\` (kapanış olmadan)
 
                     **ÇIKTI FORMATI:**
                     - Cevabın **SADECE** ve **SADECE** \`\`\`xml\n<?xml version="1.0" encoding="UTF-8"?>\n...\n</bpmn:definitions>\n\`\`\` kod bloğunu içermelidir. Başka hiçbir açıklama, giriş veya sonuç metni ekleme.
@@ -344,9 +342,6 @@ graph TD;
                     - **Yapıyı Koru:** Orijinal XML'in yapısını (\`<bpmn:definitions>\`, \`<bpmn:process>\`, \`<bpmndi:BPMNDiagram>\`) ve **tüm \`xmlns\` namespace tanımlamalarını kesinlikle koru.**
                     - **Diyagram Bilgisini Güncelle (DI):** Yeni bir eleman (task, gateway vb.) eklediğinde, \`<bpmndi:BPMNPlane>\` içine karşılık gelen bir \`<bpmndi:BPMNShape>\` eklemeyi UNUTMA. Yeni bir akış (\`<bpmn:sequenceFlow>\`) eklediğinde, karşılık gelen \`<bpmndi:BPMNEdge>\`'i eklemeyi UNUTMA.
                     - **Benzersiz ID'ler:** Eklediğin tüm yeni elemanlara benzersiz ID'ler ata.
-                    - **LANE ELEMANLARI:** \`<bpmn:lane>\` içindeki \`<bpmn:flowNodeRef>\` etiketleri **KESİNLİKLE** kendiliğinden kapanan formatta **OLMAMALIDIR**. İçerik olarak eleman ID'sini barındırmalıdırlar.
-                        - **DOĞRU:** \`<bpmn:flowNodeRef>Task_ID</bpmn:flowNodeRef>\`
-                        - **YANLIŞ:** \`<bpmn:flowNodeRef id="Task_ID" />\`
                     - **KENDİLİĞİNDEN KAPANAN ETİKETLER:** \`<dc:Bounds>\` ve \`<omgdi:waypoint>\` etiketlerinin **HER ZAMAN** kendiliğinden kapanan formatta olduğundan emin ol.
                         - **DOĞRU:** \`<dc:Bounds ... />\`
                         - **YANLIŞ:** \`<dc:Bounds ...></dc:Bounds>\`

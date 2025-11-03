@@ -146,11 +146,7 @@ const parseMarkdown = (text: string, highlightedLines: number[], rephrasingText:
 
 
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, highlightedLines = [], rephrasingText = null, highlightedUserSelectionText = null }) => {
-    
-    const processedContent = useMemo(() => {
-        // If not HTML, parse it as Markdown
-        return parseMarkdown(content, highlightedLines, rephrasingText, highlightedUserSelectionText);
-    }, [content, highlightedLines, rephrasingText, highlightedUserSelectionText]);
+    const htmlContent = useMemo(() => parseMarkdown(content, highlightedLines, rephrasingText, highlightedUserSelectionText), [content, highlightedLines, rephrasingText, highlightedUserSelectionText]);
 
     return (
         <div
@@ -162,7 +158,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, hig
                        prose-ul:my-5 prose-ol:my-5 prose-li:my-2
                        prose-strong:font-semibold prose-strong:text-slate-800 dark:prose-strong:text-slate-200 
                        prose-hr:my-8 prose-hr:border-slate-200 dark:prose-hr:border-slate-700"
-            dangerouslySetInnerHTML={{ __html: processedContent }}
+            dangerouslySetInnerHTML={{ __html: htmlContent }}
         />
     );
 };

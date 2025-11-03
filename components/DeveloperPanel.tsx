@@ -50,8 +50,7 @@ export const DeveloperPanel: React.FC<DeveloperPanelProps> = ({
     const handleSave = () => {
         onModelNameChange(localModelName);
         onSupabaseUrlChange(localSupabaseUrl);
-        // FIX: Changed localStorage.getItem to localStorage.setItem.
-        localStorage.setItem('supabaseAnonKey', localSupabaseAnonKey);
+        onSupabaseAnonKeyChange(localSupabaseAnonKey);
         onTestUserEmailChange(localTestUserEmail);
         onTestUserPasswordChange(localTestUserPassword);
 

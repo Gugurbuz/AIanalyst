@@ -9,8 +9,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
-    <!-- React Quill stylesheet -->
-    <link href="https://aistudiocdn.com/react-quilljs@^2.0.0-beta.2/dist/quill.snow.css" rel="stylesheet" />
     <!-- BPMN.io stylesheets -->
     <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.0.2/dist/assets/diagram-js.css">
     <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.0.2/dist/assets/bpmn-js.css">
@@ -163,50 +161,6 @@
       .dark ::-webkit-scrollbar-thumb:hover {
         background-color: #64748b; /* slate-500 */
       }
-
-      /* --- Custom Styles for React Quill --- */
-      .quill-container {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        overflow: hidden;
-      }
-      .quill-container .ql-editor {
-        flex-grow: 1;
-        overflow-y: auto;
-        font-family: 'Inter', sans-serif;
-        font-size: 1rem;
-        line-height: 1.75;
-        background-color: transparent;
-        padding: 1rem;
-      }
-      .quill-container .ql-container.ql-snow {
-        border: none !important;
-      }
-      .quill-container .ql-toolbar.ql-snow {
-        border: none !important;
-        border-bottom: 1px solid #e2e8f0 !important; /* slate-200 */
-        padding: 12px 8px;
-      }
-      .dark .quill-container .ql-toolbar.ql-snow {
-        border-bottom-color: #334155 !important; /* slate-700 */
-      }
-      .dark .ql-snow .ql-stroke, .dark .ql-snow .ql-fill {
-        stroke: #94a3b8; /* slate-400 */
-      }
-      .dark .ql-snow .ql-picker-label {
-        color: #94a3b8;
-      }
-      .dark .ql-snow .ql-picker-options {
-        background-color: #1e293b; /* slate-800 */
-        border-color: #334155; /* slate-700 */
-      }
-      .dark .ql-snow .ql-picker-item, .dark .ql-snow .ql-picker-item.ql-selected {
-        color: #cbd5e1; /* slate-300 */
-      }
-      .dark .ql-snow .ql-picker-item:hover, .dark .ql-snow .ql-picker-item.ql-selected:hover {
-        color: #e2e8f0;
-      }
     </style>
     <script>
       tailwind.config = {
@@ -284,10 +238,9 @@
     "uuid": "https://aistudiocdn.com/uuid@^13.0.0",
     "lucide-react": "https://aistudiocdn.com/lucide-react@^0.418.0",
     "docx": "https://aistudiocdn.com/docx@^8.5.0",
-    "react-quilljs": "https://aistudiocdn.com/react-quilljs@^2.0.0-beta.2",
-    "turndown": "https://aistudiocdn.com/turndown@^7.2.0",
-    "showdown": "https://aistudiocdn.com/showdown@^2.1.0",
-    "quill/": "https://aistudiocdn.com/quill@^2.0.3/"
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.0",
+    "path": "https://aistudiocdn.com/path@^0.12.7",
+    "vite": "https://aistudiocdn.com/vite@^7.1.12"
   }
 }
 </script>

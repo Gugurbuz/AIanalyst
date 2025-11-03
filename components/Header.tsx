@@ -113,7 +113,6 @@ export const Header: React.FC<HeaderProps> = ({
     onToggleDeveloperPanel,
     userProfile,
 }) => {
-    // FIX: Corrected useState destructuring. It should declare 'setIsUserMenuOpen', not redeclare 'React'.
     const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
     const userMenuRef = React.useRef<HTMLDivElement>(null);
     const logoClickCount = React.useRef(0);

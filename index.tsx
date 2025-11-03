@@ -47,12 +47,12 @@ const Main = () => {
     }>({});
     
     useEffect(() => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const shareId = urlParams.get('share');
+        const bootstrap = () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const shareId = urlParams.get('share');
 
-        if (shareId) {
-            const fetchPublicData = async () => {
-                try {
+            if (shareId) {
+                const fetchPublicData = async () => {
                     const { data, error } = await supabase
                         .from('conversations')
                         .select('*, conversation_details(*), documents(*), document_versions(*)')
@@ -75,76 +75,63 @@ const Main = () => {
                         };
                         setLoadResult({ publicConversation: convWithDetails as Conversation });
                     }
-                } catch (err) {
-                    const errorMessage = err instanceof Error ? err.message : 'Bilinmeyen bir hata oluştu.';
-                    setLoadResult({ error: `Veriler yüklenemedi: ${errorMessage}` });
-                } finally {
                     setIsLoading(false);
-                }
-            };
-            fetchPublicData();
-            return () => {}; // Cleanup function for shareId path
-        }
+                };
+                fetchPublicData();
+                return () => {}; // No subscription to clean up
+            }
 
-        // Normal authentication flow
-        const { data: { subscription } } = authService.onAuthStateChange((_event, session) => {
-            const handleSessionChange = async (newSession: Session | null) => {
-                try {
-                    if (newSession) {
-                        const [profileResult, conversationsResult, templatesResult] = await Promise.all([
-                            authService.getProfile(newSession.user.id),
-                            supabase
-                                .from('conversations')
-                                .select('*, conversation_details(*), document_versions(*), documents(*)')
-                                .eq('user_id', newSession.user.id)
-                                .order('created_at', { ascending: false }),
-                            authService.fetchTemplates(newSession.user.id)
-                        ]);
-                        
-                        if (conversationsResult.error) {
-                            setLoadResult({ error: `Sohbetler yüklenirken bir hata oluştu: ${conversationsResult.error.message}` });
-                            setSession(newSession);
-                        } else {
-                            const conversationsWithDetails = (conversationsResult.data || []).map((conv: any) => ({
-                                ...conv,
-                                messages: (conv.conversation_details || []).sort(
-                                    (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                                ),
-                                documentVersions: (conv.document_versions || []).sort(
-                                    (a: DocumentVersion, b: DocumentVersion) => a.version_number - b.version_number
-                                ),
-                                documents: conv.documents || [],
-                            }));
-
-                            // Set both session and data together to prevent inconsistent state renders
-                            setLoadResult({
-                                appData: {
-                                    conversations: conversationsWithDetails as Conversation[],
-                                    profile: profileResult,
-                                    templates: templatesResult,
-                                }
-                            });
-                            setSession(newSession);
-                        }
+            // Normal authentication flow
+            const { data: { subscription } } = authService.onAuthStateChange(async (_event, session) => {
+                setSession(session);
+                if (session) {
+                    const [profileResult, conversationsResult, templatesResult] = await Promise.all([
+                        authService.getProfile(session.user.id),
+                        supabase
+                            .from('conversations')
+                            .select('*, conversation_details(*), document_versions(*), documents(*)')
+                            .eq('user_id', session.user.id)
+                            .order('created_at', { ascending: false }),
+                        authService.fetchTemplates(session.user.id)
+                    ]);
+                    
+                    if (conversationsResult.error) {
+                        setLoadResult({ error: 'Sohbetler yüklenirken bir hata oluştu.' });
                     } else {
-                        setLoadResult({});
-                        setSession(null);
-                    }
-                } catch (err) {
-                    console.error("Uygulama başlatılırken bir hata oluştu:", err);
-                    const errorMessage = err instanceof Error ? err.message : 'Bilinmeyen bir hata oluştu.';
-                    setLoadResult({ error: `Veriler yüklenemedi: ${errorMessage}` });
-                } finally {
-                    setIsLoading(false);
-                }
-            };
+                        const conversationsWithDetails = (conversationsResult.data || []).map((conv: any) => ({
+                            ...conv,
+                            messages: (conv.conversation_details || []).sort(
+                                (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                            ),
+                            documentVersions: (conv.document_versions || []).sort(
+                                (a: DocumentVersion, b: DocumentVersion) => a.version_number - b.version_number
+                            ),
+                            documents: conv.documents || [],
+                        }));
 
-            handleSessionChange(session);
-        });
-        
-        return () => {
-            subscription?.unsubscribe();
+                        setLoadResult({
+                            appData: {
+                                conversations: conversationsWithDetails as Conversation[],
+                                profile: profileResult,
+                                templates: templatesResult,
+                            }
+                        });
+                    }
+                } else {
+                    setLoadResult({});
+                }
+                setIsLoading(false);
+            });
+            
+            return () => {
+                subscription?.unsubscribe();
+            };
         };
+
+        const subscriptionCleanup = bootstrap();
+        return () => {
+            subscriptionCleanup();
+        }
     }, []);
 
 

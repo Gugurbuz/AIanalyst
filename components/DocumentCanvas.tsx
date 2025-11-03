@@ -1,11 +1,5 @@
 // components/DocumentCanvas.tsx
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-// FIX: The 'react-quilljs' library uses a hook-based API, not a component.
-// The import is changed to `useQuill` and the component usage is refactored to fix the error.
-import { useQuill } from 'react-quilljs';
-import 'quill/dist/quill.snow.css';
-import TurndownService from 'turndown';
-import showdown from 'showdown';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { StreamingIndicator } from './StreamingIndicator';
 import { TemplateSelector } from './TemplateSelector';
@@ -171,10 +165,10 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
 
     // Sync local content when parent content changes
     useEffect(() => {
-        if (!isModifyingRef.current && !isEditing) {
+        if (!isModifyingRef.current) {
             setLocalContent(content);
         }
-    }, [content, isEditing]);
+    }, [content]);
     
     // Clear lint issues when content changes from parent
     useEffect(() => {
@@ -184,60 +178,52 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const handleToggleEditing = async () => {
         if (isEditing) { // Finishing edit
             setIsEditing(false); // Switch to view mode immediately
-            
-            let finalMarkdownContent = localContent;
-            if (!isTable) {
-                const turndownService = new TurndownService();
-                finalMarkdownContent = turndownService.turndown(localContent);
-            }
-
-            if (finalMarkdownContent !== originalContentRef.current) {
+            if (localContent !== originalContentRef.current) {
                 setIsSummarizing(true);
                 try {
-                    const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(originalContentRef.current, finalMarkdownContent);
+                    const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(originalContentRef.current, localContent);
                     onAddTokens(summaryTokens);
-                    onContentChange(finalMarkdownContent, summary);
+                    onContentChange(localContent, summary);
                     
-                    const { issues, tokens: lintTokens } = await geminiService.lintDocument(finalMarkdownContent);
+                    // After content is updated, check for structural issues
+                    const { issues, tokens: lintTokens } = await geminiService.lintDocument(localContent);
                     onAddTokens(lintTokens);
                     setLintIssues(issues);
 
                 } catch (error) {
                     console.error("Failed to summarize or lint changes:", error);
-                    onContentChange(finalMarkdownContent, "Manuel Düzenleme");
+                    onContentChange(localContent, "Manuel Düzenleme");
                 } finally {
                     setIsSummarizing(false);
                 }
             }
         } else { // Starting edit
             originalContentRef.current = content;
-            setLintIssues([]);
-            
-            if (!isTable) {
-                const converter = new showdown.Converter();
-                const htmlContent = converter.makeHtml(content);
-                setLocalContent(htmlContent);
-            } else {
-                setLocalContent(content);
-            }
-            
+            setLintIssues([]); // Clear issues when starting to edit
             setIsEditing(true);
         }
     };
     
     const handleSelection = useCallback(() => {
-        if (isEditing) {
-            setSelection(null);
-            return;
-        }
-
-        const currentSelection = window.getSelection();
-        if (currentSelection && currentSelection.toString().trim().length > 5) {
-            setSelection({ start: 0, end: 0, text: currentSelection.toString() });
+        if (isEditing && !isTable) {
+            const textarea = textareaRef.current;
+            if (!textarea || document.activeElement !== textarea) return;
+            const { selectionStart, selectionEnd } = textarea;
+            const selectedText = textarea.value.substring(selectionStart, selectionEnd);
+            if (selectedText.trim().length > 5) {
+                setSelection({ start: selectionStart, end: selectionEnd, text: selectedText });
+            } else {
+                setSelection(null);
+            }
         } else {
-            setSelection(null);
+            const currentSelection = window.getSelection();
+            if (currentSelection && currentSelection.toString().trim().length > 5) {
+                setSelection({ start: 0, end: 0, text: currentSelection.toString() });
+            } else {
+                setSelection(null);
+            }
         }
-    }, [isEditing]);
+    }, [isEditing, isTable]);
 
     const applyMarkdown = (prefix: string, suffix: string = '', isBlock: boolean = false) => {
         const textarea = textareaRef.current;
@@ -291,44 +277,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         return (documentVersions || []).filter(v => v.document_type === currentDocType);
     }, [documentVersions, currentDocType]);
 
-    const quillModules = useMemo(() => ({
-        toolbar: [
-            [{ 'header': [1, 2, 3, false] }],
-            ['bold', 'italic', 'underline', 'strike'],
-            [{'list': 'ordered'}, {'list': 'bullet'}],
-            ['clean']
-        ],
-    }), []);
-
-    // FIX: Refactored to use the useQuill hook from react-quilljs.
-    const { quill, quillRef } = useQuill({
-        modules: quillModules,
-        theme: 'snow',
-        placeholder,
-    });
-
-    useEffect(() => {
-        if (quill) {
-            quill.on('text-change', (delta, oldDelta, source) => {
-                if (source === 'user') {
-                    // Update local state with the new HTML content from Quill
-                    setLocalContent(quill.root.innerHTML);
-                }
-            });
-        }
-    }, [quill]);
-
-    // This effect syncs the editor's content when localContent changes externally
-    // or when entering edit mode.
-    useEffect(() => {
-        if (isEditing && quill && localContent !== quill.root.innerHTML) {
-            // Disable the editor while setting content to prevent race conditions or cursor jumps
-            quill.disable();
-            quill.root.innerHTML = localContent;
-            // Re-enable the editor after a short delay
-            setTimeout(() => quill.enable(), 10);
-        }
-    }, [isEditing, quill, localContent]);
     
     // View for documents that can be generated from within the canvas (e.g., Traceability Matrix)
     if (!content && !isStreaming && onGenerate) {
@@ -368,7 +316,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
             />
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-2 md:p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2 flex-wrap">
-                    {(isEditing && isTable) && (
+                    {(!isTable && isEditing) && (
                         <>
                             <select onChange={(e) => applyMarkdown(e.target.value, '', true)} className="px-2 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-700">
                                 <option value="">Başlık...</option>
@@ -411,43 +359,37 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                             <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Oluşturuluyor</span>
                         </div>
                     )}
-                     
-                    <button 
-                        onClick={handleToggleEditing}
-                        disabled={isSummarizing || isStreaming}
-                        className="px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-2 disabled:opacity-50"
-                    >
-                        {isSummarizing ? (
-                            <><LoaderCircle className="h-4 w-4 animate-spin" /> Özetleniyor...</>
-                        ) : isEditing ? (
-                            <><Eye className="h-4 w-4" /> Görünüm</>
-                        ) : (
-                            <><Edit className="h-4 w-4" /> Düzenle</>
-                        )}
-                    </button>
-                    <ExportDropdown content={content} filename={filename} isTable={isTable} />
+                     {!isTable && (
+                         <button 
+                            onClick={handleToggleEditing}
+                            disabled={isSummarizing || isStreaming}
+                            className="px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-2 disabled:opacity-50"
+                        >
+                            {isSummarizing ? (
+                                <><LoaderCircle className="h-4 w-4 animate-spin" /> Özetleniyor...</>
+                            ) : isEditing ? (
+                                <><Eye className="h-4 w-4" /> Görünüm</>
+                            ) : (
+                                <><Edit className="h-4 w-4" /> Düzenle</>
+                            )}
+                        </button>
+                    )}
+                    <ExportDropdown content={localContent} filename={filename} isTable={isTable} />
                 </div>
             </div>
-            <div className="flex-1 relative min-h-0" onMouseUp={handleSelection}>
-                {isEditing ? (
-                    isTable ? (
-                        <textarea
-                            ref={textareaRef}
-                            value={localContent}
-                            onChange={(e) => setLocalContent(e.target.value)}
-                            className="w-full h-full p-4 bg-transparent border-none focus:outline-none resize-none font-sans text-base leading-relaxed"
-                            placeholder={placeholder}
-                        />
-                    ) : (
-                        <div className="quill-container h-full bg-white dark:bg-slate-800">
-                             {/* FIX: Replaced the <ReactQuill> component with a div and ref for the useQuill hook. */}
-                            <div ref={quillRef} className="h-full" />
-                        </div>
-                    )
+            <div className="p-2 md:p-6 flex-1 relative" onMouseUp={handleSelection}>
+                {(isEditing && !isTable) ? (
+                    <textarea
+                        ref={textareaRef}
+                        value={localContent}
+                        onChange={(e) => setLocalContent(e.target.value)}
+                        className="w-full h-full p-2 bg-transparent border-none focus:outline-none resize-none font-sans text-base leading-relaxed"
+                        placeholder={placeholder}
+                    />
                 ) : (
-                    <div className="h-full overflow-y-auto p-4 md:p-6">
+                    <div className="h-full overflow-y-auto p-2">
                         <MarkdownRenderer
-                            content={content}
+                            content={localContent}
                             rephrasingText={
                                 inlineModificationState && inlineModificationState.docKey === docKey
                                     ? inlineModificationState.originalText
