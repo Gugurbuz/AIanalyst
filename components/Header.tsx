@@ -13,7 +13,6 @@ interface HeaderProps {
     saveStatus: 'idle' | 'saving' | 'saved' | 'error';
     maturityScore: { score: number; justification: string } | null;
     isProcessing: boolean;
-    onToggleDeveloperPanel: () => void;
     userProfile: UserProfile | null;
     isConversationListOpen: boolean;
     onToggleConversationList: () => void;
@@ -30,8 +29,8 @@ const LogoIcon = ({ className }: { className?: string }) => (
     </svg>
 );
 
-const Logo = ({ onLogoClick }: { onLogoClick: () => void }) => (
-    <div onClick={onLogoClick} title="Geliştirici Panelini açmak için 5 kez tıklayın" className="flex items-center gap-2 cursor-pointer">
+const Logo = () => (
+    <div className="flex items-center gap-2 cursor-pointer">
         <LogoIcon className="h-8 w-8" />
         <h1 className="text-xl font-bold tracking-tight text-indigo-600 dark:text-indigo-400">
             Asisty.AI
@@ -106,7 +105,6 @@ export const Header: React.FC<HeaderProps> = ({
     maturityScore,
     isProcessing,
     userProfile,
-    onToggleDeveloperPanel,
     isConversationListOpen,
     onToggleConversationList,
     isWorkspaceVisible,
@@ -116,20 +114,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
     const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
     const userMenuRef = React.useRef<HTMLDivElement>(null);
-    const logoClickCount = React.useRef(0);
-    const logoClickTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    const handleLogoClick = () => {
-        logoClickCount.current += 1;
-        if (logoClickTimer.current) clearTimeout(logoClickTimer.current);
-        logoClickTimer.current = setTimeout(() => { logoClickCount.current = 0; }, 1500);
-        if (logoClickCount.current >= 5) {
-            onToggleDeveloperPanel();
-            logoClickCount.current = 0;
-            if (logoClickTimer.current) clearTimeout(logoClickTimer.current);
-        }
-    };
-    
      React.useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
@@ -143,7 +128,7 @@ export const Header: React.FC<HeaderProps> = ({
     return (
         <header className="sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md shadow-sm p-2 flex items-center justify-between h-16 border-b border-slate-200 dark:border-slate-700 z-20 flex-shrink-0">
             <div className="flex items-center gap-2 ml-4">
-                <Logo onLogoClick={handleLogoClick} />
+                <Logo />
             </div>
 
             <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0 mr-4">

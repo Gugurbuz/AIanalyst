@@ -239,7 +239,6 @@ export const MainAppLayout: React.FC = () => {
                 saveStatus={context.saveStatus}
                 maturityScore={context.displayedMaturityScore}
                 isProcessing={context.isProcessing}
-                onToggleDeveloperPanel={context.handleToggleDeveloperPanel}
                 userProfile={context.userProfile}
                 isConversationListOpen={context.isConversationListOpen}
                 onToggleConversationList={() => context.setIsConversationListOpen(!context.isConversationListOpen)}

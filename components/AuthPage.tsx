@@ -25,34 +25,10 @@ interface AuthPageProps {
 
 export const AuthPage: React.FC<AuthPageProps> = ({ initialView = 'login', onNavigateBack }) => {
     const [isLogin, setIsLogin] = useState(initialView === 'login');
-    const [isDeveloperPanelOpen, setIsDeveloperPanelOpen] = useState(false);
-    const logoClickCount = useRef(0);
-    // FIX: Replaced NodeJS.Timeout with ReturnType<typeof setTimeout> for browser compatibility.
-    const logoClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
      useEffect(() => {
         setIsLogin(initialView === 'login');
     }, [initialView]);
-
-    const handleLogoClick = () => {
-        logoClickCount.current += 1;
-
-        if (logoClickTimer.current) {
-            clearTimeout(logoClickTimer.current);
-        }
-
-        logoClickTimer.current = setTimeout(() => {
-            logoClickCount.current = 0;
-        }, 1500); // Reset after 1.5 seconds
-
-        if (logoClickCount.current >= 5) {
-            setIsDeveloperPanelOpen(true);
-            logoClickCount.current = 0;
-            if (logoClickTimer.current) {
-                clearTimeout(logoClickTimer.current);
-            }
-        }
-    };
 
     return (
         <>
@@ -68,7 +44,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialView = 'login', onNav
                         </button>
                     )}
                     <div className="text-center mb-8">
-                        <div onClick={handleLogoClick} className="inline-block cursor-pointer" title="Geliştirici Panelini açmak için 5 kez tıklayın">
+                        <div className="inline-block">
                             <Logo />
                         </div>
                         <h2 className="mt-4 text-2xl font-bold text-slate-800 dark:text-slate-200">
@@ -87,23 +63,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialView = 'login', onNav
                     </div>
                 </div>
             </div>
-            {isDeveloperPanelOpen && (
-                 <DeveloperPanel
-                    onClose={() => setIsDeveloperPanelOpen(false)}
-                    modelName={localStorage.getItem('geminiModel') || 'gemini-2.5-flash'}
-                    onModelNameChange={(name) => localStorage.setItem('geminiModel', name)}
-                    supabaseUrl={localStorage.getItem('supabaseUrl') || ''}
-                    onSupabaseUrlChange={(url) => localStorage.setItem('supabaseUrl', url)}
-                    supabaseAnonKey={localStorage.getItem('supabaseAnonKey') || ''}
-                    onSupabaseAnonKeyChange={(key) => localStorage.setItem('supabaseAnonKey', key)}
-                    testUserEmail={localStorage.getItem('devTestUserEmail') || ''}
-                    onTestUserEmailChange={(email) => localStorage.setItem('devTestUserEmail', email)}
-                    testUserPassword={localStorage.getItem('devTestUserPassword') || ''}
-                    onTestUserPasswordChange={(pw) => localStorage.setItem('devTestUserPassword', pw)}
-                    isFetchingFeedback={false}
-                    onToggleFeedbackDashboard={() => alert('Geri bildirim panelini görüntülemek için lütfen giriş yapın.')}
-                />
-            )}
         </>
     );
 };
