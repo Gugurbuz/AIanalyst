@@ -171,7 +171,7 @@ interface AnalystViewProps {
     user: User;
     isProcessing: boolean;
     generatingDocType: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | null;
-    onSendMessage: (content: string) => Promise<void>;
+    onSendMessage: (content: string, isSystemMessage?: boolean) => Promise<void>;
     onFeedbackUpdate: (messageId: string, feedbackData: { rating: 'up' | 'down' | null; comment?: string }) => void;
     onEditLastUserMessage: () => void;
     onStopGeneration: () => void;
@@ -353,6 +353,30 @@ const parseStreamingResponse = (content: string): { thinking: string | null; res
     return { thinking, response: '' };
 };
 
+// FIX: Moved useDebounce outside of the App component to make it a proper custom hook
+// and prevent "Rendered more hooks than during the previous render" error.
+const useDebounce = (callback: (...args: any[]) => void, delay: number) => {
+    const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+            }
+        };
+    }, []);
+
+    return useCallback((...args: any[]) => {
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+        }
+        timeoutRef.current = setTimeout(() => {
+            callback(...args);
+        }, delay);
+    }, [callback, delay]);
+};
+
 
 export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
     // --- Core State ---
@@ -398,7 +422,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
     const [isDeepAnalysisMode, setIsDeepAnalysisMode] = useState(false);
     const expertModeClarificationAttempts = useRef(0);
-    const [diagramType, setDiagramType] = useState<'mermaid' | 'bpmn'>('mermaid');
+    const [diagramType, setDiagramType] = useState<'mermaid' | 'bpmn'>('bpmn');
     const [allTemplates, setAllTemplates] = useState<Template[]>([]);
     const [selectedTemplates, setSelectedTemplates] = useState({
         analysis: '',
@@ -601,20 +625,6 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
         };
     }, []);
 
-    const useDebounce = (callback: (...args: any[]) => void, delay: number) => {
-        // FIX: Replaced NodeJS.Timeout with ReturnType<typeof setTimeout> for browser compatibility.
-        const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    
-        return useCallback((...args: any[]) => {
-            if (timeoutRef.current) {
-                clearTimeout(timeoutRef.current);
-            }
-            timeoutRef.current = setTimeout(() => {
-                callback(...args);
-            }, delay);
-        }, [callback, delay]);
-    };
-    
     const triggerSave = useDebounce((conv: Partial<Conversation> & { id: string }) => {
         if (debouncedSave.current) {
             debouncedSave.current(conv);
@@ -970,7 +980,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
     const processStream = useCallback(async (stream: AsyncGenerator<StreamChunk>, assistantMessageId: string) => {
         let docResponses: { [key in keyof GeneratedDocs]?: string } = {};
         let accumulatedMessage = "";
-        let finalSuggestion: GenerativeSuggestion | null = null;
+        let finalSuggestion = "";
     
         for await (const chunk of stream) {
             if (chunk.type === 'doc_stream_chunk' && activeConversationId) {
@@ -1015,8 +1025,12 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
             } else if (chunk.type === 'visualization_update' && activeConversationId) {
                 const vizKey = diagramType === 'mermaid' ? 'mermaidViz' : 'bpmnViz';
                 saveDocumentVersion(vizKey, { code: chunk.content, sourceHash: '' }, "AI Tarafından Oluşturuldu");
-            } else if (chunk.type === 'chat_stream_chunk' && activeConversationId) {
-                accumulatedMessage += chunk.chunk;
+            } else if ((chunk.type === 'chat_stream_chunk' || chunk.type === 'chat_overwrite') && activeConversationId) {
+                if (chunk.type === 'chat_overwrite') {
+                    accumulatedMessage = chunk.chunk;
+                } else {
+                    accumulatedMessage += chunk.chunk;
+                }
                 const { thinking, response } = parseStreamingResponse(accumulatedMessage);
                 
                 setConversations(prev => prev.map(c => {
@@ -1039,7 +1053,6 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
                     }
                     return c;
                 }));
-
             } else if (chunk.type === 'chat_response' && activeConversationId) {
                 accumulatedMessage = chunk.content;
                 const { thinking, response } = parseStreamingResponse(accumulatedMessage);
@@ -1091,8 +1104,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
         if (!content.trim()) return;
 
         if (!userProfile || userProfile.tokens_used >= userProfile.token_limit) {
+            // FIX: Pass an argument to abort() to resolve the "Expected 1 arguments, but got 0" error.
             if (streamControllerRef.current) {
-                // FIX: Pass an argument to abort() to resolve the "Expected 1 arguments, but got 0" error.
                 streamControllerRef.current.abort('Token limit reached');
             }
             setShowUpgradeModal(true);
@@ -1152,12 +1165,17 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
             };
 
             // Atomically update the UI with both the user message and the placeholder.
+            // Only add the user message to the UI if it's not a system message.
             setConversations(prev =>
-                prev.map(c =>
-                    c.id === currentConversationId
-                        ? { ...c, messages: [...c.messages, userMessage, assistantPlaceholder] }
-                        : c
-                )
+                prev.map(c => {
+                    if (c.id === currentConversationId) {
+                        const newMessages = isSystemMessage
+                            ? [...c.messages, assistantPlaceholder]
+                            : [...c.messages, userMessage, assistantPlaceholder];
+                        return { ...c, messages: newMessages };
+                    }
+                    return c;
+                })
             );
 
             const { error: insertError } = await supabase.from('conversation_details').insert(userMessage);
@@ -1335,7 +1353,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
                  } else if (type === 'test') {
                      rawStream = geminiService.generateTestScenarios(conv.generatedDocs.analysisDoc, templatePrompt, modelForGeneration);
                  } else { // traceability
-                     rawStream = geminiService.generateTraceabilityMatrix(conv.generatedDocs.analysisDoc, testScenariosContent, templatePrompt, modelForGeneration);
+                     rawStream = geminiService.generateTraceabilityMatrix(conv.generatedDocs.analysisDoc, testScenariosContent, templateForGeneration, modelForGeneration);
                  }
                  stream = wrapDocStream(rawStream, docKey as any);
                  const { docResponses } = await processStream(stream, ''); // Pass empty assistantId as this is not a chat response
@@ -1559,9 +1577,9 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
 
     const handleTemplateChange = (type: 'analysis' | 'test' | 'traceability') => async (event: React.ChangeEvent<HTMLSelectElement>) => {
         const newTemplateId = event.target.value;
-        const docKey = type === 'analysis' ? 'analysisDoc' : type === 'test' ? 'testScenarios' : 'traceabilityMatrix';
-        const documentType = keyToDocumentTypeMap[docKey];
-    
+        const docKey = type === 'analysis' ? 'analysisDoc' : type === 'test' ? 'testScenarios' : type === 'traceability' ? 'traceabilityMatrix' : null; // Added traceability check
+        const documentType = docKey ? keyToDocumentTypeMap[docKey] : null; // Ensure docKey is not null
+
         if (!activeConversation || !documentType) return;
     
         // Find the latest version for the selected template
@@ -1575,7 +1593,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
             await switchActiveDocument(latestVersionForTemplate);
         } else {
             // No version exists for this template.
-            const currentDoc = activeConversation.generatedDocs[docKey];
+            const currentDoc = activeConversation.generatedDocs[docKey as keyof GeneratedDocs]; // Cast docKey to keyof GeneratedDocs
             const docContent = typeof currentDoc === 'object' ? (currentDoc as SourcedDocument).content : currentDoc;
     
             if (docContent && docContent !== SAMPLE_ANALYSIS_DOCUMENT) {
@@ -1622,7 +1640,7 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
                 suggestedQuestions: activeConversation.generatedDocs.maturityReport.suggestedQuestions.filter(q => q !== question)
             };
             // This needs to be adapted to the new data structure
-            saveDocumentVersion('maturityReport', newReport, 'Kullanıcı soruyu sordu');
+            saveDocumentVersion('maturityReport', newReport as any, 'Kullanıcı soruyu sordu');
         }
     };
 
@@ -1859,7 +1877,18 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
             {isNewAnalysisModalOpen && <NewAnalysisModal isOpen={isNewAnalysisModalOpen} onClose={() => setIsNewAnalysisModalOpen(false)} onStartFromScratch={handleStartFromScratch} onStartWithDocument={handleStartWithDocument} isProcessing={isProcessing} />}
             {isShareModalOpen && activeConversation && <ShareModal isOpen={isShareModalOpen} onClose={() => setIsShareModalOpen(false)} conversation={activeConversation} onUpdateShareSettings={(id, updates) => updateConversation(id, updates)} />}
             {showUpgradeModal && <UpgradeModal isOpen={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />}
-            {isFeatureSuggestionsModalOpen && <FeatureSuggestionsModal isOpen={isFeatureSuggestionsModalOpen} onClose={() => setIsFeatureSuggestionsModalOpen(false)} isLoading={isFetchingSuggestions} suggestions={featureSuggestions} onSelectSuggestion={(s) => sendMessage(s)} error={suggestionError} onRetry={handleSuggestNextFeature} />}
+            {isFeatureSuggestionsModalOpen && <FeatureSuggestionsModal 
+                isOpen={isFeatureSuggestionsModalOpen} 
+                onClose={() => setIsFeatureSuggestionsModalOpen(false)} 
+                isLoading={isFetchingSuggestions} 
+                suggestions={featureSuggestions} 
+                onSelectSuggestion={(s) => {
+                    const approvalMessage = `[KULLANICI EYLEMİ]: AI'nın sunduğu şu fikri geliştirmeye devam edelim: "${s}"`;
+                    sendMessage(approvalMessage, true);
+                }} 
+                error={suggestionError} 
+                onRetry={handleSuggestNextFeature} 
+            />}
             {isRegenerateModalOpen && regenerateModalData.current && (
                 <RegenerateConfirmationModal 
                     isOpen={isRegenerateModalOpen}

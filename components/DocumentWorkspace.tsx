@@ -360,7 +360,12 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             <div className="flex items-center gap-4">
                                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Süreç Görselleştirmesi</h3>
                                 <div className="flex items-center p-1 bg-slate-200 dark:bg-slate-700 rounded-lg">
-                                    <button onClick={() => handleDiagramTypeChange('mermaid')} disabled={isVisualizing} className={`px-2 py-1 text-xs flex items-center gap-1.5 sm:px-3 sm:py-1 sm:text-sm font-semibold rounded-md transition-colors disabled:cursor-not-allowed ${diagramType === 'mermaid' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>
+                                    <button 
+                                        onClick={() => handleDiagramTypeChange('mermaid')} 
+                                        disabled={true}
+                                        title="Mermaid seçeneği geçici olarak devre dışıdır."
+                                        className={`px-2 py-1 text-xs flex items-center gap-1.5 sm:px-3 sm:py-1 sm:text-sm font-semibold rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${diagramType === 'mermaid' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}
+                                    >
                                         <GanttChartSquare className="h-4 w-4" /> Mermaid
                                     </button>
                                     <button onClick={() => handleDiagramTypeChange('bpmn')} disabled={isVisualizing} className={`px-2 py-1 text-xs flex items-center gap-1.5 sm:px-3 sm:py-1 sm:text-sm font-semibold rounded-md transition-colors disabled:cursor-not-allowed ${diagramType === 'bpmn' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>
