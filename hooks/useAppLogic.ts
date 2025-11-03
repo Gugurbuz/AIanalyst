@@ -180,6 +180,13 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
     const [displayedMaturityScore, setDisplayedMaturityScore] = useState<{ score: number; justification: string } | null>(null);
     const maturityScoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const streamControllerRef = useRef<AbortController | null>(null);
+    
+    // --- Refs for fixing infinite loops ---
+    const conversationsRef = useRef(conversations);
+    conversationsRef.current = conversations;
+    const activeIdRef = useRef(activeConversationId);
+    activeIdRef.current = activeConversationId;
+
 
     useEffect(() => {
         if (error) {
@@ -246,42 +253,6 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
     }, [activeConversationId]);
 
     const isInitialRender = useRef(true);
-
-    useEffect(() => {
-        if (isInitialRender.current) {
-            isInitialRender.current = false;
-            return;
-        }
-
-        const runMaturityCheck = async () => {
-            if (!activeConversation) return;
-
-            const hasInteraction = activeConversation.messages.filter(m => m.role !== 'system').length > 0 ||
-                                   activeConversation.documents.length > 0;
-            if (!hasInteraction) return;
-
-            try {
-                console.log("Document change detected, re-running maturity check...");
-                const { report, tokens } = await geminiService.checkAnalysisMaturity(
-                    activeConversation.messages,
-                    activeConversation.generatedDocs,
-                    'gemini-2.5-flash-lite'
-                );
-                commitTokenUsage(tokens);
-                saveDocumentVersion('maturityReport', report, "Doküman değişikliği sonrası otomatik değerlendirme");
-            } catch (maturityError) {
-                console.warn("Arka plan olgunluk kontrolü (doküman değişikliği sonrası) başarısız oldu:", maturityError);
-            }
-        };
-
-        const timer = setTimeout(runMaturityCheck, 1000);
-        return () => clearTimeout(timer);
-
-    }, [
-        activeConversation?.generatedDocs.analysisDoc,
-        typeof activeConversation?.generatedDocs.testScenarios === 'object' ? activeConversation?.generatedDocs.testScenarios.content : activeConversation?.generatedDocs.testScenarios,
-        typeof activeConversation?.generatedDocs.traceabilityMatrix === 'object' ? activeConversation?.generatedDocs.traceabilityMatrix.content : activeConversation?.generatedDocs.traceabilityMatrix,
-    ]);
 
 
     // --- Developer & Feedback Panel Logic ---
@@ -417,12 +388,24 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         }
 
         if (activeConversationId) {
-            const currentConv = conversations.find(c => c.id === activeConversationId);
-            const currentTokens = currentConv?.total_tokens_used || 0;
-            const newTotal = currentTokens + tokens;
-            updateConversation(activeConversationId, { total_tokens_used: newTotal });
+            setConversations(prevConvs => {
+                const convIndex = prevConvs.findIndex(c => c.id === activeConversationId);
+                if (convIndex === -1) return prevConvs;
+
+                const currentConv = prevConvs[convIndex];
+                const newTotal = (currentConv.total_tokens_used || 0) + tokens;
+                
+                const updatedConv = { ...currentConv, total_tokens_used: newTotal };
+                
+                const newConvs = [...prevConvs];
+                newConvs[convIndex] = updatedConv;
+
+                triggerSave({ id: activeConversationId, total_tokens_used: newTotal });
+
+                return newConvs;
+            });
         }
-    }, [userProfile, activeConversationId, conversations, updateConversation, triggerProfileSave]);
+    }, [userProfile, activeConversationId, triggerProfileSave, triggerSave]);
 
     const saveDocumentVersion = useCallback(async (
         docKey: keyof GeneratedDocs,
@@ -530,6 +513,49 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
             });
         });
     }, [activeConversationId, user.id]);
+
+    useEffect(() => {
+        if (isInitialRender.current) {
+            isInitialRender.current = false;
+            return;
+        }
+
+        const runMaturityCheck = async () => {
+            const currentConversations = conversationsRef.current;
+            const currentActiveId = activeIdRef.current;
+            const activeConversation = currentConversations.find(c => c.id === currentActiveId);
+            
+            if (!activeConversation) return;
+
+            const hasInteraction = activeConversation.messages.filter(m => m.role !== 'system').length > 0 ||
+                                   activeConversation.documents.length > 0;
+            if (!hasInteraction) return;
+
+            try {
+                console.log("Document change detected, re-running maturity check...");
+                const generatedDocs = buildGeneratedDocs(activeConversation.documents);
+                const { report, tokens } = await geminiService.checkAnalysisMaturity(
+                    activeConversation.messages,
+                    generatedDocs,
+                    'gemini-2.5-flash-lite'
+                );
+                commitTokenUsage(tokens);
+                saveDocumentVersion('maturityReport', report, "Doküman değişikliği sonrası otomatik değerlendirme");
+            } catch (maturityError) {
+                console.warn("Arka plan olgunluk kontrolü (doküman değişikliği sonrası) başarısız oldu:", maturityError);
+            }
+        };
+
+        const timer = setTimeout(runMaturityCheck, 1000);
+        return () => clearTimeout(timer);
+    }, [
+        activeConversation?.generatedDocs.analysisDoc,
+        typeof activeConversation?.generatedDocs.testScenarios === 'object' ? activeConversation?.generatedDocs.testScenarios.content : activeConversation?.generatedDocs.testScenarios,
+        typeof activeConversation?.generatedDocs.traceabilityMatrix === 'object' ? activeConversation?.generatedDocs.traceabilityMatrix.content : activeConversation?.generatedDocs.traceabilityMatrix,
+        commitTokenUsage,
+        saveDocumentVersion
+    ]);
+
 
     const switchActiveDocument = useCallback(async (version: DocumentVersion) => {
         if (!activeConversationId) return;
@@ -1516,13 +1542,15 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         handleSuggestNextFeature,
         handleTemplateChange,
         handleConfirmRegenerate,
-        handlePrepareQuestionForAnswer,
-        handleApplySuggestion,
-        handleDeepAnalysisModeChange,
         handleRestoreVersion,
         commitTokenUsage,
         saveDocumentVersion,
-// FIX: Export setDiagramType to allow child components to change the diagram type.
         setDiagramType,
+        handleFeedbackUpdate,
+        handleEditLastUserMessage,
+        handleStopGeneration,
+        handlePrepareQuestionForAnswer,
+        handleApplySuggestion,
+        handleDeepAnalysisModeChange
     };
 };

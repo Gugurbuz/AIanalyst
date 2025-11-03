@@ -1,6 +1,6 @@
 // components/ChatMessage.tsx
 import React from 'react';
-import { Message, GenerativeSuggestion } from '../types'; // GenerativeSuggestion import'u (kullanmasak da) tip için kalabilir
+import { Message, GenerativeSuggestion, ThinkingStep } from '../types'; // GenerativeSuggestion import'u (kullanmasak da) tip için kalabilir
 import { User, Bot } from 'lucide-react';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { Feedback } from './Feedback';
@@ -66,9 +66,18 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
           }`}
         >
           {/* --- DEĞİŞİKLİK BURADA --- */}
-          {/* 'message.thinking' yerine 'message.expertRunChecklist' dizisini kullanıyoruz */}
+          {/* FIX: Map ExpertStep[] to ThinkingStep[] and provide all required props to ThinkingProcess. */}
           {message.role === 'assistant' && message.expertRunChecklist && (
-            <ThinkingProcess steps={message.expertRunChecklist} />
+            <ThinkingProcess
+              steps={message.expertRunChecklist.map(s => ({
+                  ...s,
+                  description: s.details || '',
+                  // Map `in_progress` to `pending` as ThinkingProcess uses `pending` for spinner.
+                  status: s.status === 'in_progress' ? 'pending' : s.status,
+              })) as ThinkingStep[]}
+              isThinking={message.expertRunChecklist.some(s => s.status === 'in_progress' || s.status === 'pending')}
+              error={message.expertRunChecklist.find(s => s.status === 'error')?.details || null}
+            />
           )}
           {/* ------------------------ */}
 
@@ -81,11 +90,11 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
           <MarkdownRenderer content={message.content} />
 
           {/* Orijinal dosyadaki 'generativeSuggestion' kontrolünü geri ekliyoruz */}
+          {/* FIX: The props for the Feedback component were incorrect. Correctly pass `msg` and `onUpdate`. */}
           {message.role === 'assistant' && !message.generativeSuggestion && (
             <Feedback
-              messageId={message.id}
-              feedback={message.feedback}
-              onFeedback={onFeedback}
+              msg={message}
+              onUpdate={(feedbackData) => onFeedback(message.id, feedbackData)}
             />
           )}
 

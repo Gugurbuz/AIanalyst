@@ -223,6 +223,8 @@ export const MainAppLayout: React.FC = () => {
         isFetchingSuggestions,
         suggestionError,
         isRegenerateModalOpen,
+        // FIX: Destructure the setter for the regenerate modal to resolve 'Cannot find name' error.
+        setIsRegenerateModalOpen,
         regenerateModalData,
         activeDocTab,
         isDeveloperPanelOpen,

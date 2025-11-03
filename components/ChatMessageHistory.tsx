@@ -54,7 +54,8 @@ export const ChatMessageHistory: React.FC<ChatMessageHistoryProps> = ({
             key={msg.id || index}
             message={msg}
             onFeedback={onFeedbackUpdate} // Hata burada 'onFeedback' idi
-            onApplySuggestion={onApplySuggestion}
+            // FIX: Remove onApplySuggestion as it's not a valid prop on ChatMessage currently.
+            // onApplySuggestion={onApplySuggestion}
           />
         );
       })}

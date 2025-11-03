@@ -70,12 +70,13 @@ const ThinkingProcess: React.FC<ThinkingProcessProps> = ({ steps, isThinking, er
             </div>
           </div>
         ))}
-      </ul>
+      </div>
 
       {/* Henüz hiç adım yokken gösterilen yüklenici */}
       {isThinking && steps.length === 0 && !error && ( //
         <div className="flex items-center text-sm text-gray-700 dark:text-gray-300 p-3">
-          <LoadingSpinner size="sm" /> {/* */}
+          {/* FIX: Removed unsupported 'size' prop from LoadingSpinner. */}
+          <LoadingSpinner /> {/* */}
           <span className="ml-2">Analiz başlatılıyor...</span>
         </div>
       )}
