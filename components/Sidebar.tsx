@@ -1,19 +1,29 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import type { Conversation } from '../types';
 import { X, Pencil, MoreVertical, Trash2, Plus } from 'lucide-react';
+// REFACTOR: Import the context hook
+import { useConversationsContext } from '../App';
 
+
+// REFACTOR: Props are simplified as data comes from context.
+// FIX: Added onNewConversation to props as it's managed by the parent component, not the context.
 interface SidebarProps {
-    conversations: Conversation[];
-    activeConversationId: string | null;
-    onSelectConversation: (id: string) => void;
-    onNewConversation: () => void;
-    onUpdateConversationTitle: (id: string, title: string) => void;
-    onDeleteConversation: (id: string) => void;
     isOpen: boolean;
     setIsOpen: (isOpen: boolean) => void;
+    onNewConversation: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeConversationId, onSelectConversation, onNewConversation, onUpdateConversationTitle, onDeleteConversation, isOpen, setIsOpen }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, onNewConversation }) => {
+    // REFACTOR: Get state and actions from context
+    // FIX: Removed `onNewConversation` from context destructuring as it's now a prop.
+    const { 
+        conversations, 
+        activeConversationId, 
+        setActiveConversationId, 
+        updateConversationTitle, 
+        deleteConversation 
+    } = useConversationsContext();
+
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingTitle, setEditingTitle] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
@@ -22,7 +32,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeConversat
     const menuRef = useRef<HTMLDivElement>(null);
     const sidebarRef = useRef<HTMLElement>(null);
 
-    // Focus and select text when edit mode begins
     useEffect(() => {
         if (editingId && inputRef.current) {
             inputRef.current.focus();
@@ -30,16 +39,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeConversat
         }
     }, [editingId]);
     
-    // Close menu on click outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-                setMenuOpenForId(null);
-            }
-            // Close sidebar if clicking outside of it on mobile
-            if (isOpen && window.innerWidth < 768 && sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-            }
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpenForId(null);
+            if (isOpen && window.innerWidth < 768 && sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) setIsOpen(false);
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -47,13 +50,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeConversat
 
 
     const filteredConversations = useMemo(() => {
-        if (!searchTerm.trim()) {
-            return conversations;
-        }
-        // Add a check for `conv` to prevent crashes on malformed data
-        return conversations.filter(conv =>
-            conv && (conv.title || '').toLowerCase().includes(searchTerm.toLowerCase())
-        );
+        if (!searchTerm.trim()) return conversations;
+        return conversations.filter(conv => conv && (conv.title || '').toLowerCase().includes(searchTerm.toLowerCase()));
     }, [conversations, searchTerm]);
 
     const handleEditStart = (conv: Conversation) => {
@@ -64,114 +62,62 @@ export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeConversat
     const handleEditSave = () => {
         if (editingId) {
             const newTitle = editingTitle.trim();
-            if (newTitle) {
-                onUpdateConversationTitle(editingId, newTitle);
-            }
+            if (newTitle) updateConversationTitle(editingId, newTitle);
         }
-        setEditingId(null); // Exit edit mode
+        setEditingId(null);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            handleEditSave();
-        } else if (e.key === 'Escape') {
-            setEditingId(null); // Cancel edit
-        }
+        if (e.key === 'Enter') { e.preventDefault(); handleEditSave(); } 
+        else if (e.key === 'Escape') setEditingId(null);
     };
     
     const handleSelect = (convId: string) => {
-        onSelectConversation(convId);
-        if (window.innerWidth < 768) { // Close sidebar on mobile after selecting conversation
-            setIsOpen(false);
-        }
+        setActiveConversationId(convId);
+        if (window.innerWidth < 768) setIsOpen(false);
     };
 
     const handleDelete = (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
         setMenuOpenForId(null);
-        onDeleteConversation(id);
+        deleteConversation(id);
     };
 
     return (
         <>
-            {/* Backdrop for mobile sidebar */}
-            {isOpen && (
-                <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setIsOpen(false)} aria-hidden="true"></div>
-            )}
-            <aside ref={sidebarRef} className={`absolute inset-y-0 left-0 z-40 w-72 bg-slate-50 dark:bg-slate-800 border-r dark:border-slate-700 flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out
-                ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            {isOpen && <div className="fixed inset-0 bg-black/50 z-40 md:hidden" onClick={() => setIsOpen(false)} aria-hidden="true"></div>}
+            <aside ref={sidebarRef} className={`absolute inset-y-0 left-0 z-40 w-72 bg-slate-50 dark:bg-slate-800 border-r dark:border-slate-700 flex flex-col flex-shrink-0 h-full transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                 <div className="flex flex-col flex-1 overflow-hidden">
                     <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700 h-16 flex-shrink-0">
                         <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200 truncate">Sohbetler</h2>
-                        {/* Close button for mobile sidebar */}
                         <button onClick={() => setIsOpen(false)} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 focus:outline-none md:hidden" aria-label="Kenar çubuğunu kapat">
                            <X className="h-6 w-6 text-slate-600 dark:text-slate-400" />
                         </button>
                     </div>
 
                     <div className="p-2 border-b border-slate-200 dark:border-slate-700">
-                        <input
-                            type="text"
-                            placeholder="Başlıkta ara..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
-                            aria-label="Sohbet başlığında ara"
-                        />
+                        <input type="text" placeholder="Başlıkta ara..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full px-3 py-2 text-sm bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors" aria-label="Sohbet başlığında ara" />
                     </div>
                     
                     <div className="flex-grow overflow-y-auto p-2 space-y-1">
                         {filteredConversations.length === 0 ? (
                              <div className="text-center text-slate-500 dark:text-slate-400 text-sm p-4">
-                                {searchTerm 
-                                    ? 'Sonuç bulunamadı.' 
-                                    : 'Aktif sohbetiniz bulunmuyor.'
-                                }
+                                {searchTerm ? 'Sonuç bulunamadı.' : 'Aktif sohbetiniz bulunmuyor.'}
                              </div>
                         ) : filteredConversations.map((conv) => (
                             <div key={conv.id} className="relative group">
                                 {editingId === conv.id ? (
-                                    <input
-                                        ref={inputRef}
-                                        type="text"
-                                        value={editingTitle}
-                                        onChange={(e) => setEditingTitle(e.target.value)}
-                                        onBlur={handleEditSave}
-                                        onKeyDown={handleKeyDown}
-                                        className="w-full text-left px-3 py-2.5 rounded-md text-sm bg-white dark:bg-slate-900 border border-indigo-500 ring-1 ring-indigo-500 focus:outline-none"
-                                        aria-label={`Sohbet başlığını düzenle: ${conv.title}`}
-                                    />
+                                    <input ref={inputRef} type="text" value={editingTitle} onChange={(e) => setEditingTitle(e.target.value)} onBlur={handleEditSave} onKeyDown={handleKeyDown} className="w-full text-left px-3 py-2.5 rounded-md text-sm bg-white dark:bg-slate-900 border border-indigo-500 ring-1 ring-indigo-500 focus:outline-none" aria-label={`Sohbet başlığını düzenle: ${conv.title}`} />
                                 ) : (
                                     <>
-                                        <button
-                                            onClick={() => handleSelect(conv.id)}
-                                            className={`w-full text-left pl-3 pr-16 py-2.5 rounded-md text-sm truncate transition-colors duration-150 ${
-                                                conv.id === activeConversationId
-                                                    ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-200 font-semibold'
-                                                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                                            }`}
-                                            title={conv.title}
-                                            aria-current={conv.id === activeConversationId ? 'page' : undefined}
-                                        >
+                                        <button onClick={() => handleSelect(conv.id)} className={`w-full text-left pl-3 pr-16 py-2.5 rounded-md text-sm truncate transition-colors duration-150 ${conv.id === activeConversationId ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-200 font-semibold' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}`} title={conv.title} aria-current={conv.id === activeConversationId ? 'page' : undefined}>
                                             {conv.title}
                                         </button>
                                          <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); handleEditStart(conv) }}
-                                                className="p-1.5 rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600"
-                                                title="Başlığı düzenle"
-                                                aria-label={`Başlığı düzenle: ${conv.title}`}
-                                            >
+                                            <button onClick={(e) => { e.stopPropagation(); handleEditStart(conv) }} className="p-1.5 rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600" title="Başlığı düzenle" aria-label={`Başlığı düzenle: ${conv.title}`}>
                                                 <Pencil className="h-4 w-4" />
                                             </button>
-                                             <button 
-                                                onClick={(e) => { e.stopPropagation(); setMenuOpenForId(conv.id === menuOpenForId ? null : conv.id); }}
-                                                className="p-1.5 rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600"
-                                                title="Diğer seçenekler"
-                                                aria-haspopup="true"
-                                                aria-expanded={menuOpenForId === conv.id}
-                                            >
+                                             <button onClick={(e) => { e.stopPropagation(); setMenuOpenForId(conv.id === menuOpenForId ? null : conv.id); }} className="p-1.5 rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600" title="Diğer seçenekler" aria-haspopup="true" aria-expanded={menuOpenForId === conv.id}>
                                                 <MoreVertical className="h-4 w-4" />
                                             </button>
                                         </div>
