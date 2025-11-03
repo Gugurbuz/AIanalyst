@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Message, User, GenerativeSuggestion } from '../types';
-import { ChatMessage } from './ChatMessage';
+import  ChatMessage  from './ChatMessage';
 
 interface ChatMessageHistoryProps {
     user: User;

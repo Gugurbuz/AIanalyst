@@ -222,3 +222,18 @@ export interface LintingIssue {
     section: string; // e.g., "Fonksiyonel Gereksinimler"
     details: string; // e.g., "FR-001'den sonra FR-003 geliyor."
 }
+// ... diğer tipler
+export interface ThinkingStep {
+  id: string;
+  name: string; // Bu, "Başlık" olacak
+  description: string; // YENİ: Bu, "Açıklama" metni olacak
+  status: 'pending' | 'completed' | 'error'; //
+  result?: any;
+  error?: string;
+}
+// ... diğer tipler
+
+
+
+
+
