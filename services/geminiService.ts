@@ -204,7 +204,7 @@ const tools: FunctionDeclaration[] = [
 // --- GÜNCELLENMİŞ FONKSİYON ---
 // Bu fonksiyon artık BİRDEN FAZLA <dusunce> etiketini bulup
 // birleştirecek şekilde güncellendi.
-const parseStreamingResponse = (content: string): { thinking: string | null; response: string } => {
+export const parseStreamingResponse = (content: string): { thinking: string | null; response: string } => {
     const thinkingTagRegex = /<dusunce>([\s\S]*?)<\/dusunce>/g;
     const thoughts: string[] = [];
     let match;
@@ -381,7 +381,6 @@ export const geminiService = {
     },
     
     clarifyAndConfirmExpertMode: async (history: Message[], model: GeminiModel): Promise<{ needsClarification: boolean; questions?: string; confirmationRequest?: string; checklist?: ExpertStep[], tokens: number }> => {
-        // ... (logic remains the same, just need to handle token return)
         const schema = {
             type: Type.OBJECT,
             properties: {
@@ -844,4 +843,3 @@ export const geminiService = {
         }
     },
 };
-

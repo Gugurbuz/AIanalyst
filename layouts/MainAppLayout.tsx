@@ -245,6 +245,8 @@ export const MainAppLayout: React.FC = () => {
                 onToggleConversationList={() => context.setIsConversationListOpen(!context.isConversationListOpen)}
                 isWorkspaceVisible={context.isWorkspaceVisible}
                 onToggleWorkspace={() => context.setIsWorkspaceVisible(!context.isWorkspaceVisible)}
+                isExpertMode={context.isExpertMode}
+                setIsExpertMode={context.setIsExpertMode}
             />
             <div className="flex-1 flex min-h-0 relative">
                 <MainSidebar />

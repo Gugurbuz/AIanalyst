@@ -70,6 +70,27 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
   
   const styles = isUser ? bubbleStyles.user : bubbleStyles.assistant;
 
+  // Combine thinking steps from the 'thoughts' string and 'expertRunChecklist'
+  const thinkingSteps: ThinkingStep[] = (message.thoughts || '')
+    .split('\n')
+    // Filter out both empty lines and the initial placeholder text
+    .filter(line => line.trim() !== '' && line.trim() !== 'Düşünülüyor...')
+    .map((line, index) => ({
+        id: `thinking-step-${index}`,
+        name: line,
+        description: '', // The name is the primary display text
+        status: 'pending' // 'pending' status shows the spinner in ThinkingProcess
+    }));
+  
+  const expertSteps: ThinkingStep[] = (message.expertRunChecklist || []).map(s => ({
+      id: s.id,
+      name: s.name,
+      description: s.details || '',
+      status: s.status === 'in_progress' ? 'pending' : s.status,
+  }));
+  
+  const allSteps = [...thinkingSteps, ...expertSteps];
+
   return (
     <div
         className={`group/row flex items-end gap-2 animate-fade-in-up ${styles.container} ${isFirstInGroup ? 'mt-4' : 'mt-1'}`}
@@ -98,14 +119,10 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
         {/* Bubble Content */}
         <div className={`group relative max-w-lg lg:max-w-2xl w-fit flex items-start ${!isUser ? 'border-l-4 border-indigo-500 pl-3' : ''}`}>
              <div className={`relative px-4 py-3 ${styles.bubble} ${styles.corners} shadow-sm`}>
-                {message.role === 'assistant' && (message.thinking || message.expertRunChecklist) && (
+                {(message.thoughts || message.expertRunChecklist) && (
                     <ThinkingProcess
-                      steps={(message.expertRunChecklist || []).map(s => ({
-                          ...s,
-                          description: s.details || '',
-                          status: s.status === 'in_progress' ? 'pending' : s.status,
-                      })) as ThinkingStep[]}
-                      isThinking={!!message.thinking || message.expertRunChecklist?.some(s => s.status === 'in_progress' || s.status === 'pending')}
+                      steps={allSteps}
+                      isThinking={!!message.thoughts || message.expertRunChecklist?.some(s => s.status === 'in_progress' || s.status === 'pending')}
                       error={message.expertRunChecklist?.find(s => s.status === 'error')?.details || null}
                     />
                 )}

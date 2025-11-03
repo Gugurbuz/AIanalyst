@@ -50,7 +50,7 @@ export interface Message {
     feedback?: Feedback;
     expertRunChecklist?: ExpertStep[];
     generativeSuggestion?: GenerativeSuggestion;
-    thinking?: string;
+    thoughts?: string | null;
     created_at: string;
 }
 

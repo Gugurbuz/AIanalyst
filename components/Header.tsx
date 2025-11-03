@@ -2,6 +2,7 @@ import React from 'react';
 import type { User, Theme, UserProfile } from '../types';
 import { ThemeSwitcher } from './ThemeSwitcher';
 import { Menu, Share2, LoaderCircle, CheckCircle, AlertCircle, TrendingUp, Database, Sidebar, LayoutGrid } from 'lucide-react';
+import { ExpertModeToggle } from './ExpertModeToggle';
 
 interface HeaderProps {
     user: User;
@@ -18,6 +19,8 @@ interface HeaderProps {
     onToggleConversationList: () => void;
     isWorkspaceVisible: boolean;
     onToggleWorkspace: () => void;
+    isExpertMode: boolean;
+    setIsExpertMode: (isOn: boolean) => void;
 }
 
 const LogoIcon = ({ className }: { className?: string }) => (
@@ -101,12 +104,15 @@ export const Header: React.FC<HeaderProps> = ({
     onOpenShareModal,
     saveStatus,
     maturityScore,
+    isProcessing,
     userProfile,
     onToggleDeveloperPanel,
     isConversationListOpen,
     onToggleConversationList,
     isWorkspaceVisible,
     onToggleWorkspace,
+    isExpertMode,
+    setIsExpertMode,
 }) => {
     const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
     const userMenuRef = React.useRef<HTMLDivElement>(null);
@@ -177,6 +183,13 @@ export const Header: React.FC<HeaderProps> = ({
                         <UserTokenIndicator profile={userProfile} />
                     </>
                 )}
+                
+                <div className="h-4 w-px bg-slate-300 dark:bg-slate-600 hidden sm:block" />
+                <ExpertModeToggle
+                    isExpertMode={isExpertMode}
+                    setIsExpertMode={setIsExpertMode}
+                    disabled={isProcessing}
+                />
                 
                 <ThemeSwitcher theme={theme} onThemeChange={onThemeChange} />
 

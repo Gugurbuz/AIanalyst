@@ -1,7 +1,7 @@
 // hooks/useAppLogic.ts
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { geminiService } from '../services/geminiService';
+import { geminiService, parseStreamingResponse } from '../services/geminiService';
 import { promptService } from '../services/promptService';
 import type { StreamChunk } from '../services/geminiService';
 import { SAMPLE_ANALYSIS_DOCUMENT } from '../templates';
@@ -87,42 +87,6 @@ const simpleHash = (str: string): string => {
     return hash.toString();
 };
 
-const parseStreamingResponse = (content: string): { thinking: string | null; response: string } => {
-    const thinkingTagStart = '<dusunce>';
-    const thinkingTagEnd = '</dusunce>';
-    const separator = '\n\n';
-
-    const thinkingStartIndex = content.indexOf(thinkingTagStart);
-    if (thinkingStartIndex === -1) {
-        // No thinking tag found, entire content is the response.
-        return { thinking: null, response: content.trim() };
-    }
-
-    const thinkingContentStartIndex = thinkingStartIndex + thinkingTagStart.length;
-    const thinkingEndIndex = content.indexOf(thinkingTagEnd, thinkingContentStartIndex);
-
-    // Case 1: A closing </dusunce> tag is found. This is the most reliable separator.
-    if (thinkingEndIndex !== -1) {
-        const thinking = content.substring(thinkingContentStartIndex, thinkingEndIndex).trim();
-        const response = content.substring(thinkingEndIndex + thinkingTagEnd.length).trim();
-        return { thinking, response };
-    }
-    
-    // Case 2: No closing tag, but a double newline separator is found. This is a fallback for streaming.
-    // We look for the separator AFTER the start of the thinking content.
-    const separatorIndex = content.indexOf(separator, thinkingContentStartIndex);
-    if (separatorIndex !== -1) {
-        const thinking = content.substring(thinkingContentStartIndex, separatorIndex).trim();
-        const response = content.substring(separatorIndex + separator.length).trim();
-        return { thinking, response };
-    }
-
-    // Case 3: Only the opening tag is present and no separator yet. Assume everything after it is thinking content.
-    // This happens during streaming before the main response arrives.
-    const thinking = content.substring(thinkingContentStartIndex).trim();
-    return { thinking, response: '' };
-};
-
 interface UseAppLogicProps {
     user: User;
     onLogout: () => void;
@@ -169,6 +133,8 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
     const [inlineModificationState, setInlineModificationState] = useState<{ docKey: 'analysisDoc' | 'testScenarios'; originalText: string } | null>(null);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
     const [isDeepAnalysisMode, setIsDeepAnalysisMode] = useState(false);
+    // FIX: Add isExpertMode state to be used by the Header and ExpertModeToggle components.
+    const [isExpertMode, setIsExpertMode] = useState(false);
     const expertModeClarificationAttempts = useRef(0);
     const [diagramType, setDiagramType] = useState<'mermaid' | 'bpmn'>('mermaid');
     const [allTemplates, setAllTemplates] = useState<Template[]>([]);
@@ -764,7 +730,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
                             ...c,
                             messages: c.messages.map(m => {
                                 if (m.id === assistantMessageId) {
-                                    const newMsg = { ...m, thinking: thinking ?? undefined };
+                                    const newMsg = { ...m, thoughts: thinking ?? undefined };
                                     if (response) {
                                         (newMsg as Message).content = response;
                                     }
@@ -782,7 +748,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
                 const { thinking, response } = parseStreamingResponse(accumulatedMessage);
                 setConversations(prev => prev.map(c => {
                     if (c.id === activeConversationId) {
-                        return { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? { ...m, content: response, thinking: thinking ?? undefined } : m) };
+                        return { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? { ...m, content: response, thoughts: thinking ?? undefined } : m) };
                     }
                     return c;
                 }));
@@ -879,7 +845,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
                 conversation_id: currentConversationId,
                 role: 'assistant',
                 content: '',
-                thinking: '',
+                thoughts: 'Düşünülüyor...',
                 timestamp: new Date().toISOString(),
                 created_at: new Date().toISOString(),
             };
@@ -930,13 +896,13 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
                 const finalAssistantMessageData: Message = {
                     ...assistantPlaceholder,
                     content: response,
-                    thinking: thinking ?? undefined,
+                    thoughts: thinking ?? null,
                     generativeSuggestion: finalSuggestion || undefined,
                 };
         
                 setConversations(prev => prev.map(c => c.id === currentConversationId ? { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? finalAssistantMessageData : m) } : c));
                 
-                if (finalAssistantMessageData.content.trim() || finalAssistantMessageData.generativeSuggestion || finalAssistantMessageData.expertRunChecklist) {
+                if (finalAssistantMessageData.content.trim() || finalAssistantMessageData.generativeSuggestion || finalAssistantMessageData.expertRunChecklist || (finalAssistantMessageData.thoughts && finalAssistantMessageData.thoughts.trim())) {
                     const { error: newMsgError } = await supabase.from('conversation_details').upsert(finalAssistantMessageData);
                     if (newMsgError) { setError("Asistan yanıtı kaydedilemedi."); }
                 } else {
@@ -1486,6 +1452,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         inlineModificationState,
         saveStatus,
         isDeepAnalysisMode,
+        isExpertMode,
         diagramType,
         allTemplates,
         selectedTemplates,
@@ -1534,6 +1501,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         handleStopGeneration,
         handlePrepareQuestionForAnswer,
         handleApplySuggestion,
-        handleDeepAnalysisModeChange
+        handleDeepAnalysisModeChange,
+        setIsExpertMode,
     };
 };
