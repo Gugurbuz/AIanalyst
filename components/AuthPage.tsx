@@ -14,7 +14,7 @@ const LogoIcon = ({ className }: { className?: string }) => (
 const Logo = () => (
     <div className="flex items-center justify-center gap-3">
          <LogoIcon className="h-9 w-9" />
-        <span className="text-3xl font-bold text-slate-800 dark:text-slate-200">Asisty.ai</span>
+        <span className="text-3xl font-bold text-slate-800 dark:text-slate-200">Asisty.AI</span>
     </div>
 );
 
@@ -72,7 +72,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialView = 'login', onNav
                             <Logo />
                         </div>
                         <h2 className="mt-4 text-2xl font-bold text-slate-800 dark:text-slate-200">
-                            Asisty.ai'ye Hoş Geldiniz
+                            Asisty.AI'ye Hoş Geldiniz
                         </h2>
                         <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
                             Yapay zeka iş analisti asistanınızla gereksinimlerinizi olgunlaştırın, kullanıcı hikayeleri ve test senaryoları oluşturun.

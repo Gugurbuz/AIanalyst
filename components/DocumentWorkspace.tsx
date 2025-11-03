@@ -308,13 +308,17 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                                             key={doc.id}
                                             onClick={() => handleCreateClick(doc.id as any)}
                                             disabled={
+                                                (doc.id === 'viz' && !isAnalysisDocReady) ||
                                                 (doc.id === 'test' && !isAnalysisDocReady) ||
                                                 (doc.id === 'traceability' && (!isAnalysisDocReady || !testScenariosContent)) ||
                                                 (doc.id === 'backlog-generation' && (!isAnalysisDocReady || !testScenariosContent || !traceabilityMatrixContent))
                                             }
                                             title={
-                                                 (doc.id === 'test' && !isAnalysisDocReady) ? "Önce analiz dokümanı oluşturulmalı." :
-                                                 (doc.id === 'traceability' && (!isAnalysisDocReady || !testScenariosContent)) ? "Önce analiz ve test dokümanları oluşturulmalı." : ""
+                                                 (doc.id === 'viz' && !isAnalysisDocReady) ? "Görselleştirme için önce geçerli bir analiz dokümanı oluşturulmalıdır." :
+                                                 (doc.id === 'test' && !isAnalysisDocReady) ? "Test senaryoları için önce geçerli bir analiz dokümanı oluşturulmalıdır." :
+                                                 (doc.id === 'traceability' && (!isAnalysisDocReady || !testScenariosContent)) ? "İzlenebilirlik matrisi için önce analiz ve test dokümanları oluşturulmalıdır." :
+                                                 (doc.id === 'backlog-generation' && (!isAnalysisDocReady || !testScenariosContent || !traceabilityMatrixContent)) ? "Backlog oluşturmak için önce analiz, test ve izlenebilirlik dokümanları oluşturulmalıdır." :
+                                                 ""
                                             }
                                             className="w-full text-left flex items-center px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                             role="menuitem"

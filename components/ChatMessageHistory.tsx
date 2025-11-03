@@ -21,15 +21,19 @@ export const ChatMessageHistory: React.FC<ChatMessageHistoryProps> = ({
   onEditLastUserMessage,
   onApplySuggestion,
 }) => {
-  // 1. DÜZELTME:
-  // Tanımsız (undefined) mesajları filtreleyerek "Cannot read 'role'" hatasını en başta engelliyoruz.
   const visibleMessages = chatHistory.filter(
     (msg) => msg && msg.role !== 'system'
   );
 
   return (
-    <div className="w-full space-y-6 py-4">
+    <div className="w-full space-y-1 py-4">
       {visibleMessages.map((msg, index) => {
+        const prevMessage = visibleMessages[index - 1];
+        const nextMessage = visibleMessages[index + 1];
+
+        const isFirstInGroup = !prevMessage || prevMessage.role !== msg.role;
+        const isLastInGroup = !nextMessage || nextMessage.role !== msg.role;
+        
         // 'isEditable' mantığınız burada (bunu koruyoruz)
         const isLastMessage = index === visibleMessages.length - 1;
         const isSecondToLast = index === visibleMessages.length - 2;
@@ -45,24 +49,17 @@ export const ChatMessageHistory: React.FC<ChatMessageHistoryProps> = ({
             isEditable = true;
           }
         }
-
-        // 2. DÜZELTME:
-        // İç içe geçmiş 'map' döngüsü kaldırıldı.
-        // 'onFeedback' prop'u 'onFeedbackUpdate' olarak düzeltildi.
+        
         return (
           <ChatMessage
             key={msg.id || index}
             message={msg}
-            onFeedback={onFeedbackUpdate} // Hata burada 'onFeedback' idi
-            // FIX: Remove onApplySuggestion as it's not a valid prop on ChatMessage currently.
-            // onApplySuggestion={onApplySuggestion}
+            onFeedback={onFeedbackUpdate}
+            isFirstInGroup={isFirstInGroup}
+            isLastInGroup={isLastInGroup}
           />
         );
       })}
     </div>
   );
 };
-
-// Not: Bu dosya 'export const' (isimli) kullandığı için,
-// onu import eden dosyada 'import { ChatMessageHistory } from ...'
-// (süslü parantezli) kullanılması gerekir.

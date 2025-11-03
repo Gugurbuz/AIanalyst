@@ -256,8 +256,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
 
     return (
-        <div className="w-full bg-white dark:bg-slate-800 rounded-lg p-2">
-            <form onSubmit={handleSubmit} className="flex items-end space-x-2">
+        <div className="w-full bg-white dark:bg-slate-800 rounded-lg p-3">
+            <form onSubmit={handleSubmit} className="flex items-end space-x-3">
                  <input
                     type="file"
                     ref={fileInputRef}
@@ -345,8 +345,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                             onKeyDown={handleKeyDown}
                             placeholder="Bir iş analisti gibi sorun, Asisty yanıtlasın..."
                             disabled={isLoading}
-                            className="w-full p-3 pl-4 pr-12 bg-transparent focus:outline-none disabled:opacity-50 resize-none overflow-y-auto"
-                            rows={1}
+                            className="w-full py-4 pl-4 pr-12 bg-transparent focus:outline-none disabled:opacity-50 resize-none overflow-y-auto"
                             style={{ lineHeight: '1.5rem', maxHeight: '256px' }}
                         />
                         <button
@@ -364,7 +363,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                      <button
                         type="button"
                         onClick={onStopGeneration}
-                        className="self-end p-3 bg-red-600 text-white font-semibold rounded-xl shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-75 transition duration-200 flex-shrink-0"
+                        className="self-end p-4 bg-red-600 text-white font-semibold rounded-2xl shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-75 transition duration-200 flex-shrink-0"
                         aria-label="Üretmeyi Durdur"
                     >
                          <StopCircle className="h-6 w-6" />
@@ -373,7 +372,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <button
                         type="submit"
                         disabled={isLoading || (!input.trim() && !attachedFile)}
-                        className="self-end p-3 bg-indigo-600 text-white font-semibold rounded-xl shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-75 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200 flex-shrink-0"
+                        className="self-end p-4 bg-indigo-600 text-white font-semibold rounded-2xl shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-75 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200 flex-shrink-0"
                         aria-label="Mesajı Gönder"
                     >
                          <Send className="h-6 w-6" />

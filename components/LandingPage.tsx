@@ -33,7 +33,7 @@ const AuthModal = ({ onClose, onProceed }: { onClose: () => void; onProceed: () 
                     </div>
                     <h2 className="text-2xl font-bold mb-3">Devam etmek için giriş yapın</h2>
                     <p className="text-gray-400 mb-8">
-                        Asisty.ai'yi kullanmak için mevcut bir hesapla giriş yapmalı veya yeni bir hesap oluşturmalısınız.
+                        Asisty.AI'yi kullanmak için mevcut bir hesapla giriş yapmalı veya yeni bir hesap oluşturmalısınız.
                     </p>
 
                     <div className="space-y-4">
@@ -144,9 +144,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                 <div className="relative min-h-screen w-full flex flex-col items-center overflow-hidden" style={{backgroundColor: '#f7faff'}}>
                     <header className="absolute top-0 left-0 right-0 w-full py-4 z-50">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-14">
-                            <a href="#" className="flex items-center gap-2" aria-label="Asisty.ai Ana Sayfa">
+                            <a href="#" className="flex items-center gap-2" aria-label="Asisty.AI Ana Sayfa">
                                 <LogoIcon className="w-8 h-8" theme="light" />
-                                <span className="text-2xl font-bold text-gray-900">Asisty.ai</span>
+                                <span className="text-2xl font-bold text-gray-900">Asisty.AI</span>
                             </a>
                             <div className="hidden md:flex items-center gap-6">
                                 <a href="#features" className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">Özellikler</a>

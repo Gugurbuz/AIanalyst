@@ -1,14 +1,10 @@
 // components/ChatMessage.tsx
-import React from 'react';
-import { Message, GenerativeSuggestion, ThinkingStep } from '../types'; // GenerativeSuggestion import'u (kullanmasak da) tip için kalabilir
-import { User, Bot } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Message, GenerativeSuggestion, ThinkingStep } from '../types';
+import { User, Bot, Copy, Check } from 'lucide-react';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { Feedback } from './Feedback';
 import ThinkingProcess from './ThinkingProcess';
-// import { ExpertRunChecklist } from './ExpertRunChecklist'; // Orijinalde yorum satırındaydı
-
-// HATA BURADAYDI: Bu dosya (GenerativeSuggestionCard.tsx) projede bulunmadığı için import'u yorum satırına alıyoruz.
-// import { GenerativeSuggestionCard } from './GenerativeSuggestionCard';
 
 interface ChatMessageProps {
   message: Message;
@@ -16,20 +12,37 @@ interface ChatMessageProps {
     messageId: string,
     feedback: { rating: 'up' | 'down' | null; comment?: string }
   ) => void;
-  // Eksik bileşene bağlı olan bu prop'u da arayüzden kaldırıyoruz
-  // onApplySuggestion: (
-  //   suggestion: GenerativeSuggestion,
-  //   messageId: string
-  // ) => void;
+  isFirstInGroup: boolean;
+  isLastInGroup: boolean;
 }
 
 const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
   onFeedback,
-  // onApplySuggestion, // Prop kaldırıldı
+  isFirstInGroup,
+  isLastInGroup
 }) => {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
+  const [copyText, setCopyText] = useState('');
+
+  useEffect(() => {
+    if (copyText) {
+        const timer = setTimeout(() => setCopyText(''), 2000);
+        return () => clearTimeout(timer);
+    }
+  }, [copyText]);
+
+  const handleCopy = () => {
+      if (!message.content) return;
+      navigator.clipboard.writeText(message.content).then(() => {
+          setCopyText('Kopyalandı!');
+      }).catch(err => {
+          console.error('Could not copy text: ', err);
+          setCopyText('Hata');
+      });
+  };
+
 
   if (isSystem) {
     return (
@@ -41,74 +54,67 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
       </div>
     );
   }
+  
+  const bubbleStyles = {
+    user: {
+      container: `justify-end`,
+      bubble: `bg-indigo-600 dark:bg-indigo-700 text-white`,
+      corners: isLastInGroup ? 'rounded-2xl rounded-br-lg' : 'rounded-2xl',
+    },
+    assistant: {
+      container: `justify-start`,
+      bubble: `bg-white dark:bg-slate-800 dark:text-slate-200`,
+      corners: isLastInGroup ? 'rounded-2xl rounded-bl-lg' : 'rounded-2xl',
+    }
+  };
+  
+  const styles = isUser ? bubbleStyles.user : bubbleStyles.assistant;
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
-      <div
-        className={`flex max-w-lg lg:max-w-xl ${
-          isUser ? 'flex-row-reverse' : 'flex-row'
-        }`}
-      >
-        <div
-          className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center ${
-            isUser
-              ? 'bg-blue-500 text-white ml-2'
-              : 'bg-gray-700 text-white mr-2'
-          }`}
-        >
-          {isUser ? <User size={18} /> : <Bot size={18} />}
-        </div>
-        <div
-          className={`px-4 py-3 rounded-lg ${
-            isUser
-              ? 'bg-blue-500 text-white'
-              : 'bg-white dark:bg-gray-800 dark:text-gray-200 shadow-md'
-          }`}
-        >
-          {/* --- DEĞİŞİKLİK BURADA --- */}
-          {/* FIX: Map ExpertStep[] to ThinkingStep[] and provide all required props to ThinkingProcess. */}
-          {message.role === 'assistant' && message.expertRunChecklist && (
-            <ThinkingProcess
-              steps={message.expertRunChecklist.map(s => ({
-                  ...s,
-                  description: s.details || '',
-                  // Map `in_progress` to `pending` as ThinkingProcess uses `pending` for spinner.
-                  status: s.status === 'in_progress' ? 'pending' : s.status,
-              })) as ThinkingStep[]}
-              isThinking={message.expertRunChecklist.some(s => s.status === 'in_progress' || s.status === 'pending')}
-              error={message.expertRunChecklist.find(s => s.status === 'error')?.details || null}
-            />
-          )}
-          {/* ------------------------ */}
-
-          {/* Orijinal 'thinking' string'ini gösteren satırı kaldırıyoruz (veya yorumluyoruz)
-            {message.role === 'assistant' && message.thinking && (
-              <ThinkingProcess content={message.thinking} />
+    <div
+        className={`group/row flex items-end gap-2 animate-fade-in-up ${styles.container} ${isFirstInGroup ? 'mt-4' : 'mt-1'}`}
+        style={{ animationDuration: '0.3s' }}
+    >
+        {/* Action Buttons: Positioned before the bubble. Flex alignment places them on the left for both user & assistant. */}
+        <div className="flex-shrink-0 self-end opacity-0 group-hover/row:opacity-100 transition-opacity duration-200 pb-2">
+            {isUser ? (
+                 <button 
+                    onClick={handleCopy} 
+                    className="p-1.5 rounded-lg text-slate-500 bg-slate-200 hover:bg-slate-300 dark:text-indigo-200 dark:bg-black/20 dark:hover:bg-black/40 transition-colors"
+                    title="Mesajı kopyala"
+                >
+                    {copyText ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                </button>
+            ) : (
+                message.role === 'assistant' && !message.generativeSuggestion && (
+                     <Feedback
+                      msg={message}
+                      onUpdate={(feedbackData) => onFeedback(message.id, feedbackData)}
+                    />
+                )
             )}
-          */}
-          
-          <MarkdownRenderer content={message.content} />
-
-          {/* Orijinal dosyadaki 'generativeSuggestion' kontrolünü geri ekliyoruz */}
-          {/* FIX: The props for the Feedback component were incorrect. Correctly pass `msg` and `onUpdate`. */}
-          {message.role === 'assistant' && !message.generativeSuggestion && (
-            <Feedback
-              msg={message}
-              onUpdate={(feedbackData) => onFeedback(message.id, feedbackData)}
-            />
-          )}
-
-          {/* Eksik bileşen (GenerativeSuggestionCard) nedeniyle bu bölümü
-            orijinaldeki gibi yorum satırında bırakıyoruz.
-          {message.role === 'assistant' && message.generativeSuggestion && (
-            <GenerativeSuggestionCard
-              suggestion={message.generativeSuggestion}
-              onApply={() => onApplySuggestion(message.generativeSuggestion!, message.id)}
-            />
-          )}
-          */}
         </div>
-      </div>
+        
+        {/* Bubble Content */}
+        <div className={`group relative max-w-lg lg:max-w-2xl w-fit flex items-start ${!isUser ? 'border-l-4 border-indigo-500 pl-3' : ''}`}>
+             <div className={`relative px-4 py-3 ${styles.bubble} ${styles.corners} shadow-sm`}>
+                {message.role === 'assistant' && (message.thinking || message.expertRunChecklist) && (
+                    <ThinkingProcess
+                      steps={(message.expertRunChecklist || []).map(s => ({
+                          ...s,
+                          description: s.details || '',
+                          status: s.status === 'in_progress' ? 'pending' : s.status,
+                      })) as ThinkingStep[]}
+                      isThinking={!!message.thinking || message.expertRunChecklist?.some(s => s.status === 'in_progress' || s.status === 'pending')}
+                      error={message.expertRunChecklist?.find(s => s.status === 'error')?.details || null}
+                    />
+                )}
+                
+                <div className={isUser ? "dark [--tw-prose-invert-body:theme(colors.white)] [--tw-prose-invert-headings:theme(colors.white)] [--tw-prose-invert-bold:theme(colors.white)]" : ""}>
+                    <MarkdownRenderer content={message.content} />
+                </div>
+             </div>
+        </div>
     </div>
   );
 };

@@ -1,25 +1,23 @@
 import React from 'react';
-import type { User, Theme, AppMode, UserProfile } from '../types';
+import type { User, Theme, UserProfile } from '../types';
 import { ThemeSwitcher } from './ThemeSwitcher';
-import { Menu, Share2, PanelRightOpen, PanelRightClose, LoaderCircle, CheckCircle, AlertCircle, TrendingUp, Database } from 'lucide-react';
+import { Menu, Share2, LoaderCircle, CheckCircle, AlertCircle, TrendingUp, Database, Sidebar, LayoutGrid } from 'lucide-react';
 
 interface HeaderProps {
     user: User;
     onLogout: () => void;
     theme: Theme;
     onThemeChange: (theme: Theme) => void;
-    appMode: AppMode;
-    onAppModeChange: (mode: AppMode) => void;
-    isSidebarOpen: boolean;
-    onToggleSidebar: () => void;
     onOpenShareModal: () => void;
-    isWorkspaceVisible: boolean;
-    onToggleWorkspace: () => void;
     saveStatus: 'idle' | 'saving' | 'saved' | 'error';
     maturityScore: { score: number; justification: string } | null;
     isProcessing: boolean;
     onToggleDeveloperPanel: () => void;
     userProfile: UserProfile | null;
+    isConversationListOpen: boolean;
+    onToggleConversationList: () => void;
+    isWorkspaceVisible: boolean;
+    onToggleWorkspace: () => void;
 }
 
 const LogoIcon = ({ className }: { className?: string }) => (
@@ -29,11 +27,11 @@ const LogoIcon = ({ className }: { className?: string }) => (
     </svg>
 );
 
-const Logo = () => (
-    <div className="flex items-center gap-2">
-        <LogoIcon className="h-6 w-6" />
-         <h1 className="text-lg font-bold text-slate-800 dark:text-slate-200 truncate">
-            Asisty.ai
+const Logo = ({ onLogoClick }: { onLogoClick: () => void }) => (
+    <div onClick={onLogoClick} title="Geliştirici Panelini açmak için 5 kez tıklayın" className="flex items-center gap-2 cursor-pointer">
+        <LogoIcon className="h-8 w-8" />
+        <h1 className="text-xl font-bold tracking-tight text-indigo-600 dark:text-indigo-400">
+            Asisty.AI
         </h1>
     </div>
 );
@@ -100,23 +98,19 @@ export const Header: React.FC<HeaderProps> = ({
     onLogout,
     theme,
     onThemeChange,
-    appMode,
-    onAppModeChange,
-    isSidebarOpen,
-    onToggleSidebar,
     onOpenShareModal,
-    isWorkspaceVisible,
-    onToggleWorkspace,
     saveStatus,
     maturityScore,
-    isProcessing,
-    onToggleDeveloperPanel,
     userProfile,
+    onToggleDeveloperPanel,
+    isConversationListOpen,
+    onToggleConversationList,
+    isWorkspaceVisible,
+    onToggleWorkspace,
 }) => {
     const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
     const userMenuRef = React.useRef<HTMLDivElement>(null);
     const logoClickCount = React.useRef(0);
-    // FIX: Replaced NodeJS.Timeout with ReturnType<typeof setTimeout> for browser compatibility.
     const logoClickTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const handleLogoClick = () => {
@@ -129,7 +123,7 @@ export const Header: React.FC<HeaderProps> = ({
             if (logoClickTimer.current) clearTimeout(logoClickTimer.current);
         }
     };
-
+    
      React.useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
@@ -142,25 +136,36 @@ export const Header: React.FC<HeaderProps> = ({
 
     return (
         <header className="sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md shadow-sm p-2 flex items-center justify-between h-16 border-b border-slate-200 dark:border-slate-700 z-20 flex-shrink-0">
-            <div className="flex items-center gap-2">
-                <button onClick={onToggleSidebar} className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700">
-                   <Menu className="h-6 w-6 text-slate-600 dark:text-slate-400" />
-                </button>
-                {appMode === 'analyst' && (
-                    <button 
-                        onClick={onToggleWorkspace} 
-                        title="Çalışma Alanını Göster/Gizle"
-                        className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 transition-colors"
-                    >
-                        {isWorkspaceVisible ? <PanelRightClose className="h-5 w-5" /> : <PanelRightOpen className="h-5 w-5" />}
-                    </button>
-                )}
-                 <div onClick={handleLogoClick} title="Geliştirici Panelini açmak için 5 kez tıklayın" className="cursor-pointer flex items-center gap-2 overflow-hidden flex-1 min-w-0">
-                    <Logo />
-                </div>
+            <div className="flex items-center gap-2 ml-4">
+                <Logo onLogoClick={handleLogoClick} />
             </div>
 
-            <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+            <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0 mr-4">
+                 <div className="flex items-center gap-1">
+                    <button
+                        onClick={onToggleConversationList}
+                        title="Sohbet Listesini Göster/Gizle"
+                        className={`p-2 rounded-md hidden md:flex items-center justify-center transition-colors ${
+                            isConversationListOpen 
+                            ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400' 
+                            : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        }`}
+                    >
+                        <Sidebar className="h-5 w-5" />
+                    </button>
+                    <button
+                        onClick={onToggleWorkspace}
+                        title="Çalışma Alanını Göster/Gizle"
+                        className={`p-2 rounded-md hidden lg:flex items-center justify-center transition-colors ${
+                            isWorkspaceVisible
+                            ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400'
+                            : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        }`}
+                    >
+                        <LayoutGrid className="h-5 w-5" />
+                    </button>
+                </div>
+                <div className="h-4 w-px bg-slate-300 dark:bg-slate-600" />
                  {maturityScore ? (
                     <MaturityScoreIndicator score={maturityScore.score} justification={maturityScore.justification} />
                 ) : (
@@ -172,17 +177,6 @@ export const Header: React.FC<HeaderProps> = ({
                         <UserTokenIndicator profile={userProfile} />
                     </>
                 )}
-                 <div className="flex items-center gap-2 sm:gap-4">
-                    <div className="flex items-center p-1 bg-slate-200 dark:bg-slate-700 rounded-lg">
-                        <button onClick={() => onAppModeChange('analyst')} className={`px-2 py-1 text-xs sm:px-3 sm:py-1 sm:text-sm font-semibold rounded-md transition-colors ${appMode === 'analyst' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>
-                            Analist
-                        </button>
-                        <button onClick={() => onAppModeChange('backlog')} className={`px-2 py-1 text-xs sm:px-3 sm:py-1 sm:text-sm font-semibold rounded-md transition-colors ${appMode === 'backlog' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}>
-                            Backlog
-                        </button>
-                    </div>
-                </div>
-
                 
                 <ThemeSwitcher theme={theme} onThemeChange={onThemeChange} />
 

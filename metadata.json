@@ -1,6 +1,6 @@
 {
-  "name": "Asisty.ai",
-  "description": "Asisty.ai acts as your expert business analyst, helping you mature and document business requirements, generate user stories, and create test scenarios through conversation.",
+  "name": "Asisty.AI",
+  "description": "Asisty.AI acts as your expert business analyst, helping you mature and document business requirements, generate user stories, and create test scenarios through conversation.",
   "requestFramePermissions": [
     "microphone"
   ]

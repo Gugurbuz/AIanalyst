@@ -2,7 +2,9 @@
 
 import { GoogleGenAI, Type, Content, FunctionDeclaration, GenerateContentResponse } from "@google/genai";
 import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep, GenerativeSuggestion, LintingIssue, SourcedDocument } from '../types';
-import { promptService } from './promptService'; // Import the new prompt service
+// GÜNCELLEME: 'promptService' artık '.ts' olmadan import ediliyor.
+// Projenizdeki diğer import'larla tutarlı olması için
+import { promptService } from './promptService';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
@@ -199,6 +201,44 @@ const tools: FunctionDeclaration[] = [
     }
 ];
 
+// --- GÜNCELLENMİŞ FONKSİYON ---
+// Bu fonksiyon artık BİRDEN FAZLA <dusunce> etiketini bulup
+// birleştirecek şekilde güncellendi.
+const parseStreamingResponse = (content: string): { thinking: string | null; response: string } => {
+    const thinkingTagRegex = /<dusunce>([\s\S]*?)<\/dusunce>/g;
+    const thoughts: string[] = [];
+    let match;
+    let lastIndex = 0;
+
+    // 1. Regex kullanarak TÜM düşünce etiketlerini bul
+    while ((match = thinkingTagRegex.exec(content)) !== null) {
+        thoughts.push(match[1].trim());
+        // Son etiketin bittiği indeksi kaydet
+        lastIndex = match.index + match[0].length;
+    }
+
+    // 2. Hiç düşünce etiketi bulunamadı
+    if (thoughts.length === 0) {
+        // Stream hala devam ediyor olabilir, yarım etiketi kontrol et
+        // Örn: "<dusunce>Kullanıcı..."
+        const partialMatch = content.match(/<dusunce>([\s\S]*)/);
+        if (partialMatch) {
+            // Sadece düşünce var, henüz cevap yok
+            return { thinking: partialMatch[1].trim(), response: '' };
+        }
+        // Düşünce etiketi yoksa, tüm içerik yanıttır
+        return { thinking: null, response: content.trim() };
+    }
+
+    // 3. Bulunan tüm düşünceleri birleştir (UI'da alt alta göstermek için)
+    const combinedThoughts = thoughts.join('\n');
+
+    // 4. Yanıt, son düşünce etiketinden sonraki tüm içeriktir
+    const response = content.substring(lastIndex).trim();
+
+    return { thinking: combinedThoughts, response };
+};
+
 export const geminiService = {
     processAnalystMessageStream: async function* (history: Message[], generatedDocs: GeneratedDocs, templates: { analysis: string; test: string; traceability: string; visualization: string; }, model: GeminiModel): AsyncGenerator<StreamChunk> {
         let responseGenerated = false;
@@ -210,6 +250,8 @@ export const geminiService = {
             
             // Check if a real analysis document exists to decide which system prompt to use.
             const hasRealAnalysisDoc = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
+            
+            // promptService'den GÜNCELLENMİŞ prompt'ları alıyoruz
             const systemInstruction = !hasRealAnalysisDoc
                 ? promptService.getPrompt('continueConversation')
                 : promptService.getPrompt('proactiveAnalystSystemInstruction').replace('{analysis_document_content}', analysisDocContent);
@@ -802,3 +844,4 @@ export const geminiService = {
         }
     },
 };
+

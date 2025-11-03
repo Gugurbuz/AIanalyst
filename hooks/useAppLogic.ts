@@ -143,8 +143,9 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
 
     // --- UI & Mode State ---
     const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'dark'); // Set default to 'dark'
-    const [appMode, setAppMode] = useState<AppMode>('analyst');
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [currentView, setCurrentView] = useState<'analyst' | 'backlog'>('analyst'); // New state for main navigation
+    const [appMode, setAppMode] = useState<AppMode>('analyst'); // Kept for compatibility, but currentView is preferred
+    const [isConversationListOpen, setIsConversationListOpen] = useState(false);
     const [isWorkspaceVisible, setIsWorkspaceVisible] = useState(true);
     const [isNewAnalysisModalOpen, setIsNewAnalysisModalOpen] = useState(false);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -302,30 +303,6 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
     }, [isFeedbackDashboardOpen, fetchAllFeedback]);
 
     // --- Save Conversation Debouncing ---
-    const debouncedSave = useRef<(conv: Partial<Conversation> & { id: string }) => void>();
-
-    useEffect(() => {
-        debouncedSave.current = (conv: Partial<Conversation> & { id: string }) => {
-            const save = async () => {
-                setSaveStatus('saving');
-                const { messages, documentVersions, documents, ...updatePayload } = conv;
-                const { error } = await supabase
-                    .from('conversations')
-                    .update(updatePayload)
-                    .eq('id', conv.id);
-
-                if (error) {
-                    setSaveStatus('error');
-                    console.error('Save error:', error);
-                } else {
-                    setSaveStatus('saved');
-                     setTimeout(() => setSaveStatus('idle'), 2000);
-                }
-            };
-            save();
-        };
-    }, []);
-
     const useDebounce = (callback: (...args: any[]) => void, delay: number) => {
         const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     
@@ -339,11 +316,24 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         }, [callback, delay]);
     };
     
-    const triggerSave = useDebounce((conv: Partial<Conversation> & { id: string }) => {
-        if (debouncedSave.current) {
-            debouncedSave.current(conv);
+    const saveConversation = useCallback(async (conv: Partial<Conversation> & { id: string }) => {
+        setSaveStatus('saving');
+        const { messages, documentVersions, documents, ...updatePayload } = conv;
+        const { error } = await supabase
+            .from('conversations')
+            .update(updatePayload)
+            .eq('id', conv.id);
+    
+        if (error) {
+            setSaveStatus('error');
+            console.error('Save error:', error);
+        } else {
+            setSaveStatus('saved');
+             setTimeout(() => setSaveStatus('idle'), 2000);
         }
-    }, 1500);
+    }, []);
+
+    const triggerSave = useDebounce(saveConversation, 1500);
     
     const updateConversation = useCallback((id: string, updates: Partial<Conversation>) => {
         setConversations(prev =>
@@ -352,46 +342,37 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         triggerSave({ id, ...updates });
     }, [triggerSave]);
 
-    const debouncedProfileSave = useRef<(profile: UserProfile) => void>();
-    useEffect(() => {
-        debouncedProfileSave.current = (profile: UserProfile) => {
-            const save = async () => {
-                const { error } = await supabase
-                    .from('user_profiles')
-                    .update({ tokens_used: profile.tokens_used })
-                    .eq('id', profile.id);
+    const saveProfile = useCallback(async (profile: UserProfile) => {
+        const { error } = await supabase
+            .from('user_profiles')
+            .update({ tokens_used: profile.tokens_used })
+            .eq('id', profile.id);
 
-                if (error) {
-                    setError('Kullanıcı profili güncellenemedi: ' + error.message);
-                }
-            };
-            save();
-        };
-    }, []);
-
-    const triggerProfileSave = useDebounce((profile: UserProfile) => {
-        if (debouncedProfileSave.current) {
-            debouncedProfileSave.current(profile);
+        if (error) {
+            setError('Kullanıcı profili güncellenemedi: ' + error.message);
         }
-    }, 2000);
+    }, [setError]);
+
+    const triggerProfileSave = useDebounce(saveProfile, 2000);
 
     const commitTokenUsage = useCallback((tokens: number) => {
         if (tokens <= 0) return;
-
-        if (userProfile) {
+    
+        setUserProfile(currentProfile => {
+            if (!currentProfile) return null;
             const updatedProfile = {
-                ...userProfile,
-                tokens_used: userProfile.tokens_used + tokens,
+                ...currentProfile,
+                tokens_used: currentProfile.tokens_used + tokens,
             };
-            setUserProfile(updatedProfile);
             triggerProfileSave(updatedProfile);
-        }
-
+            return updatedProfile;
+        });
+    
         if (activeConversationId) {
             setConversations(prevConvs => {
                 const convIndex = prevConvs.findIndex(c => c.id === activeConversationId);
                 if (convIndex === -1) return prevConvs;
-
+    
                 const currentConv = prevConvs[convIndex];
                 const newTotal = (currentConv.total_tokens_used || 0) + tokens;
                 
@@ -399,13 +380,13 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
                 
                 const newConvs = [...prevConvs];
                 newConvs[convIndex] = updatedConv;
-
+    
                 triggerSave({ id: activeConversationId, total_tokens_used: newTotal });
-
+    
                 return newConvs;
             });
         }
-    }, [userProfile, activeConversationId, triggerProfileSave, triggerSave]);
+    }, [activeConversationId, triggerProfileSave, triggerSave]);
 
     const saveDocumentVersion = useCallback(async (
         docKey: keyof GeneratedDocs,
@@ -1484,7 +1465,8 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         error,
         theme,
         appMode,
-        isSidebarOpen,
+        currentView,
+        isConversationListOpen,
         isWorkspaceVisible,
         isNewAnalysisModalOpen,
         isShareModalOpen,
@@ -1518,7 +1500,8 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         setError,
         handleThemeChange,
         setAppMode,
-        setIsSidebarOpen,
+        setCurrentView,
+        setIsConversationListOpen,
         setIsWorkspaceVisible,
         setIsNewAnalysisModalOpen,
         setIsShareModalOpen,
