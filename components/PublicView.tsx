@@ -168,7 +168,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
                              {generatedDocs.analysisDoc && (
                                 <div className="max-w-4xl mx-auto w-full bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700">
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-                                     // ... (Satır 170)
+                                  
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">{conversation.title} - Analiz Dokümanı</h3>
                                     </div>
