@@ -168,7 +168,20 @@ export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
                              {generatedDocs.analysisDoc && (
                                 <div className="max-w-4xl mx-auto w-full bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700">
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-                                  
+        // ... (Satır 170)
+                            {generatedDocs.analysisDoc && (
+                                <div className="max-w-4xl mx-auto w-full bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700">
+                                    
+                                    {/* DÜZELTİLMİŞ BAŞLIK BÖLÜMÜ */}
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">{conversation.title} - Analiz Dokümanı</h3>
                                     </div>
+
+                                    {/* EKSİK OLAN İÇERİK BÖLÜMÜ */}
+                                    <div className="p-4 md:p-6">
+                                        <MarkdownRenderer content={generatedDocs.analysisDoc} />
+                                    </div>
+
+                                </div> // <-- 170. satırda açılan div'in kapanışı
+                            )}
+// ...
