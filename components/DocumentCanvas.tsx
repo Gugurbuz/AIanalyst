@@ -1,6 +1,9 @@
 // components/DocumentCanvas.tsx
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import ReactQuill from 'react-quill';
+// FIX: The 'react-quilljs' library uses a hook-based API, not a component.
+// The import is changed to `useQuill` and the component usage is refactored to fix the error.
+import { useQuill } from 'react-quilljs';
+import 'quill/dist/quill.snow.css';
 import TurndownService from 'turndown';
 import showdown from 'showdown';
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -297,6 +300,35 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         ],
     }), []);
 
+    // FIX: Refactored to use the useQuill hook from react-quilljs.
+    const { quill, quillRef } = useQuill({
+        modules: quillModules,
+        theme: 'snow',
+        placeholder,
+    });
+
+    useEffect(() => {
+        if (quill) {
+            quill.on('text-change', (delta, oldDelta, source) => {
+                if (source === 'user') {
+                    // Update local state with the new HTML content from Quill
+                    setLocalContent(quill.root.innerHTML);
+                }
+            });
+        }
+    }, [quill]);
+
+    // This effect syncs the editor's content when localContent changes externally
+    // or when entering edit mode.
+    useEffect(() => {
+        if (isEditing && quill && localContent !== quill.root.innerHTML) {
+            // Disable the editor while setting content to prevent race conditions or cursor jumps
+            quill.disable();
+            quill.root.innerHTML = localContent;
+            // Re-enable the editor after a short delay
+            setTimeout(() => quill.enable(), 10);
+        }
+    }, [isEditing, quill, localContent]);
     
     // View for documents that can be generated from within the canvas (e.g., Traceability Matrix)
     if (!content && !isStreaming && onGenerate) {
@@ -407,13 +439,9 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                             placeholder={placeholder}
                         />
                     ) : (
-                        <div className="quill-container bg-white dark:bg-slate-800">
-                             <ReactQuill
-                                theme="snow"
-                                value={localContent}
-                                onChange={setLocalContent}
-                                modules={quillModules}
-                            />
+                        <div className="quill-container h-full bg-white dark:bg-slate-800">
+                             {/* FIX: Replaced the <ReactQuill> component with a div and ref for the useQuill hook. */}
+                            <div ref={quillRef} className="h-full" />
                         </div>
                     )
                 ) : (
