@@ -1,6 +1,8 @@
 // components/DocumentCanvas.tsx
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import ReactQuill from 'react-quill';
+import TurndownService from 'turndown';
+import showdown from 'showdown';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { StreamingIndicator } from './StreamingIndicator';
 import { TemplateSelector } from './TemplateSelector';
@@ -166,10 +168,10 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
 
     // Sync local content when parent content changes
     useEffect(() => {
-        if (!isModifyingRef.current) {
+        if (!isModifyingRef.current && !isEditing) {
             setLocalContent(content);
         }
-    }, [content]);
+    }, [content, isEditing]);
     
     // Clear lint issues when content changes from parent
     useEffect(() => {
@@ -179,35 +181,49 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const handleToggleEditing = async () => {
         if (isEditing) { // Finishing edit
             setIsEditing(false); // Switch to view mode immediately
-            if (localContent !== originalContentRef.current) {
+            
+            let finalMarkdownContent = localContent;
+            if (!isTable) {
+                const turndownService = new TurndownService();
+                finalMarkdownContent = turndownService.turndown(localContent);
+            }
+
+            if (finalMarkdownContent !== originalContentRef.current) {
                 setIsSummarizing(true);
                 try {
-                    const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(originalContentRef.current, localContent);
+                    const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(originalContentRef.current, finalMarkdownContent);
                     onAddTokens(summaryTokens);
-                    onContentChange(localContent, summary);
+                    onContentChange(finalMarkdownContent, summary);
                     
-                    // After content is updated, check for structural issues
-                    const { issues, tokens: lintTokens } = await geminiService.lintDocument(localContent);
+                    const { issues, tokens: lintTokens } = await geminiService.lintDocument(finalMarkdownContent);
                     onAddTokens(lintTokens);
                     setLintIssues(issues);
 
                 } catch (error) {
                     console.error("Failed to summarize or lint changes:", error);
-                    onContentChange(localContent, "Manuel Düzenleme");
+                    onContentChange(finalMarkdownContent, "Manuel Düzenleme");
                 } finally {
                     setIsSummarizing(false);
                 }
             }
         } else { // Starting edit
             originalContentRef.current = content;
-            setLintIssues([]); // Clear issues when starting to edit
+            setLintIssues([]);
+            
+            if (!isTable) {
+                const converter = new showdown.Converter();
+                const htmlContent = converter.makeHtml(content);
+                setLocalContent(htmlContent);
+            } else {
+                setLocalContent(content);
+            }
+            
             setIsEditing(true);
         }
     };
     
     const handleSelection = useCallback(() => {
         if (isEditing) {
-            // AI modification from inside the editor is disabled for now to simplify integration.
             setSelection(null);
             return;
         }
@@ -377,7 +393,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                             <><Edit className="h-4 w-4" /> Düzenle</>
                         )}
                     </button>
-                    <ExportDropdown content={localContent} filename={filename} isTable={isTable} />
+                    <ExportDropdown content={content} filename={filename} isTable={isTable} />
                 </div>
             </div>
             <div className="flex-1 relative min-h-0" onMouseUp={handleSelection}>
@@ -403,7 +419,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                 ) : (
                     <div className="h-full overflow-y-auto p-4 md:p-6">
                         <MarkdownRenderer
-                            content={localContent}
+                            content={content}
                             rephrasingText={
                                 inlineModificationState && inlineModificationState.docKey === docKey
                                     ? inlineModificationState.originalText

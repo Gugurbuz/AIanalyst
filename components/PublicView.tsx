@@ -8,6 +8,8 @@ import { ChatMessageHistory } from './ChatMessageHistory';
 import { DocumentCanvas } from './DocumentCanvas';
 import { Visualizations } from './Visualizations';
 import { ThemeSwitcher } from './ThemeSwitcher';
+import { MaturityCheckReport } from './MaturityCheckReport';
+
 
 interface PublicViewProps {
     conversation: Conversation;
@@ -127,7 +129,9 @@ export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
 
     // A dummy function for read-only components
     const noOp = async () => {};
-    const noOpWithArgs = (...args: any[]) => {};
+    // FIX: Changed noOpWithArgs to return Promise<void>
+    const noOpWithArgs = async (...args: any[]): Promise<void> => {};
+    const noOpGenerateDiagram = async (): Promise<void> => {};
 
     const testScenariosContent = typeof generatedDocs.testScenarios === 'object'
         ? generatedDocs.testScenarios.content
@@ -167,25 +171,107 @@ export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
                         <div className="p-4 md:p-6 pt-6 space-y-6">
                              {generatedDocs.analysisDoc && (
                                 <div className="max-w-4xl mx-auto w-full bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700">
-                                  
-   // ... (Satır 169)
-                        <div className="p-4 md:p-6 pt-6 space-y-6">
-                            {generatedDocs.analysisDoc && (
-                                <div className="max-w-4xl mx-auto w-full bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700">
-                                    
-                                    {/* BAŞLIK BÖLÜMÜ */}
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-                                        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">{conversation.title} - Analiz Dokümanı</h3>
+                                        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">İş Analizi Dokümanı</h3>
                                     </div>
-
-                                    {/* İÇERİK BÖLÜMÜ */}
-                                    <div className="p-4 md:p-6">
-                                        <MarkdownRenderer content={generatedDocs.analysisDoc} />
-                                    </div>
-
+                                    <DocumentCanvas
+                                        key="analysis-public"
+                                        content={generatedDocs.analysisDoc}
+                                        onContentChange={noOpWithArgs} // Read-only
+                                        docKey="analysisDoc"
+                                        onModifySelection={noOpWithArgs} // Read-only
+                                        inlineModificationState={null}
+                                        isGenerating={false}
+                                        isStreaming={false}
+                                        filename={`${title}-analiz`}
+                                        isTable={false}
+                                        documentVersions={conversation.documentVersions}
+                                        onAddTokens={noOpWithArgs}
+                                        onRestoreVersion={noOpWithArgs}
+                                    />
                                 </div>
-                            )} {/* <-- FAZLADAN </div> SİLİNDİ. Kapanış parantezi tek başına kalmalı. */}
-                            
-                            {/* Diğer dokümanlar (varsa) burada devam eder... */}
-                            {vizContent && (
-// ...
+                            )}
+
+                            {(generatedDocs.mermaidViz?.code || generatedDocs.bpmnViz?.code || generatedDocs.visualization) ? (
+                                <div className="max-w-4xl mx-auto w-full bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700">
+                                    <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+                                        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Süreç Görselleştirmesi</h3>
+                                    </div>
+                                    <Visualizations
+                                        content={vizContent}
+                                        onModifyDiagram={noOpGenerateDiagram} // Read-only
+                                        onGenerateDiagram={noOpGenerateDiagram} // Read-only
+                                        isLoading={false}
+                                        error={null}
+                                        diagramType={diagramType}
+                                        isAnalysisDocReady={!!generatedDocs.analysisDoc}
+                                    />
+                                </div>
+                            ) : null}
+
+                            {testScenariosContent && (
+                                <div className="max-w-4xl mx-auto w-full bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700">
+                                    <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+                                        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Test Senaryoları</h3>
+                                    </div>
+                                    <DocumentCanvas
+                                        key="test-public"
+                                        content={testScenariosContent}
+                                        onContentChange={noOpWithArgs} // Read-only
+                                        docKey="testScenarios"
+                                        onModifySelection={noOpWithArgs} // Read-only
+                                        inlineModificationState={null}
+                                        isGenerating={false}
+                                        isStreaming={false}
+                                        filename={`${title}-test-senaryolari`}
+                                        isTable={true}
+                                        documentVersions={conversation.documentVersions}
+                                        onAddTokens={noOpWithArgs}
+                                        onRestoreVersion={noOpWithArgs}
+                                    />
+                                </div>
+                            )}
+
+                            {traceabilityMatrixContent && (
+                                <div className="max-w-4xl mx-auto w-full bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700">
+                                    <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+                                        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">İzlenebilirlik Matrisi</h3>
+                                    </div>
+                                    <DocumentCanvas
+                                        key="traceability-public"
+                                        content={traceabilityMatrixContent}
+                                        onContentChange={noOpWithArgs} // Read-only
+                                        docKey="traceabilityMatrix"
+                                        onModifySelection={noOpWithArgs} // Read-only
+                                        inlineModificationState={null}
+                                        isGenerating={false}
+                                        isStreaming={false}
+                                        filename={`${title}-izlenebilirlik`}
+                                        isTable={true}
+                                        documentVersions={conversation.documentVersions}
+                                        onAddTokens={noOpWithArgs}
+                                        onRestoreVersion={noOpWithArgs}
+                                    />
+                                </div>
+                            )}
+
+                            {generatedDocs.maturityReport && (
+                                <div className="max-w-4xl mx-auto w-full bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700">
+                                    <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+                                        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Olgunluk Raporu</h3>
+                                    </div>
+                                    <MaturityCheckReport
+                                        report={generatedDocs.maturityReport}
+                                        onPrepareQuestionForAnswer={noOpWithArgs} // Read-only
+                                        onDismissQuestion={noOpWithArgs} // Read-only
+                                        isLoading={false}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+};

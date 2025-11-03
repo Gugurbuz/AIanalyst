@@ -148,19 +148,8 @@ const parseMarkdown = (text: string, highlightedLines: number[], rephrasingText:
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, highlightedLines = [], rephrasingText = null, highlightedUserSelectionText = null }) => {
     
     const processedContent = useMemo(() => {
-        // Simple heuristic to check if content is HTML from Quill
-        const isHtml = content.startsWith('<p>') || content.startsWith('<h1>') || content.startsWith('<h2>') || content.startsWith('<h3>') || content.startsWith('<ul>') || content.startsWith('<ol>');
-        
-        if (isHtml) {
-            // For HTML content, we directly render it, bypassing markdown parsing.
-            // Highlighting and rephrasing indicators are not supported for raw HTML to prevent breaking the structure.
-            // A more robust solution would involve parsing the HTML tree, which is out of scope.
-            return content;
-        }
-        
         // If not HTML, parse it as Markdown
         return parseMarkdown(content, highlightedLines, rephrasingText, highlightedUserSelectionText);
-
     }, [content, highlightedLines, rephrasingText, highlightedUserSelectionText]);
 
     return (

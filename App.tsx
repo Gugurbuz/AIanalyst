@@ -980,7 +980,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
     const processStream = useCallback(async (stream: AsyncGenerator<StreamChunk>, assistantMessageId: string) => {
         let docResponses: { [key in keyof GeneratedDocs]?: string } = {};
         let accumulatedMessage = "";
-        let finalSuggestion = "";
+        // FIX: Change finalSuggestion type from string to GenerativeSuggestion | undefined
+        let finalSuggestion: GenerativeSuggestion | undefined = undefined;
     
         for await (const chunk of stream) {
             if (chunk.type === 'doc_stream_chunk' && activeConversationId) {
@@ -1063,10 +1064,11 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
                     return c;
                 }));
             } else if (chunk.type === 'generative_suggestion' && activeConversationId) {
+                // FIX: Assign the entire GenerativeSuggestion object, not just a string.
                 finalSuggestion = chunk.suggestion;
                 setConversations(prev => prev.map(c => {
                     if (c.id === activeConversationId) {
-                        return { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? { ...m, generativeSuggestion: finalSuggestion! } : m) };
+                        return { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? { ...m, generativeSuggestion: finalSuggestion } : m) };
                     }
                     return c;
                 }));
@@ -1219,7 +1221,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
                     ...assistantPlaceholder, // Start with the placeholder data
                     content: response,
                     thinking: thinking ?? undefined,
-                    generativeSuggestion: finalSuggestion || undefined,
+                    // FIX: finalSuggestion is now correctly typed as GenerativeSuggestion | undefined
+                    generativeSuggestion: finalSuggestion,
                 };
         
                 // Update the placeholder in state with the final content
@@ -1353,7 +1356,8 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
                  } else if (type === 'test') {
                      rawStream = geminiService.generateTestScenarios(conv.generatedDocs.analysisDoc, templatePrompt, modelForGeneration);
                  } else { // traceability
-                     rawStream = geminiService.generateTraceabilityMatrix(conv.generatedDocs.analysisDoc, testScenariosContent, templateForGeneration, modelForGeneration);
+                     // FIX: Replaced 'templateForGeneration' with 'templatePrompt'
+                     rawStream = geminiService.generateTraceabilityMatrix(conv.generatedDocs.analysisDoc, testScenariosContent, templatePrompt, modelForGeneration);
                  }
                  stream = wrapDocStream(rawStream, docKey as any);
                  const { docResponses } = await processStream(stream, ''); // Pass empty assistantId as this is not a chat response
@@ -1851,7 +1855,11 @@ export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
                                         onModifyDiagram={handleModifyDiagram}
                                         onGenerateDoc={handleGenerateDoc}
                                         inlineModificationState={inlineModificationState}
-                                        templates={{ analysis: analysisTemplates, test: testTemplates, traceability: traceabilityTemplates }}
+                                        templates={{
+                                            analysis: analysisTemplates,
+                                            test: testTemplates,
+                                            traceability: traceabilityTemplates,
+                                        }}
                                         selectedTemplates={selectedTemplates}
                                         onTemplateChange={{
                                             analysis: handleTemplateChange('analysis'),
