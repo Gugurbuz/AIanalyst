@@ -172,4 +172,3 @@ export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
                                     <div className="p-4 border-b border-slate-200 dark:border-slate-700">
                                         <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">{conversation.title} - Analiz Dokümanı</h3>
                                     </div>
-// ...
