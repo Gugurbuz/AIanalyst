@@ -272,7 +272,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     
 
     return (
-        <div className="flex flex-col h-full w-full">
+        <div className="flex flex-col h-full w-full min-h-0">
             {/* Tabs Navigation */}
             <div className="px-4 flex-shrink-0 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
                 <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Tabs">
