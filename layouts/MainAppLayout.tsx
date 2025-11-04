@@ -15,6 +15,7 @@ import { FeedbackDashboard } from '../components/FeedbackDashboard';
 import { UpgradeModal } from '../components/UpgradeModal';
 import { LongTextModal } from '../components/LongTextModal';
 import { RequestConfirmationModal } from '../components/RequestConfirmationModal';
+import { ResetConfirmationModal } from '../components/ResetConfirmationModal';
 import { AlertTriangle, FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, X } from 'lucide-react';
 import { MainSidebar } from './MainSidebar'; // New Main Sidebar component for primary navigation
 import { Sidebar } from '../components/Sidebar'; // This is now the conversation list
@@ -93,9 +94,10 @@ const AnalystWorkspace = () => {
 
             {/* --- Right Column: Document Workspace --- */}
             {isWorkspaceVisible && (
-                 <div className="hidden lg:flex lg:col-span-3 bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700">
+                 <div className="hidden lg:flex lg:col-span-3 bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 overflow-hidden">
                      <DocumentWorkspace 
-                        conversation={{...activeConversation, generatedDocs: activeConversation.generatedDocs}}
+                        conversation={activeConversation}
+                        onUpdateConversation={context.updateConversation}
                         isProcessing={context.isProcessing}
                         generatingDocType={context.generatingDocType}
                         onUpdateDocument={context.saveDocumentVersion}
@@ -328,6 +330,15 @@ export const MainAppLayout: React.FC = () => {
                     onConfirm={context.handleConfirmRequest}
                     onReject={context.handleRejectRequest}
                     onClose={() => context.setRequestConfirmation(null)}
+                />
+            )}
+            {context.resetConfirmation && (
+                 <ResetConfirmationModal
+                    isOpen={!!context.resetConfirmation}
+                    onClose={() => context.setResetConfirmation(null)}
+                    onConfirm={context.handleConfirmReset}
+                    documentName={context.resetConfirmation.changedDocName}
+                    impactedDocs={context.resetConfirmation.impactedDocNames}
                 />
             )}
         </div>

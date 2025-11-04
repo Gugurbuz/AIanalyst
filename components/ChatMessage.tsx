@@ -16,7 +16,7 @@ interface ChatMessageProps {
   isLastInGroup: boolean;
 }
 
-const ChatMessage: React.FC<ChatMessageProps> = ({
+export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
   onFeedback,
   isFirstInGroup,
@@ -123,5 +123,3 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
     </div>
   );
 };
-
-export default ChatMessage;

@@ -1,7 +1,7 @@
 // components/ChatMessageHistory.tsx
 import React from 'react';
 import type { Message, User, GenerativeSuggestion } from '../types';
-import ChatMessage from './ChatMessage'; // Bu import artık doğru (parantezsiz)
+import { ChatMessage } from './ChatMessage';
 
 interface ChatMessageHistoryProps {
   user: User;

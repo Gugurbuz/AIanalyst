@@ -4,7 +4,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { StreamingIndicator } from './StreamingIndicator';
 import { TemplateSelector } from './TemplateSelector';
 import { ExportDropdown } from './ExportDropdown';
-import { Template, DocumentVersion, LintingIssue } from '../types';
+import { Template, DocumentVersion, LintingIssue, StructuredAnalysisDoc, isStructuredAnalysisDoc } from '../types';
 import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, Edit, Eye, Wrench, X, History } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 import { VersionHistoryModal } from './VersionHistoryModal';
@@ -30,6 +30,72 @@ interface DocumentCanvasProps {
     documentVersions: DocumentVersion[];
     onAddTokens: (tokens: number) => void;
     onRestoreVersion: (version: DocumentVersion) => void;
+}
+
+// --- Helper Functions for Structured Document Conversion ---
+
+function structuredDocToMarkdown(doc: StructuredAnalysisDoc): string {
+    let markdown = '';
+    doc.sections.forEach(section => {
+        markdown += `## ${section.title}\n\n`;
+        if (section.content) {
+            markdown += `${section.content}\n\n`;
+        }
+        if (section.subSections) {
+            section.subSections.forEach(subSection => {
+                markdown += `### ${subSection.title}\n\n`;
+                if (subSection.content) {
+                    markdown += `${subSection.content}\n\n`;
+                }
+                if (subSection.requirements) {
+                    subSection.requirements.forEach(req => {
+                        markdown += `- **${req.id}:** ${req.text}\n`;
+                    });
+                    markdown += '\n';
+                }
+            });
+        }
+    });
+    return markdown;
+}
+
+function simpleMarkdownToHtml(md: string): string {
+    if (!md) return '';
+    // This is a very basic parser. It won't handle nested lists or complex cases,
+    // but it's good enough to get the content into an editable HTML format.
+    return md
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/^- (.*$)/gm, '<li>$1</li>')
+        .replace(/(\<\/li\>)\n\<li\> /g, '$1<li>') // fix list spacing
+        .replace(/\n/g, '<br/>');
+}
+
+
+function structuredDocToHtml(doc: StructuredAnalysisDoc): string {
+    let html = '';
+    doc.sections.forEach(section => {
+        html += `<h2>${section.title}</h2>`;
+        if (section.content) {
+            html += `<p>${simpleMarkdownToHtml(section.content)}</p>`;
+        }
+        if (section.subSections) {
+            section.subSections.forEach(subSection => {
+                html += `<h3>${subSection.title}</h3>`;
+                if (subSection.content) {
+                    html += `<p>${simpleMarkdownToHtml(subSection.content)}</p>`;
+                }
+                if (subSection.requirements) {
+                    html += '<ul>';
+                    subSection.requirements.forEach(req => {
+                        html += `<li><strong>${req.id}:</strong> ${req.text}</li>`;
+                    });
+                    html += '</ul>';
+                }
+            });
+        }
+    });
+    return html;
 }
 
 const AiAssistantModal: React.FC<{
@@ -136,7 +202,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         onRestoreVersion
     } = props;
 
-    const [localContent, setLocalContent] = useState(content);
+    const [localContent, setLocalContent] = useState('');
     const [isEditing, setIsEditing] = useState(false);
     const [selection, setSelection] = useState<{ start: number, end: number, text: string } | null>(null);
     const [isAiModalOpen, setIsAiModalOpen] = useState(false);
@@ -145,9 +211,13 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const [isFixing, setIsFixing] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     
+    // State for structured documents (like analysisDoc)
+    const [isStructured, setIsStructured] = useState(false);
+    const [docObject, setDocObject] = useState<StructuredAnalysisDoc | null>(null);
+    
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const isModifyingRef = useRef(false);
-    const originalContentRef = useRef<string>(content);
+    const editorRef = useRef<HTMLDivElement>(null);
+    const originalContentRef = useRef<string>('');
     
     const documentTypeMap: Record<string, DocumentVersion['document_type']> = {
         analysisDoc: 'analysis',
@@ -163,12 +233,31 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     };
     const documentName = docNameMap[docKey] || 'Doküman';
 
-    // Sync local content when parent content changes
+    // Update local content whenever the parent content (the stream) changes.
     useEffect(() => {
-        if (!isModifyingRef.current) {
-            setLocalContent(content);
-        }
+        setLocalContent(content || '');
     }, [content]);
+    
+    // Parse final JSON only when streaming stops.
+    useEffect(() => {
+        if (!isStreaming && localContent) {
+            try {
+                const parsed = JSON.parse(localContent);
+                if (isStructuredAnalysisDoc(parsed)) {
+                    setIsStructured(true);
+                    setDocObject(parsed);
+                } else {
+                    setIsStructured(false);
+                    setDocObject(null);
+                }
+            } catch(e) {
+                // Not a valid JSON, treat as plain markdown.
+                setIsStructured(false);
+                setDocObject(null);
+            }
+        }
+    }, [isStreaming, localContent]);
+
     
     // Clear lint issues when content changes from parent
     useEffect(() => {
@@ -178,6 +267,40 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const handleToggleEditing = async () => {
         if (isEditing) { // Finishing edit
             setIsEditing(false); // Switch to view mode immediately
+
+            // Handle structured doc saving (from contentEditable div)
+            if (isStructured && editorRef.current && docObject) {
+                const htmlContent = editorRef.current.innerHTML;
+                const originalHtml = structuredDocToHtml(docObject);
+                
+                // Only save if content has actually changed
+                if (htmlContent === originalHtml) {
+                    return; 
+                }
+                
+                setIsSummarizing(true); // Reuse this state for the conversion loading indicator
+                try {
+                    const { json: newDocObject, tokens } = await geminiService.convertHtmlToAnalysisJson(htmlContent);
+                    onAddTokens(tokens);
+                    const finalContentString = JSON.stringify(newDocObject, null, 2);
+
+                    // Generate a summary of the change by comparing markdown versions
+                    const oldMarkdown = structuredDocToMarkdown(docObject);
+                    const newMarkdown = structuredDocToMarkdown(newDocObject);
+                    const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(oldMarkdown, newMarkdown);
+                    onAddTokens(summaryTokens);
+                    
+                    onContentChange(finalContentString, summary);
+                } catch (error) {
+                    console.error("Failed to convert HTML to JSON on save:", error);
+                    // Optionally, show an error to the user
+                } finally {
+                    setIsSummarizing(false);
+                }
+                return; // Exit after handling structured doc
+            }
+
+            // Handle non-structured (plain markdown) doc saving
             if (localContent !== originalContentRef.current) {
                 setIsSummarizing(true);
                 try {
@@ -198,7 +321,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                 }
             }
         } else { // Starting edit
-            originalContentRef.current = content;
+            originalContentRef.current = localContent;
             setLintIssues([]); // Clear issues when starting to edit
             setIsEditing(true);
         }
@@ -252,9 +375,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     
     const handleAiModify = async (userPrompt: string) => {
         if (!selection) return;
-        isModifyingRef.current = true;
         await onModifySelection(selection.text, userPrompt, docKey as 'analysisDoc' | 'testScenarios');
-        isModifyingRef.current = false;
         setIsAiModalOpen(false);
         setSelection(null);
     };
@@ -276,6 +397,44 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const filteredHistory = useMemo(() => {
         return (documentVersions || []).filter(v => v.document_type === currentDocType);
     }, [documentVersions, currentDocType]);
+
+    const displayContent = useMemo(() => {
+        // When not streaming, show the accurately parsed final version.
+        if (!isStreaming) {
+            if (isStructured && docObject) {
+                return structuredDocToMarkdown(docObject);
+            }
+            // Fallback for plain markdown or other non-structured content.
+            return localContent;
+        }
+
+        // --- NEW STREAMING LOGIC ---
+        // For tables, streaming preview is complex, show raw for now.
+        if (isTable) return localContent;
+
+        // 1. Try to parse the incomplete JSON. If it's valid at any point, render it perfectly.
+        try {
+            const parsed = JSON.parse(localContent);
+            if (isStructuredAnalysisDoc(parsed)) {
+                return structuredDocToMarkdown(parsed);
+            }
+        } catch (e) {
+            // 2. If parsing fails (the common case), fall back to stripping syntax.
+            // This shows a clean text stream instead of raw JSON.
+            const knownKeys = /"sections"|"subSections"|"requirements"|"title"|"content"|"id"|"text"/g;
+            return localContent
+                .replace(knownKeys, '') // Remove known JSON keys
+                .replace(/[\{\}\[\]",:]/g, ' ') // Replace all JSON syntax characters with spaces
+                .replace(/\\n/g, '\n') // Handle escaped newlines
+                .replace(/\\"/g, '"') // Handle escaped quotes
+                .replace(/\s+/g, ' ') // Collapse multiple spaces into one
+                .trim();
+        }
+        
+        // Final fallback for any weird edge cases.
+        return localContent;
+
+    }, [isStreaming, isTable, localContent, isStructured, docObject]);
 
     
     // View for documents that can be generated from within the canvas (e.g., Traceability Matrix)
@@ -305,7 +464,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     }
 
     const currentVersion = filteredHistory.length > 0 ? Math.max(...filteredHistory.map(v => v.version_number)) : 0;
-    
+
     return (
         <div className="flex flex-col h-full relative">
             <LintingSuggestionsBar 
@@ -316,7 +475,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
             />
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-2 md:p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2 flex-wrap">
-                    {(!isTable && isEditing) && (
+                    {(!isTable && isEditing && !isStructured) && (
                         <>
                             <select onChange={(e) => applyMarkdown(e.target.value, '', true)} className="px-2 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-700">
                                 <option value="">Başlık...</option>
@@ -366,7 +525,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                             className="px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-2 disabled:opacity-50"
                         >
                             {isSummarizing ? (
-                                <><LoaderCircle className="h-4 w-4 animate-spin" /> Özetleniyor...</>
+                                <><LoaderCircle className="h-4 w-4 animate-spin" /> Kaydediliyor...</>
                             ) : isEditing ? (
                                 <><Eye className="h-4 w-4" /> Görünüm</>
                             ) : (
@@ -374,11 +533,19 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                             )}
                         </button>
                     )}
-                    <ExportDropdown content={localContent} filename={filename} isTable={isTable} />
+                    <ExportDropdown content={displayContent} filename={filename} isTable={isTable} />
                 </div>
             </div>
             <div className="p-2 md:p-6 flex-1 relative" onMouseUp={handleSelection}>
-                {(isEditing && !isTable) ? (
+                 {(isEditing && isStructured && docObject) ? (
+                    <div
+                        ref={editorRef}
+                        contentEditable
+                        suppressContentEditableWarning
+                        dangerouslySetInnerHTML={{ __html: structuredDocToHtml(docObject) }}
+                        className="prose prose-slate dark:prose-invert max-w-none w-full h-full p-4 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 overflow-y-auto"
+                    />
+                ) : (isEditing && !isTable) ? (
                     <textarea
                         ref={textareaRef}
                         value={localContent}
@@ -389,7 +556,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                 ) : (
                     <div className="h-full overflow-y-auto p-2">
                         <MarkdownRenderer
-                            content={localContent}
+                            content={displayContent}
                             rephrasingText={
                                 inlineModificationState && inlineModificationState.docKey === docKey
                                     ? inlineModificationState.originalText

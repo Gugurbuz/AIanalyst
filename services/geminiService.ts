@@ -1,7 +1,7 @@
 // services/geminiService.ts
 
 import { GoogleGenAI, Type, Content, FunctionDeclaration, GenerateContentResponse } from "@google/genai";
-import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep, GenerativeSuggestion, LintingIssue, SourcedDocument } from '../types';
+import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep, GenerativeSuggestion, LintingIssue, SourcedDocument, StructuredAnalysisDoc } from '../types';
 // GÜNCELLEME: 'promptService' artık '.ts' olmadan import ediliyor.
 // Projenizdeki diğer import'larla tutarlı olması için
 import { promptService } from './promptService';
@@ -228,6 +228,47 @@ export const parseStreamingResponse = (content: string): { thinking: string | nu
     return { thinking: null, response };
 };
 
+const analysisSchema = {
+    type: Type.OBJECT,
+    properties: {
+        sections: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    title: { type: Type.STRING },
+                    content: { type: Type.STRING },
+                    subSections: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                title: { type: Type.STRING },
+                                content: { type: Type.STRING },
+                                requirements: {
+                                    type: Type.ARRAY,
+                                    items: {
+                                        type: Type.OBJECT,
+                                        properties: {
+                                            id: { type: Type.STRING },
+                                            text: { type: Type.STRING },
+                                        },
+                                        required: ['id', 'text'],
+                                    },
+                                },
+                            },
+                            required: ['title', 'content'],
+                        },
+                    },
+                },
+                required: ['title'],
+            },
+        },
+    },
+    required: ['sections'],
+};
+
+
 export const geminiService = {
     processAnalystMessageStream: async function* (history: Message[], generatedDocs: GeneratedDocs, templates: { analysis: string; test: string; traceability: string; visualization: string; }, model: GeminiModel): AsyncGenerator<StreamChunk> {
         let responseGenerated = false;
@@ -235,16 +276,17 @@ export const geminiService = {
             const apiKey = getApiKey();
             const ai = new GoogleGenAI({ apiKey });
 
-            const analysisDocContent = generatedDocs.analysisDoc || "Henüz bir doküman oluşturulmadı.";
-            
+            const hasRequestDoc = !!generatedDocs.requestDoc && generatedDocs.requestDoc.trim().length > 0;
             const hasRealAnalysisDoc = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
 
-            // Per user request, the 'isDeepMode' check has been removed. 
-            // The AI will now always receive the full document context to provide better contextual responses,
-            // even in Normal mode (at the cost of higher token usage).
-            const systemInstruction = hasRealAnalysisDoc
-                ? promptService.getPrompt('proactiveAnalystSystemInstruction').replace('{analysis_document_content}', analysisDocContent)
-                : promptService.getPrompt('continueConversation');
+            // The conversation is just starting if there are no docs and few messages.
+            const isStartingConversation = !hasRequestDoc && !hasRealAnalysisDoc && history.filter(m => m.role !== 'system').length <= 1;
+
+            const systemInstruction = isStartingConversation
+                ? promptService.getPrompt('continueConversation')
+                : promptService.getPrompt('proactiveAnalystSystemInstruction')
+                    .replace('{analysis_document_content}', generatedDocs.analysisDoc || "Henüz bir analiz dokümanı oluşturulmadı.")
+                    .replace('{request_document_content}', generatedDocs.requestDoc || "Henüz bir talep dokümanı oluşturulmadı.");
             
             const geminiHistory = convertMessagesToGeminiFormat(history);
 
@@ -281,7 +323,7 @@ export const geminiService = {
                                 const suggestionPrompt = promptService.getPrompt('generateSectionSuggestions')
                                     .replace('{task_description}', args.task_description)
                                     .replace('{target_section_name}', args.target_section)
-                                    .replace('{analysis_document}', analysisDocContent);
+                                    .replace('{analysis_document}', generatedDocs.analysisDoc || generatedDocs.requestDoc);
                                 
                                 const schema = {
                                     type: Type.OBJECT,
@@ -369,87 +411,6 @@ export const geminiService = {
         }
     },
     
-    clarifyAndConfirmExpertMode: async (history: Message[], model: GeminiModel): Promise<{ needsClarification: boolean; questions?: string; confirmationRequest?: string; checklist?: ExpertStep[], tokens: number }> => {
-        const schema = {
-            type: Type.OBJECT,
-            properties: {
-                needsClarification: { type: Type.BOOLEAN },
-                questions: { type: Type.STRING },
-                isReadyForConfirmation: { type: Type.BOOLEAN }
-            },
-            required: ['needsClarification', 'questions', 'isReadyForConfirmation']
-        };
-
-        const prompt = promptService.getPrompt('expertModeClarificationCheck') + `\n\nSohbet Geçmişi:\n${formatHistory(history)}`;
-        const config = { responseMimeType: "application/json", responseSchema: schema };
-
-        const { text: jsonString, tokens } = await generateContent(prompt, model, config);
-        const result = JSON.parse(jsonString);
-        
-        const checklist: ExpertStep[] = [
-            { id: 'analysis', name: 'İş Analizi Dokümanı Oluşturma', status: 'pending' },
-            { id: 'viz', name: 'Süreç Akışını Görselleştirme', status: 'pending' },
-            { id: 'test', name: 'Test Senaryoları Oluşturma', status: 'pending' },
-            { id: 'traceability', name: 'İzlenebilirlik Matrisi Oluşturma', status: 'pending' },
-        ];
-        
-        if (result.needsClarification) {
-            return { needsClarification: true, questions: result.questions, tokens };
-        } else {
-             return {
-                needsClarification: false,
-                confirmationRequest: "Analiz için yeterli bilgiye sahibim. Aşağıdaki adımları otomatik olarak gerçekleştireceğim. Onaylıyor musunuz?",
-                checklist: checklist,
-                tokens
-            };
-        }
-    },
-
-    executeExpertRun: async function* (history: Message[], templates: { analysis: string; test: string; traceability: string; visualization: string; }, model: GeminiModel): AsyncGenerator<StreamChunk> {
-        let analysisDocContent = '';
-        for await (const chunk of geminiService.generateAnalysisDocument(history, templates.analysis, model)) {
-            if (chunk.type === 'doc_stream_chunk' && chunk.docKey === 'analysisDoc') {
-                analysisDocContent += chunk.chunk;
-            }
-            yield chunk;
-        }
-
-        if (analysisDocContent) {
-            const { code: vizCode, tokens: vizTokens } = await geminiService.generateDiagram(analysisDocContent, 'mermaid', templates.visualization, model);
-            yield { type: 'usage_update', tokens: vizTokens };
-            yield { type: 'visualization_update', content: vizCode };
-            
-            let testScenariosContent = '';
-            for await (const chunk of geminiService.generateTestScenarios(analysisDocContent, templates.test, model)) {
-                if (chunk.type === 'doc_stream_chunk' && chunk.docKey === 'testScenarios') {
-                    testScenariosContent += chunk.chunk;
-                }
-                yield chunk;
-            }
-
-            if (testScenariosContent) {
-                for await (const chunk of geminiService.generateTraceabilityMatrix(analysisDocContent, testScenariosContent, templates.traceability, model)) {
-                    yield chunk;
-                }
-            }
-        }
-    },
-
-
-    continueConversation: async (history: Message[], model: GeminiModel): Promise<{ text: string, tokens: number }> => {
-        const systemInstruction = promptService.getPrompt('continueConversation');
-        const geminiHistory = convertMessagesToGeminiFormat(history);
-        const apiKey = getApiKey();
-        const ai = new GoogleGenAI({ apiKey });
-        const response = await ai.models.generateContent({
-            model, contents: geminiHistory, config: { systemInstruction }
-        });
-        return {
-            text: response.text,
-            tokens: response.usageMetadata?.totalTokenCount || 0
-        };
-    },
-    
     checkAnalysisMaturity: async (history: Message[], generatedDocs: GeneratedDocs, model: GeminiModel, modelConfig?: object): Promise<{ report: MaturityReport, tokens: number }> => {
         const schema = {
             type: Type.OBJECT,
@@ -514,7 +475,7 @@ export const geminiService = {
 
     generateAnalysisDocument: async function* (history: Message[], templatePrompt: string, model: GeminiModel, modelConfig?: object): AsyncGenerator<StreamChunk> {
         const prompt = `${templatePrompt}\n\n**TALİMAT:**\nDokümanı yalnızca ve yalnızca aşağıda sağlanan konuşma geçmişine dayanarak oluştur.\n\n**Konuşma Geçmişi:**\n${formatHistory(history)}`;
-        const stream = generateContentStream(prompt, model, modelConfig);
+        const stream = generateContentStream(prompt, model, { ...modelConfig, responseMimeType: 'application/json', responseSchema: analysisSchema });
         let totalTokens = 0;
         for await (const chunk of stream) {
             if (chunk.text) {
@@ -534,7 +495,25 @@ export const geminiService = {
             throw new Error("Lütfen önce geçerli bir analiz dokümanı oluşturun.");
         }
         const prompt = `${templatePrompt}\n\n**TALİMAT:**\nTest senaryolarını yalnızca aşağıda sağlanan İş Analizi Dokümanına dayanarak oluştur.\n\n**İş Analizi Dokümanı:**\n'${analysisDocument}'`;
-        const stream = generateContentStream(prompt, model, modelConfig);
+
+        const schema = {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    "Test Senaryo ID": { type: Type.STRING },
+                    "İlgili Gereksinim": { type: Type.STRING },
+                    "Senaryo Açıklaması": { type: Type.STRING },
+                    "Test Adımları": { type: Type.STRING },
+                    "Beklenen Sonuç": { type: Type.STRING },
+                },
+                required: ["Test Senaryo ID", "İlgili Gereksinim", "Senaryo Açıklaması", "Test Adımları", "Beklenen Sonuç"],
+            }
+        };
+
+        const config = { ...modelConfig, responseMimeType: 'application/json', responseSchema: schema };
+
+        const stream = generateContentStream(prompt, model, config);
         let totalTokens = 0;
         for await (const chunk of stream) {
             if (chunk.text) {
@@ -554,7 +533,22 @@ export const geminiService = {
             throw new Error("Lütfen önce geçerli bir analiz dokümanı ve test senaryoları oluşturun.");
         }
         const prompt = `${templatePrompt}\n\n**İş Analizi Dokümanı:**\n'${analysisDocument}'\n\n**Test Senaryoları Dokümanı:**\n'${testScenarios}'`;
-        const stream = generateContentStream(prompt, model, modelConfig);
+        
+        const schema = {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    "Gereksinim ID": { type: Type.STRING },
+                    "Gereksinim Açıklaması": { type: Type.STRING },
+                    "İlgili Test Senaryo ID'leri": { type: Type.STRING },
+                },
+                required: ["Gereksinim ID", "Gereksinim Açıklaması", "İlgili Test Senaryo ID'leri"],
+            }
+        };
+        const config = { ...modelConfig, responseMimeType: 'application/json', responseSchema: schema };
+
+        const stream = generateContentStream(prompt, model, config);
         let totalTokens = 0;
         for await (const chunk of stream) {
             if (chunk.text) {
@@ -629,37 +623,56 @@ export const geminiService = {
        return { code, tokens };
     },
     
-    generateBacklogSuggestions: async (analysisDoc: string, testScenarios: string, traceabilityMatrix: string, model: GeminiModel): Promise<{ suggestions: BacklogSuggestion[], tokens: number }> => {
-        const backlogItemProperties = {
+    generateBacklogSuggestions: async (analysisDoc: string, testScenarios: string, traceabilityMatrix: string, model: GeminiModel): Promise<{ suggestions: BacklogSuggestion[], reasoning: string, tokens: number }> => {
+        const backlogItemProperties: any = {
             id: { type: Type.STRING },
-            type: { type: Type.STRING, enum: ['epic', 'story', 'test_case'] },
+            type: { type: Type.STRING, enum: ['epic', 'story', 'test_case', 'task'] },
             title: { type: Type.STRING },
             description: { type: Type.STRING },
             priority: { type: Type.STRING, enum: ['low', 'medium', 'high', 'critical'] },
         };
-        
-        const schema = {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    ...backlogItemProperties,
-                    children: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                ...backlogItemProperties,
-                                // For grandchildren, define children as a generic array to stop schema recursion
-                                // while still satisfying the API's requirement for defined properties.
-                                children: { type: Type.ARRAY }
-                            },
-                            required: ['id', 'type', 'title', 'description', 'priority', 'children']
+
+        // Define a self-contained item schema for recursion.
+        // The library doesn't support $ref, so we define it once and nest it manually.
+        // By not including `children` in `required`, we make it optional for leaf nodes.
+        const baseItemSchema: any = {
+            type: Type.OBJECT,
+            properties: backlogItemProperties,
+            required: ['id', 'type', 'title', 'description', 'priority'],
+        };
+
+        // Manually create a nested schema to guide the model for hierarchical data.
+        const schema: any = {
+            type: Type.OBJECT,
+            properties: {
+                suggestions: {
+                    type: Type.ARRAY,
+                    items: {
+                        ...baseItemSchema,
+                        properties: {
+                            ...baseItemSchema.properties,
+                            children: {
+                                type: Type.ARRAY,
+                                items: {
+                                    ...baseItemSchema,
+                                    properties: {
+                                        ...baseItemSchema.properties,
+                                        children: {
+                                            type: Type.ARRAY,
+                                            items: {
+                                                ...baseItemSchema,
+                                                // We stop nesting here; the model should understand the pattern.
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 },
-                required: ['id', 'type', 'title', 'description', 'priority', 'children']
-            }
+                reasoning: { type: Type.STRING }
+            },
+            required: ['suggestions', 'reasoning']
         };
 
         const basePrompt = promptService.getPrompt('generateBacklogFromArtifacts');
@@ -670,8 +683,8 @@ export const geminiService = {
         const { text: jsonString, tokens } = await generateContent(prompt, model, config);
         try {
             const cleanedJson = jsonString.replace(/^```json\s*|```\s*$/g, '');
-            const results = JSON.parse(cleanedJson) as BacklogSuggestion[];
-            return { suggestions: results, tokens };
+            const results = JSON.parse(cleanedJson) as { suggestions: BacklogSuggestion[], reasoning: string };
+            return { ...results, tokens };
         } catch (e) {
             console.error("Failed to parse backlog suggestions JSON:", e, "Received string:", jsonString);
             throw new Error("Backlog önerileri ayrıştırılamadı.");
@@ -831,4 +844,22 @@ export const geminiService = {
             throw new Error("Özellik önerileri ayrıştırılamadı.");
         }
     },
+    
+    convertHtmlToAnalysisJson: async (htmlContent: string, model: GeminiModel = 'gemini-2.5-flash'): Promise<{ json: StructuredAnalysisDoc, tokens: number }> => {
+        const basePrompt = promptService.getPrompt('convertHtmlToAnalysisJson');
+        const prompt = `${basePrompt}\n\n**HTML İÇERİĞİ:**\n${htmlContent}`;
+        
+        const config = { responseMimeType: "application/json", responseSchema: analysisSchema };
+        const { text: jsonString, tokens } = await generateContent(prompt, model, config);
+        try {
+            const cleanedJson = jsonString.replace(/^```json\s*|```\s*$/g, '');
+            return { json: JSON.parse(cleanedJson) as StructuredAnalysisDoc, tokens };
+        } catch (e) {
+            console.error("Failed to parse analysis JSON from HTML:", e, "Received string:", jsonString);
+            throw new Error("Düzenlenen doküman yapısal formata dönüştürülemedi.");
+        }
+    },
+    // FIX: Expose the `generateContent` helper function to be used for generic, one-shot API calls.
+    // This resolves an error where `continueConversation` was called but did not exist.
+    generateContent,
 };

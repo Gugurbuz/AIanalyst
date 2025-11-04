@@ -38,7 +38,6 @@ const keyToDocumentTypeMap: Record<keyof GeneratedDocs, DocumentType | null> = {
     maturityReport: 'maturity_report',
     visualization: null,
     visualizationType: null,
-    backlogSuggestions: null,
     isVizStale: null,
     isTestStale: null,
     isTraceabilityStale: null,
@@ -90,6 +89,50 @@ const simpleHash = (str: string): string => {
     return hash.toString();
 };
 
+// Hook to get the previous value of a prop or state.
+function usePrevious<T>(value: T): T | undefined {
+    const ref = useRef<T | undefined>(undefined);
+    useEffect(() => {
+        ref.current = value;
+    }, [value]);
+    return ref.current;
+}
+
+// Helper to convert a JSON string representing an array of objects into a Markdown table
+const jsonToMarkdownTable = (jsonString: string): string => {
+    try {
+        // Clean up potential markdown code fences from the AI response
+        const cleanedJsonString = jsonString.replace(/^```json\s*|```\s*$/g, '').trim();
+        if (!cleanedJsonString) return "<!-- Boş JSON verisi -->";
+
+        const data = JSON.parse(cleanedJsonString);
+        if (!Array.isArray(data) || data.length === 0) {
+            return "<!-- Geçerli bir tablo verisi bulunamadı -->";
+        }
+
+        const headers = Object.keys(data[0]);
+        const headerLine = `| ${headers.join(' | ')} |`;
+        const separatorLine = `| ${headers.map(() => '---').join(' | ')} |`;
+
+        const bodyLines = data.map(row => {
+            const cells = headers.map(header => {
+                let cellData = row[header] || '';
+                // Replace newlines inside a cell with <br> for markdown table compatibility
+                cellData = typeof cellData === 'string' ? cellData.replace(/\n/g, '<br/>') : String(cellData);
+                return cellData;
+            });
+            return `| ${cells.join(' | ')} |`;
+        });
+
+        return [headerLine, separatorLine, ...bodyLines].join('\n');
+    } catch (error) {
+        console.error("JSON'dan Markdown tablosuna dönüştürme hatası:", error);
+        // If parsing fails, return the original string, maybe it's an error message
+        return `JSON'dan tabloya dönüştürme hatası:\n\n${jsonString}`;
+    }
+};
+
+
 interface UseAppLogicProps {
     user: User;
     onLogout: () => void;
@@ -125,6 +168,8 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
     const [activeDocTab, setActiveDocTab] = useState<'request' |'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation'>('analysis');
     const [longTextPrompt, setLongTextPrompt] = useState<{ content: string; callback: (choice: 'analyze' | 'save') => void } | null>(null);
     const [requestConfirmation, setRequestConfirmation] = useState<{ summary: string } | null>(null);
+    const [resetConfirmation, setResetConfirmation] = useState<{ changedDocKey: keyof GeneratedDocs; changedDocName: string; impactedDocNames: string[] } | null>(null);
+
 
     
     // --- Developer & Feedback Panel State ---
@@ -226,6 +271,61 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
 
     const isInitialRender = useRef(true);
 
+    const prevRequestDoc = usePrevious(activeConversation?.generatedDocs.requestDoc);
+    const prevAnalysisDoc = usePrevious(activeConversation?.generatedDocs.analysisDoc);
+
+    // --- Effect for detecting changes and triggering reset confirmation ---
+    useEffect(() => {
+        if (resetConfirmation) return;
+        if (isInitialRender.current || !activeConversation) {
+            if (isInitialRender.current) isInitialRender.current = false;
+            return;
+        }
+
+        const { generatedDocs } = activeConversation;
+        const { requestDoc, analysisDoc, mermaidViz, bpmnViz, testScenarios, traceabilityMatrix } = generatedDocs;
+
+        const hasPrevRequest = prevRequestDoc !== undefined;
+        const hasPrevAnalysis = prevAnalysisDoc !== undefined;
+        
+        const testScenariosContent = typeof testScenarios === 'object' ? testScenarios.content : testScenarios;
+        const traceabilityMatrixContent = typeof traceabilityMatrix === 'object' ? traceabilityMatrix.content : traceabilityMatrix;
+
+        if (hasPrevRequest && requestDoc.trim() !== prevRequestDoc.trim()) {
+            const analysisExists = analysisDoc && !analysisDoc.includes("Bu bölüme projenin temel hedefini");
+            const dependentDocsExist = analysisExists || mermaidViz?.code || bpmnViz?.code || !!testScenariosContent || !!traceabilityMatrixContent;
+            
+            if (dependentDocsExist) {
+                setResetConfirmation({
+                    changedDocKey: 'requestDoc',
+                    changedDocName: 'Talep Dokümanı',
+                    impactedDocNames: ['İş Analizi', 'Görselleştirme', 'Test Senaryoları', 'İzlenebilirlik Matrisi'].filter(name => {
+                        if (name === 'İş Analizi') return analysisExists;
+                        if (name === 'Görselleştirme') return !!(mermaidViz?.code || bpmnViz?.code);
+                        if (name === 'Test Senaryoları') return !!testScenariosContent;
+                        if (name === 'İzlenebilirlik Matrisi') return !!traceabilityMatrixContent;
+                        return false;
+                    })
+                });
+            }
+        } else if (hasPrevAnalysis && analysisDoc.trim() !== prevAnalysisDoc.trim()) {
+            const dependentDocsExist = mermaidViz?.code || bpmnViz?.code || !!testScenariosContent || !!traceabilityMatrixContent;
+            
+            if (dependentDocsExist) {
+                setResetConfirmation({
+                    changedDocKey: 'analysisDoc',
+                    changedDocName: 'İş Analizi Dokümanı',
+                    impactedDocNames: ['Görselleştirme', 'Test Senaryoları', 'İzlenebilirlik Matrisi'].filter(name => {
+                         if (name === 'Görselleştirme') return !!(mermaidViz?.code || bpmnViz?.code);
+                        if (name === 'Test Senaryoları') return !!testScenariosContent;
+                        if (name === 'İzlenebilirlik Matrisi') return !!traceabilityMatrixContent;
+                        return false;
+                    })
+                });
+            }
+        }
+    }, [activeConversation, prevRequestDoc, prevAnalysisDoc, resetConfirmation]);
+
 
     // --- Developer & Feedback Panel Logic ---
     const handleToggleDeveloperPanel = () => {
@@ -289,7 +389,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
     
     const saveConversation = useCallback(async (conv: Partial<Conversation> & { id: string }) => {
         setSaveStatus('saving');
-        const { messages, documentVersions, documents, ...updatePayload } = conv;
+        const { messages, documentVersions, documents, backlogSuggestions, ...updatePayload } = conv;
         const { error } = await supabase
             .from('conversations')
             .update(updatePayload)
@@ -468,7 +568,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
 
     useEffect(() => {
         if (isInitialRender.current) {
-            isInitialRender.current = false;
+            // isInitialRender.current = false; // Moved to the reset confirmation effect
             return;
         }
 
@@ -589,7 +689,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         
         commitTokenUsage(tokensUsed);
 
-        const newConversationData: Omit<Conversation, 'id' | 'created_at' | 'messages' | 'documentVersions' | 'documents'> = {
+        const newConversationData: Omit<Conversation, 'id' | 'created_at' | 'messages' | 'documentVersions' | 'documents' | 'backlogSuggestions'> = {
             user_id: user.id,
             title: title || 'Yeni Analiz',
             is_shared: false,
@@ -613,6 +713,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         newConv.messages = [];
         newConv.documentVersions = [];
         newConv.documents = [];
+        newConv.backlogSuggestions = [];
 
         setConversations(prev => [newConv, ...prev]);
         setActiveConversationId(newConv.id);
@@ -1022,6 +1123,59 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
 
         setRequestConfirmation(null); // Close modal
     };
+    
+    const handleConfirmReset = async () => {
+        if (!resetConfirmation || !activeConversationId) return;
+
+        const { changedDocKey } = resetConfirmation;
+
+        const dependencyMap: Record<keyof GeneratedDocs, (keyof GeneratedDocs)[]> = {
+            requestDoc: ['analysisDoc', 'mermaidViz', 'bpmnViz', 'testScenarios', 'traceabilityMatrix'],
+            analysisDoc: ['mermaidViz', 'bpmnViz', 'testScenarios', 'traceabilityMatrix'],
+            testScenarios: ['traceabilityMatrix'],
+            traceabilityMatrix: [],
+            mermaidViz: [],
+            bpmnViz: [],
+            visualization: [],
+            visualizationType: [],
+            maturityReport: [],
+            isVizStale: [],
+            isTestStale: [],
+            isTraceabilityStale: [],
+            isBacklogStale: [],
+        };
+
+        const keysToReset = dependencyMap[changedDocKey] || [];
+        if (keysToReset.length === 0) {
+            setResetConfirmation(null);
+            return;
+        }
+
+        const typesToDelete = keysToReset.map(key => keyToDocumentTypeMap[key]).filter((t): t is DocumentType => t !== null);
+
+        // Optimistic UI update
+        setConversations(prev => prev.map(c => {
+            if (c.id === activeConversationId) {
+                const updatedDocuments = c.documents.filter(d => !typesToDelete.includes(d.document_type));
+                return { ...c, documents: updatedDocuments };
+            }
+            return c;
+        }));
+
+        // Database update
+        const { error } = await supabase
+            .from('documents')
+            .delete()
+            .in('document_type', typesToDelete)
+            .eq('conversation_id', activeConversationId);
+
+        if (error) {
+            setError("Bağımlı dokümanlar sıfırlanırken bir hata oluştu: " + error.message);
+            // TODO: Optionally revert optimistic update on error
+        }
+
+        setResetConfirmation(null);
+    };
 
 
      const handleGenerateDoc = useCallback(async (
@@ -1130,15 +1284,20 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
                  const { docResponses } = await processStream(stream, '');
                  const fullResponse = docResponses[docKey as keyof GeneratedDocs];
                  if (fullResponse) {
+                    let finalContent = fullResponse;
+                    if (docKey === 'testScenarios' || docKey === 'traceabilityMatrix') {
+                        finalContent = jsonToMarkdownTable(fullResponse);
+                    }
+
                      if (docKey === 'testScenarios') {
                         const analysisHash = simpleHash(conv.generatedDocs.analysisDoc);
-                        await saveDocumentVersion(docKey, { content: fullResponse, sourceHash: analysisHash }, "AI Tarafından Oluşturuldu", currentTemplateId);
+                        await saveDocumentVersion(docKey, { content: finalContent, sourceHash: analysisHash }, "AI Tarafından Oluşturuldu", currentTemplateId);
                     } else if (docKey === 'traceabilityMatrix') {
                         const analysisDoc = conv.generatedDocs.analysisDoc;
                         const combinedHash = simpleHash(analysisDoc + testScenariosContent);
-                        await saveDocumentVersion(docKey, { content: fullResponse, sourceHash: combinedHash }, "AI Tarafından Oluşturuldu", currentTemplateId);
-                    } else {
-                        await saveDocumentVersion(docKey as 'analysisDoc', fullResponse, "AI Tarafından Oluşturuldu", currentTemplateId);
+                        await saveDocumentVersion(docKey, { content: finalContent, sourceHash: combinedHash }, "AI Tarafından Oluşturuldu", currentTemplateId);
+                    } else { // analysisDoc
+                        await saveDocumentVersion(docKey as 'analysisDoc', finalContent, "AI Tarafından Oluşturuldu", currentTemplateId);
                     }
                  }
 
@@ -1255,7 +1414,8 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         try {
             const basePrompt = promptService.getPrompt('modifySelectedText');
             const fullPrompt = `${basePrompt}\n\n**Orijinal Metin:**\n"${selectedText}"\n\n**Talimat:**\n"${userPrompt}"`;
-            const { text: modifiedText, tokens } = await geminiService.continueConversation([{ role: 'user', content: fullPrompt, id: 'temp', timestamp: '', conversation_id: 'temp', created_at: '' }], 'gemini-2.5-flash');
+            // FIX: Replaced call to non-existent `continueConversation` with `generateContent`.
+            const { text: modifiedText, tokens } = await geminiService.generateContent(fullPrompt, 'gemini-2.5-flash');
             commitTokenUsage(tokens);
 
             const newContent = originalStringContent.replace(selectedText, modifiedText);
@@ -1559,6 +1719,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         traceabilityTemplates,
         longTextPrompt,
         requestConfirmation,
+        resetConfirmation,
         
         // Handlers
         onLogout,
@@ -1603,5 +1764,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         setRequestConfirmation,
         handleConfirmRequest,
         handleRejectRequest,
+        setResetConfirmation,
+        handleConfirmReset,
     };
 };

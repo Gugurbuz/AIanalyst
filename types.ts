@@ -122,7 +122,6 @@ export interface GeneratedDocs {
     bpmnViz?: VizData;
     traceabilityMatrix: SourcedDocument | string;
     maturityReport?: MaturityReport | null;
-    backlogSuggestions?: BacklogSuggestion[];
     // --- New flags for impact analysis ---
     isVizStale?: boolean;
     isTestStale?: boolean;
@@ -141,6 +140,7 @@ export interface Conversation {
     share_id: string | null;
     created_at: string;
     total_tokens_used?: number;
+    backlogSuggestions?: BacklogSuggestion[];
 }
 
 // --- Project Board Types ---
@@ -168,11 +168,11 @@ export interface Task {
 
 export interface BacklogSuggestion {
     id: string; // Temporary ID for UI key
-    type: 'epic' | 'story' | 'test_case';
+    type: TaskType;
     title: string;
     description: string;
     priority: TaskPriority;
-    children: BacklogSuggestion[];
+    children?: BacklogSuggestion[];
 }
 
 
@@ -232,5 +232,47 @@ export interface ThinkingStep {
   status: 'pending' | 'completed' | 'error' | 'in_progress';
   result?: any;
   error?: string;
+}
+
+// NEW: Types for structured analysis document
+export interface AnalysisRequirement {
+    id: string; // e.g., "FR-001"
+    text: string;
+}
+
+export interface AnalysisSubSection {
+    title: string;
+    content: string; // Markdown content
+    requirements?: AnalysisRequirement[];
+}
+
+export interface AnalysisSection {
+    title: string; // e.g., "1. ANALİZ KAPSAMI"
+    content?: string; // Markdown content for simple sections
+    subSections?: AnalysisSubSection[];
+}
+
+export interface StructuredAnalysisDoc {
+    sections: AnalysisSection[];
+}
+
+// NEW: Structured types for JSON-based document generation
+export interface StructuredTestScenario {
+    "Test Senaryo ID": string;
+    "İlgili Gereksinim": string;
+    "Senaryo Açıklaması": string;
+    "Test Adımları": string;
+    "Beklenen Sonuç": string;
+}
+
+export interface StructuredTraceabilityRow {
+    "Gereksinim ID": string;
+    "Gereksinim Açıklaması": string;
+    "İlgili Test Senaryo ID'leri": string; // Comma separated string
+}
+
+
+export function isStructuredAnalysisDoc(obj: any): obj is StructuredAnalysisDoc {
+    return obj && typeof obj === 'object' && Array.isArray(obj.sections);
 }
 // ... diğer tipler

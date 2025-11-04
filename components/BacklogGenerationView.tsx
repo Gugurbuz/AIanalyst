@@ -1,23 +1,22 @@
 // components/BacklogGenerationView.tsx
 import React, { useState, useCallback } from 'react';
 // FIX: Add GeneratedDocs to the type import to correctly type component props.
-import type { Conversation, BacklogSuggestion, Task, GeneratedDocs, SourcedDocument } from '../types';
+import type { Conversation, BacklogSuggestion, Task, GeneratedDocs, SourcedDocument, TaskType } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { geminiService } from '../services/geminiService';
 import { CheckSquare, LoaderCircle, Square, Layers, FileText, Beaker, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface BacklogGenerationViewProps {
-    // FIX: Update the 'conversation' prop to include the 'generatedDocs' object.
-    conversation: Conversation & { generatedDocs: GeneratedDocs };
-    // FIX: Update the 'onUpdateConversation' signature to allow passing 'generatedDocs'.
-    onUpdateConversation: (id: string, updates: Partial<Conversation> & { generatedDocs?: Partial<GeneratedDocs> }) => void;
+    conversation: Conversation;
+    onUpdateConversation: (id: string, updates: Partial<Conversation>) => void;
 }
 
-const typeInfo = {
+const typeInfo: Record<TaskType, { icon: React.ReactElement; name: string }> = {
     epic: { icon: <Layers className="h-5 w-5 text-purple-500" />, name: 'Epic' },
     story: { icon: <FileText className="h-5 w-5 text-blue-500" />, name: 'Story' },
     test_case: { icon: <Beaker className="h-5 w-5 text-green-500" />, name: 'Test Case' },
+    task: { icon: <CheckSquare className="h-5 w-5 text-slate-500" />, name: 'Task' },
 };
 
 const priorityStyles: Record<BacklogSuggestion['priority'], string> = {
@@ -36,6 +35,8 @@ const SuggestionItem: React.FC<{
 }> = ({ suggestion, level, isSelected, onToggle }) => {
     const [isExpanded, setIsExpanded] = useState(level < 2); // Expand epics and stories by default
     const hasChildren = suggestion.children && suggestion.children.length > 0;
+    const info = typeInfo[suggestion.type as TaskType] || typeInfo.task;
+    const priority = suggestion.priority || 'medium';
 
     return (
         <div style={{ paddingLeft: `${level * 20}px` }}>
@@ -51,13 +52,13 @@ const SuggestionItem: React.FC<{
                     <button onClick={() => onToggle(suggestion.id, suggestion)}>
                         {isSelected(suggestion.id) ? <CheckSquare className="h-5 w-5 text-indigo-600" /> : <Square className="h-5 w-5 text-slate-400" />}
                     </button>
-                    {typeInfo[suggestion.type].icon}
+                    {info.icon}
                 </div>
                 <div className="flex-1">
                     <div className="flex justify-between items-start">
                         <h4 className="font-semibold text-slate-800 dark:text-slate-100">{suggestion.title}</h4>
-                        <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${priorityStyles[suggestion.priority]}`}>
-                            {suggestion.priority.charAt(0).toUpperCase() + suggestion.priority.slice(1)}
+                        <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${priorityStyles[priority]}`}>
+                            {priority.charAt(0).toUpperCase() + priority.slice(1)}
                         </span>
                     </div>
                     <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{suggestion.description}</p>
@@ -76,42 +77,49 @@ const SuggestionItem: React.FC<{
 
 
 export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ conversation, onUpdateConversation }) => {
-    const suggestions = conversation.generatedDocs.backlogSuggestions || [];
+    const suggestions = conversation.backlogSuggestions || [];
     const [isGenerating, setIsGenerating] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+    // This is now derived from the conversation object which has the generatedDocs property added in the parent
+    const generatedDocs = (conversation as any).generatedDocs as GeneratedDocs;
+
     const isReadyForGeneration = 
-        !!conversation.generatedDocs.analysisDoc &&
-        !!conversation.generatedDocs.testScenarios &&
-        !!conversation.generatedDocs.traceabilityMatrix;
+        !!generatedDocs.analysisDoc &&
+        !!generatedDocs.testScenarios &&
+        !!generatedDocs.traceabilityMatrix;
 
     const handleGenerateSuggestions = useCallback(async () => {
         setIsGenerating(true);
         setError(null);
         try {
-            // FIX: Extract string content from SourcedDocument types before passing to service.
-            const testScenariosContent = typeof conversation.generatedDocs.testScenarios === 'object'
-                ? (conversation.generatedDocs.testScenarios as SourcedDocument).content
-                : conversation.generatedDocs.testScenarios;
-            const traceabilityMatrixContent = typeof conversation.generatedDocs.traceabilityMatrix === 'object'
-                ? (conversation.generatedDocs.traceabilityMatrix as SourcedDocument).content
-                : conversation.generatedDocs.traceabilityMatrix;
+            const testScenariosContent = typeof generatedDocs.testScenarios === 'object'
+                ? (generatedDocs.testScenarios as SourcedDocument).content
+                : generatedDocs.testScenarios;
+            const traceabilityMatrixContent = typeof generatedDocs.traceabilityMatrix === 'object'
+                ? (generatedDocs.traceabilityMatrix as SourcedDocument).content
+                : generatedDocs.traceabilityMatrix;
 
-            const { suggestions: result, tokens } = await geminiService.generateBacklogSuggestions(
-                conversation.generatedDocs.analysisDoc,
+            const { suggestions: result, reasoning, tokens } = await geminiService.generateBacklogSuggestions(
+                generatedDocs.analysisDoc,
                 testScenariosContent,
                 traceabilityMatrixContent,
                 'gemini-2.5-pro' // Use a more powerful model for this complex task
             );
+
+            if (!result || result.length === 0) {
+                // If the result is empty, use the AI's reasoning as the error message.
+                const errorMessage = reasoning || "Yapay zeka, sağlanan dokümanlardan bir backlog oluşturamadı. Lütfen dokümanlarınızın içeriğini kontrol edip tekrar deneyin.";
+                throw new Error(errorMessage);
+            }
+
             onUpdateConversation(conversation.id, {
-                generatedDocs: {
-                    ...conversation.generatedDocs,
-                    backlogSuggestions: result,
-                },
+                backlogSuggestions: result,
                 total_tokens_used: (conversation.total_tokens_used || 0) + tokens
             });
+
             // Auto-select all new suggestions
             const allIds = new Set<string>();
             const traverse = (items: BacklogSuggestion[]) => {
@@ -127,25 +135,39 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
         } finally {
             setIsGenerating(false);
         }
-    }, [conversation, onUpdateConversation]);
+    }, [conversation.id, conversation.total_tokens_used, generatedDocs, onUpdateConversation]);
 
     const handleToggleSelection = useCallback((id: string, toggledSuggestion: BacklogSuggestion) => {
         const newSelection = new Set(selectedIds);
         const childIds = new Set<string>();
-        const traverse = (items: BacklogSuggestion[]) => {
+        
+        // Recursive function to collect all child IDs
+        const traverse = (items: BacklogSuggestion[] | undefined) => {
+            // GUARD: Prevent crash if an item has no `children` property.
+            if (!items) {
+                return;
+            }
             items.forEach(item => {
                 childIds.add(item.id);
-                if (item.children) traverse(item.children);
+                // Recursively traverse if children exist
+                if (item.children) {
+                    traverse(item.children);
+                }
             });
         };
+        
+        // Start traversal with the toggled suggestion's children
         traverse(toggledSuggestion.children);
-
+    
         const isSelected = newSelection.has(id);
         if (isSelected) {
+            // If it was selected, deselect it and all its children
             newSelection.delete(id);
             childIds.forEach(childId => newSelection.delete(childId));
         } else {
+            // If it was not selected, select it and all its children
             newSelection.add(id);
+            // BUG FIX: The second argument to `add` should be the `childId`, not the parent `id`.
             childIds.forEach(childId => newSelection.add(childId));
         }
         setSelectedIds(newSelection);
@@ -240,7 +262,7 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
             const remainingSuggestions = suggestions.filter(s => !addedTopLevelIds.has(s.id));
 
             onUpdateConversation(conversation.id, {
-                generatedDocs: { ...conversation.generatedDocs, backlogSuggestions: remainingSuggestions }
+                backlogSuggestions: remainingSuggestions
             });
             setSelectedIds(new Set());
             alert(`${tasksToInsert.length} madde başarıyla Backlog panosuna eklendi.`);
@@ -261,6 +283,12 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
     if (suggestions.length === 0) {
         return (
             <div className="p-6 text-center text-slate-500 dark:text-slate-400 h-full flex flex-col justify-center items-center">
+                {error && (
+                    <div className="mb-4 w-full max-w-xl p-3 text-sm text-red-800 bg-red-100 border border-red-300 rounded-lg dark:bg-red-900/50 dark:text-red-300 dark:border-red-600 flex items-start gap-2">
+                        <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" /> 
+                        <span className="text-left">{error}</span>
+                    </div>
+                )}
                 <p className="text-lg font-semibold">Henüz backlog önerisi oluşturulmadı.</p>
                 <p className="text-sm mt-1 max-w-md">Mevcut analiz dokümanlarını (analiz, test, izlenebilirlik) kullanarak AI'dan hiyerarşik bir backlog oluşturmasını isteyin.</p>
                  <button 

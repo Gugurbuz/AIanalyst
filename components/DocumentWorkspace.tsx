@@ -37,6 +37,7 @@ const simpleHash = (str: string): string => {
 
 interface DocumentWorkspaceProps {
     conversation: Conversation & { generatedDocs: GeneratedDocs };
+    onUpdateConversation: (id: string, updates: Partial<Conversation>) => void;
     isProcessing: boolean; // This is now the GLOBAL processing state (e.g., for chat)
     generatingDocType: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | null;
     onUpdateDocument: (docKey: keyof GeneratedDocs, newContent: string | SourcedDocument, reason: string) => void;
@@ -80,6 +81,7 @@ const StaleIndicator = ({ isStale }: { isStale?: boolean }) => {
 
 export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     conversation,
+    onUpdateConversation,
     isProcessing,
     generatingDocType,
     onUpdateDocument,
@@ -109,12 +111,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     const { generatedDocs, id: conversationId } = conversation;
     const prevAnalysisDoc = usePrevious(generatedDocs.analysisDoc);
     
-    // FIX: Update the signature of onUpdateConversation to allow 'generatedDocs' property for type safety in BacklogGenerationView.
-    const onUpdateConversation = (id: string, updates: Partial<Conversation> & { generatedDocs?: Partial<GeneratedDocs> }) => {
-        // This is a placeholder now, the main logic is in App.tsx
-        // But we need it for BacklogGenerationView
-    };
-
     const updateDocumentStaleness = async (docType: DocumentType, isStale: boolean) => {
         const { error } = await supabase
             .from('documents')
@@ -192,19 +188,30 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
         { id: 'viz', name: 'Görselleştirme', isStale: generatedDocs.isVizStale, content: vizContent, icon: <GanttChartSquare className="h-4 w-4 mr-2" /> },
         { id: 'test', name: 'Test Senaryoları', isStale: generatedDocs.isTestStale, content: testScenariosContent, icon: <Beaker className="h-4 w-4 mr-2" /> },
         { id: 'traceability', name: 'İzlenebilirlik', isStale: generatedDocs.isTraceabilityStale, content: traceabilityMatrixContent, icon: <GitBranch className="h-4 w-4 mr-2" /> },
-        { id: 'backlog-generation', name: 'Backlog Oluşturma', isStale: generatedDocs.isBacklogStale, content: (generatedDocs.backlogSuggestions || []).length > 0, icon: <Check className="h-4 w-4 mr-2" /> },
+        { id: 'backlog-generation', name: 'Backlog Oluşturma', isStale: generatedDocs.isBacklogStale, content: (conversation.backlogSuggestions || []).length > 0, icon: <Check className="h-4 w-4 mr-2" /> },
         { id: 'maturity', name: 'Olgunluk', isStale: false, content: true, icon: <Check className="h-4 w-4 mr-2" /> }, // Always has content
     ];
 
     const visibleTabs = useMemo(() => {
         return allTabs.filter(tab => (tab.id === 'analysis' || tab.id === 'maturity' || tab.id === 'request') ? !!tab.content : tab.content);
-    }, [generatedDocs, vizContent]);
+    }, [conversation, vizContent]);
 
     const creatableDocs = useMemo(() => {
-        return allTabs.filter(tab => (tab.id !== 'analysis' && tab.id !== 'maturity' && tab.id !== 'request') && !tab.content);
-    }, [generatedDocs, vizContent]);
+        const analysisTab = allTabs.find(t => t.id === 'analysis');
+        
+        const standardCreatable = allTabs.filter(tab => 
+            !['analysis', 'maturity', 'request'].includes(tab.id) && !tab.content
+        );
+
+        // Conditionally add the analysis doc to the beginning of the list if it can be created
+        if (generatedDocs.requestDoc && analysisTab && !analysisTab.content) {
+            return [analysisTab, ...standardCreatable];
+        }
+        
+        return standardCreatable;
+    }, [conversation, allTabs, generatedDocs.requestDoc]);
     
-    const handleCreateClick = (type: 'viz' | 'test' | 'traceability' | 'backlog-generation') => {
+    const handleCreateClick = (type: 'analysis' | 'viz' | 'test' | 'traceability' | 'backlog-generation') => {
         onGenerateDoc(type);
         setIsCreateMenuOpen(false);
     };
@@ -309,12 +316,14 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                                             key={doc.id}
                                             onClick={() => handleCreateClick(doc.id as any)}
                                             disabled={
+                                                (doc.id === 'analysis' && !generatedDocs.requestDoc) ||
                                                 (doc.id === 'viz' && !isAnalysisDocReady) ||
                                                 (doc.id === 'test' && !isAnalysisDocReady) ||
                                                 (doc.id === 'traceability' && (!isAnalysisDocReady || !testScenariosContent)) ||
                                                 (doc.id === 'backlog-generation' && (!isAnalysisDocReady || !testScenariosContent || !traceabilityMatrixContent))
                                             }
                                             title={
+                                                 (doc.id === 'analysis' && !generatedDocs.requestDoc) ? "Analiz dokümanı oluşturmak için önce bir talep dokümanı gereklidir." :
                                                  (doc.id === 'viz' && !isAnalysisDocReady) ? "Görselleştirme için önce geçerli bir analiz dokümanı oluşturulmalıdır." :
                                                  (doc.id === 'test' && !isAnalysisDocReady) ? "Test senaryoları için önce geçerli bir analiz dokümanı oluşturulmalıdır." :
                                                  (doc.id === 'traceability' && (!isAnalysisDocReady || !testScenariosContent)) ? "İzlenebilirlik matrisi için önce analiz ve test dokümanları oluşturulmalıdır." :
