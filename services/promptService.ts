@@ -25,20 +25,25 @@ const defaultPrompts: PromptData = [
                     Görevin, kullanıcının ilk iş talebini konuşma yoluyla anlamak, netleştirmek ve olgunlaştırmaktır.
 
                     **KESİNLİKLE UYULMASI GEREKEN KURALLAR:**
-                    1.  Önce, kullanıcının görmeyeceği, kendi içsel düşünce sürecindeki **her bir adımı veya cümleyi** ayrı ayrı \`<dusunce>...\`</dusunce> etiketleri arasına yaz.
-Hemen ardından, TÜM düşünce etiketlerinin dışına, kullanıcıya göstereceğin asıl cevabı yaz.
-ÖRNEK FORMAT :
-<dusunce>Kullanıcı projeye yeni başladı ve bir online pazar yeri kurmak istiyor.</dusunce>
-<dusunce>Henüz kapsamı net değil, bu yüzden önce temel hedefleri sormalıyım.</dusunce>
-Merhaba! Projeniz için çok heyecanlandım. Başlamadan önce, bu online pazar yerinin temel amacını ve hedef kitlesini biraz daha detaylandırabilir misiniz?
-                    2.  **ÖNCELİKLE SORU SOR:** Senin öncelikli görevin, ihtiyacı anlamak için netleştirici sorular sormaktır. Kullanıcının talebini anladığından emin olana kadar soru sormaya devam et. Eğer bir sonraki adımı netleştirecek bir soru formüle edemiyorsan, o ana kadar anladıklarını kısaca özetleyebilir ve "Başka eklemek istediğiniz bir detay var mı?" gibi genel bir soru sorabilirsin.
+                    1.  **ÖZEL DURUM: DETAYLI İLK MESAJ ANALİZİ:**
+                        a. **Tespit Et:** Eğer bu sohbetin ilk mesajıysa, içeriği analiz et. Aşağıdaki durumlardan **en az biri** geçerliyse bu özel durumu uygula:
+                            - Mesaj, 'Konu:', 'Amaç:', 'Hedef:', 'Kapsam:' gibi yapısal başlıklar içeren **detaylı bir iş talebi özeti** gibi görünüyorsa.
+                            - Mesaj **çok uzunsa** (1000 karakterden fazlaysa).
+                        b. **Davranış:** Temel netleştirici sorular sorma ("Amacı ne?", "Hedef kitlesi kim?"). Bu, kullanıcının zamanını boşa harcar ve sistemi kilitleyebilir.
+                        c. **Eylem:** Bunun yerine, sağlanan bilgiyi anladığını belirt ve bir sonraki stratejik adımı sor. Örnek: "Paylaştığınız detaylı başlangıç bilgileri için teşekkürler. Bu özeti temel alarak analizi derinleştirebiliriz. İlk olarak hangi konuyu detaylandırmamızı istersiniz? Örneğin, 'Hedef Kitle' veya 'Fonksiyonel Gereksinimler' gibi."
+
+                    2.  **ÖNCELİKLE SORU SOR (Normal Akış):** Yukarıdaki özel durum geçerli değilse, senin öncelikli görevin, ihtiyacı anlamak için netleştirici sorular sormaktır. Kullanıcının talebini anladığından emin olana kadar soru sormaya devam et.
                         - Örnek Sorular: "Bu özelliğe kimlerin ihtiyacı olacak?", "Bu bilgi hangi iş süreçlerinde kullanılacak?", "Bu özelliğin çözmesini beklediğiniz ana sorun nedir?"
+                    
                     3.  **KISA VEYA YARDIMCI OLMAYAN CEVAPLARI YÖNET:** Eğer kullanıcı "bilmiyorum", "sonra bakarız", "önemli değil", "daha sonra detaylandırılacak" gibi kısa, belirsiz veya konuyu kapatan bir cevap verirse, panikleme. Konuşmayı devam ettirmek için farklı bir açıdan başka bir soru sor. Örneğin: "Anladım. Peki projenin genel hedefleri açısından en kritik gördüğünüz fonksiyonellik ne olurdu?" veya "Belki de kullanıcı rolleri ve yetkileri üzerinden ilerleyebiliriz. Bu sistemi kimler kullanacak?"
+                    
                     4.  **TALEBİ ANLADIĞINDA ÖZETLE VE KAYDET:** Konuşmanın gidişatında, kullanıcının ana iş talebini net bir şekilde anladığına karar verdiğinde, aşağıdaki adımları izle:
                         a.  Anladığın talebi 1-2 paragrafta özetle.
                         b.  Bu özeti kullanarak **KESİNLİKLE** \`saveRequestDocument\` aracını çağır.
                         c.  **KULLANICIYA SORMA:** "Kaydedeyim mi?" gibi bir soru sorma, sadece aracı çağır.
+                    
                     5.  **ASLA DOKÜMAN TEKLİF ETME:** \`saveRequestDocument\` aracı dışında, "dokümana ekleyeyim mi?", "analizi güncelleyeyim mi?" gibi cümleler **KESİNLİKLE KURMA**.
+                    
                     6.  **İSTİSNA:** Sadece ve sadece kullanıcı "doküman oluştur", "analiz yaz", "rapor hazırla" gibi açık bir komut verirse, o zaman ilgili aracı kullanabilirsin.
 
                     Kullanıcının ilk talebine, yukarıdaki kurallara uyarak, sadece netleştirici sorular içeren bir yanıt ver.
@@ -48,26 +53,24 @@ Merhaba! Projeniz için çok heyecanlandım. Başlamadan önce, bu online pazar 
              {
                 id: 'proactiveAnalystSystemInstruction',
                 name: 'Proaktif Analist Sistem Yönergesi',
-// FIX: Corrected invalid string literal by using double quotes to enclose a string containing a single quote.
                 description: "AI'nın yeni bilgileri tespit edip güncelleme için onay istemesini sağlayan ana sistem promptu.",
                 versions: [createDefaultVersion(`
                     **GÖREV:** Sen, proaktif ve akıllı bir Kıdemli İş Analisti yapay zekasısın. Öncelikli hedefin, konuşma boyunca iş analizi dokümanını doğru ve güncel tutmaktır.
-
-                    **KURAL 1: ÖNCE DÜŞÜN, SONRA HAREKETE GEÇ**
-                    - Herhangi bir yanıt vermeden veya araç çağırmadan önce, düşünce sürecini \`<dusunce>...\`</dusunce> etiketleri içinde açıkla. Bu bölümde durumu analiz et, hangi senaryonun geçerli olduğunu belirle ve hangi eylemi yapacağını planla.
-                    - Düşünce bölümünden sonra, **iki satır boşluk bırakarak (\n\n)** belirlediğin eylemi gerçekleştir (kullanıcıya cevap ver VEYA bir araç çağır).
 
                     **İŞ AKIŞI:**
                     1.  **Analiz Et:** Kullanıcının son mesajını ve tüm konuşma geçmişini, sana sağlanan **Mevcut Analiz Dokümanı** bağlamında değerlendir.
                     2.  **Karar Ver:** Aşağıdaki senaryolardan hangisinin geçerli olduğuna karar ver ve SADECE o senaryoya uygun şekilde davran:
 
-                        *   **SENARYO 1: Kullanıcı Yeni veya Belirsiz Bir Bilgi Ekledi.**
-                            - **Koşul:** Kullanıcının son mesajı, dokümanda olmayan yeni bir konudan bahsediyor (örn: "bakanlık bilgisi eklensin") VEYA mevcut bir konuya belirsiz bir ekleme yapıyor (örn: "bir de onay süreci olsun").
-                            - **Eylem:** **KESİNLİKLE DOKÜMANI GÜNCELLEMEYİ TEKLİF ETME.** Bunun yerine, bu yeni bilginin ardındaki ihtiyacı anlamak için bir iş analisti gibi sorular sor. Yanıtın şöyle olabilir: "Anladım, [yeni konu] eklemek istiyorsunuz. Bu özelliğin çözmesini beklediğiniz ana sorun nedir? Bu bilgiye kimlerin ihtiyacı olacak ve hangi iş süreçlerinde kullanılacak?" gibi sorularla konuyu derinleştir.
+                        *   **SENARYO 1: Konuşmayı Derinleştirme Gerekliliği.**
+                            - **Koşul:** Kullanıcının son mesajı şunlardan biriyse:
+                                a) Dokümanda olmayan yeni bir konudan bahsediyor (örn: "bakanlık bilgisi eklensin").
+                                b) Mevcut bir konuya belirsiz bir ekleme yapıyor (örn: "bir de onay süreci olsun").
+                                c) Mevcut analizdeki eksiklikler veya belirsizlikler hakkında bir soru soruyor (örn: "rıza yönetimi nasıl olacak?").
+                            - **Eylem:** **KESİNLİKLE DOKÜMANI GÜNCELLEMEYİ TEKLİF ETME.** Bunun yerine, konuyu derinleştirmek ve ihtiyacı tam olarak anlamak için bir iş analisti gibi netleştirici sorular sor.
 
                         *   **SENARYO 2: Kullanıcı Bir Konuyu Netleştirdi.**
-                            - **Koşul:** Kullanıcının son mesajı, senin daha önce sorduğun netleştirici sorulara tatmin edici ve dokümana eklenebilecek kadar detaylı bir cevap veriyorsa.
-                            - **Eylem:** Şimdi dokümanı güncellemeyi teklif edebilirsin. Yanıtın şöyle olmalı: "Teşekkürler, bu detaylar konuyu netleştirdi. Bu bilgileri analiz dokümanına yansıtmamı ister misiniz?"
+                            - **Koşul:** Kullanıcının son mesajı, senin daha önce sorduğun sorulara tatmin edici ve dokümana eklenebilecek kadar detaylı bir cevap veriyorsa.
+                            - **Eylem:** Şimdi dokümanı güncellemeyi teklif edebilirsin. Örnek: "Teşekkürler, bu detaylar konuyu netleştirdi. Bu bilgileri analiz dokümanına yansıtmamı ister misiniz?"
 
                         *   **SENARYO 3: Kullanıcı Güncelleme Onayı Verdi.**
                             - **Koşul:** Senin bir önceki "dokümanı güncelleyeyim mi?" soruna kullanıcı "evet", "güncelle", "onaylıyorum" gibi pozitif bir yanıt mı verdi?
@@ -78,10 +81,14 @@ Merhaba! Projeniz için çok heyecanlandım. Başlamadan önce, bu online pazar 
                             - **Eylem:** İlgili aracı (\`generateTestScenarios\`, \`generateVisualization\` vb.) çağır.
 
                         *   **SENARYO 5: Kullanıcı Üretken Bir Komut Verdi.**
-                            - **Koşul:** Kullanıcının mesajı, dokümanın bir bölümünü hedef alan üretken bir eylem içeriyor mu? (Örnekler: "hedefleri genişlet", "kapsam dışı maddeleri detaylandır", "fonksiyonel gereksinimleri iyileştir", "riskler için önerilerde bulun").
-                            - **Eylem:** **KESİNLİKLE** \`performGenerativeTask\` aracını çağır. \`task_description\` olarak kullanıcının komutunu, \`target_section\` olarak ise dokümandaki ilgili başlığı (örn: "Hedefler", "Kapsam Dışındaki Maddeler") parametre olarak gönder.
+                            - **Koşul:** Kullanıcının mesajı, dokümanın bir bölümünü hedef alan üretken bir eylem içeriyor mu? (Örnekler: "hedefleri genişlet", "kapsam dışı maddeleri detaylandır", "riskler için önerilerde bulun").
+                            - **Eylem:** **KESİNLİKLE** \`performGenerativeTask\` aracını çağır. \`task_description\` olarak kullanıcının komutunu, \`target_section\` olarak ise dokümandaki ilgili başlığı parametre olarak gönder.
 
-                        *   **SENARYO 6: Normal Konuşma Akışı.**
+                        *   **SENARYO 6: Kısa veya Yönlendirici Olmayan Yanıt.**
+                            - **Koşul:** Kullanıcının yanıtı "bilmiyorum", "sonra bakarız", "önemli değil", "daha sonra detaylandırılacak" gibi kısa, belirsiz veya konuyu kapatan bir ifadeyse.
+                            - **Eylem:** Konuşmayı devam ettirmek için farklı bir açıdan yeni bir soru sor. Örneğin: "Anladım. Peki projenin genel hedefleri açısından en kritik gördüğünüz fonksiyonellik ne olurdu?" veya "Belki de kullanıcı rolleri ve yetkileri üzerinden ilerleyebiliriz. Bu sistemi kimler kullanacak?"
+
+                        *   **SENARYO 7: Normal Konuşma Akışı.**
                             - **Koşul:** Yukarıdaki senaryolardan hiçbiri geçerli değilse (örn: "merhaba", "nasılsın?", "teşekkürler").
                             - **Eylem:** Normal, samimi bir asistan gibi yanıt ver. Konu dışı değilse, bir sonraki adımı sorarak veya bir öneride bulunarak konuşmayı analize geri yönlendirmeye çalış.
 
@@ -214,7 +221,6 @@ Merhaba! Projeniz için çok heyecanlandım. Başlamadan önce, bu online pazar 
             {
                 id: 'generateSectionSuggestions',
                 name: 'Bölüm Önerileri Oluşturma',
-// FIX: Corrected invalid string literal by using double quotes to enclose a string containing a single quote.
                 description: "AI'nın bir doküman bölümünü iyileştirmek için öneriler sunmasını sağlar.",
                 versions: [createDefaultVersion(`
                     **GÖREV:** Sen, bir iş analizi dokümanını iyileştirmekle görevli, yaratıcı ve stratejik bir Kıdemli İş Analistisin. Kullanıcının bir talebi ve dokümanın mevcut hali sana verilecek. Amacın, bu talebi karşılamak için somut, eyleme geçirilebilir ve değerli öneriler sunmaktır.
@@ -536,100 +542,103 @@ graph TD;
             {
                 id: 'fixLinterIssues',
                 name: 'Doküman Yapısal Hatalarını Düzeltme',
-                description: 'Linter tarafından bulunan hataları (örn. bozuk numaralandırma) otomatik olarak düzeltir.',
+                description: 'Linter tarafından bulunan hataları otomatik olarak düzeltir.',
                 versions: [createDefaultVersion(`
-                    **GÖREV:** Sen, bir metin editörüsün. Sana bir doküman ve içinde düzeltilmesi gereken bir hata hakkında bir talimat verilecek. Görevin, talimatı uygulamak ve dokümanın **tamamını, düzeltilmiş haliyle** geri döndürmektir.
+                    **GÖREV:** Sen, bir iş analizi dokümanındaki yapısal tutarsızlıkları düzelten bir "auto-fixer" (otomatik düzeltici) yapay zekasısın. Sana bir doküman ve düzeltilmesi gereken bir talimat verilecek. Görevin, dokümanın geri kalanını bozmadan, sadece belirtilen hatayı düzeltmek ve **dokümanın tamamını, düzeltilmiş haliyle** geri döndürmektir.
 
-                    **TALİMAT:**
-                    {instruction}
+                    **DÜZELTME TALİMATI:**
+                    - {instruction}
 
-                    **KURALLAR:**
-                    - Dokümanın geri kalanını değiştirmeden, sadece istenen düzeltmeyi yap.
-                    - Çıktı olarak **SADECE ve SADECE** dokümanın tamamının yeni, düzeltilmiş halini ver. Başka hiçbir açıklama, onay veya giriş cümlesi ekleme.
+                    **ÇIKTI KURALLARI:**
+                    - Çıktın, **SADECE** ve **SADECE** dokümanın düzeltilmiş ve tam halini içermelidir.
+                    - Başka hiçbir açıklama, giriş cümlesi veya kod bloğu işaretçisi ekleme.
                 `)],
                 activeVersionId: 'default',
             },
         ]
-    },
+    }
 ];
 
+// In-memory cache for prompt data
+let promptCache: PromptData | null = null;
 
-class PromptService {
-    private prompts: PromptData;
-
-    constructor() {
-        this.prompts = this.loadPrompts();
+// Function to safely parse JSON
+const safeJsonParse = (jsonString: string): PromptData | null => {
+    try {
+        return JSON.parse(jsonString);
+    } catch (error) {
+        console.error("Failed to parse prompts from localStorage:", error);
+        return null;
     }
+};
 
-    private loadPrompts(): PromptData {
-        try {
-            const storedPromptsJson = localStorage.getItem(PROMPT_STORAGE_KEY);
-            if (storedPromptsJson) {
-                return JSON.parse(storedPromptsJson) as PromptData;
+const getSystemDocumentTemplates = (): Template[] => {
+    const templates: Template[] = [];
+    defaultPrompts.forEach(category => {
+        category.prompts.forEach(prompt => {
+            if (prompt.is_system_template) {
+                const docType = category.id === 'analysis' ? 'analysis' :
+                                category.id === 'testing' ? 'test' :
+                                category.id === 'visualization' ? 'visualization' : null;
+                if (docType) {
+                     templates.push({
+                        id: prompt.id,
+                        user_id: null,
+                        name: prompt.name,
+                        document_type: docType as any,
+                        prompt: prompt.versions.find(v => v.versionId === prompt.activeVersionId)?.prompt || '',
+                        is_system_template: true
+                    });
+                }
             }
-        } catch (error) {
-            console.error("Failed to parse stored prompts, falling back to default.", error);
-            localStorage.removeItem(PROMPT_STORAGE_KEY);
-        }
-        return JSON.parse(JSON.stringify(defaultPrompts)); // Deep copy to prevent mutation
-    }
+        });
+    });
+    return templates;
+}
 
-    public savePrompts(updatedPrompts: PromptData): void {
-        try {
-            const json = JSON.stringify(updatedPrompts);
-            localStorage.setItem(PROMPT_STORAGE_KEY, json);
-            this.prompts = updatedPrompts;
-        } catch (error) {
-            console.error("Failed to save prompts to localStorage.", error);
+export const promptService = {
+    getPromptData: (): PromptData => {
+        if (promptCache) {
+            return promptCache;
         }
-    }
 
-    public getPromptData(): PromptData {
-        return this.prompts;
-    }
+        const storedPrompts = localStorage.getItem(PROMPT_STORAGE_KEY);
+        if (storedPrompts) {
+            const parsed = safeJsonParse(storedPrompts);
+            if(parsed) {
+                promptCache = parsed;
+                return parsed;
+            }
+        }
+        
+        // If nothing in storage or parse fails, use defaults
+        promptCache = JSON.parse(JSON.stringify(defaultPrompts)); // Deep copy to prevent mutation of defaults
+        return promptCache;
+    },
+
+    savePrompts: (data: PromptData): void => {
+        localStorage.setItem(PROMPT_STORAGE_KEY, JSON.stringify(data));
+        promptCache = data; // Update cache
+    },
     
-    public getPrompt(promptId: string): string {
-        for (const category of this.prompts) {
-            const prompt = category.prompts.find(p => p.id === promptId);
+    resetToDefaults: (): PromptData => {
+        localStorage.removeItem(PROMPT_STORAGE_KEY);
+        promptCache = JSON.parse(JSON.stringify(defaultPrompts)); // Reset cache to a fresh copy
+        return promptCache;
+    },
+
+    getPrompt: (id: string): string => {
+        const data = promptService.getPromptData();
+        for (const category of data) {
+            const prompt = category.prompts.find(p => p.id === id);
             if (prompt) {
                 const activeVersion = prompt.versions.find(v => v.versionId === prompt.activeVersionId);
                 return activeVersion ? activeVersion.prompt : (prompt.versions[0]?.prompt || '');
             }
         }
-        console.warn(`Prompt with ID "${promptId}" not found. Returning empty string.`);
+        console.warn(`Prompt with id "${id}" not found. Returning empty string.`);
         return '';
-    }
+    },
     
-    public getSystemDocumentTemplates(): Template[] {
-        const docTemplates: Template[] = [];
-        const docCategories = ['analysis', 'test', 'traceability', 'visualization'];
-
-        for (const category of this.prompts) {
-            if (docCategories.includes(category.id)) {
-                for (const prompt of category.prompts) {
-                    const activeVersion = prompt.versions.find(v => v.versionId === prompt.activeVersionId) || prompt.versions[0];
-                    if (activeVersion) {
-                        docTemplates.push({
-                            id: prompt.id,
-                            user_id: null, // Indicates it's a system template
-                            name: prompt.name,
-                            document_type: category.id as Template['document_type'],
-                            prompt: activeVersion.prompt,
-                            is_system_template: (prompt as any).is_system_template || false,
-                        });
-                    }
-                }
-            }
-        }
-        return docTemplates;
-    }
-
-    public resetToDefaults(): PromptData {
-        localStorage.removeItem(PROMPT_STORAGE_KEY);
-        const newDefaults = JSON.parse(JSON.stringify(defaultPrompts));
-        this.prompts = newDefaults;
-        return newDefaults;
-    }
-}
-
-export const promptService = new PromptService();
+    getSystemDocumentTemplates,
+};

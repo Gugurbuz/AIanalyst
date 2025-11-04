@@ -322,7 +322,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         if (error) {
             setError('Kullanıcı profili güncellenemedi: ' + error.message);
         }
-    }, [setError]);
+    }, []);
 
     const triggerProfileSave = useDebounce(saveProfile, 2000);
 
@@ -491,7 +491,10 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
                     generatedDocs,
                     'gemini-2.5-flash-lite'
                 );
-                commitTokenUsage(tokens);
+                // The calls that update state and cause re-renders are removed from this automatic check
+                // to prevent potential infinite loops. Token usage for this background task will not be counted,
+                // and the maturity report is saved via a separate, more stable mechanism.
+                // commitTokenUsage(tokens);
                 saveDocumentVersion('maturityReport', report, "Doküman değişikliği sonrası otomatik değerlendirme");
             } catch (maturityError) {
                 console.warn("Arka plan olgunluk kontrolü (doküman değişikliği sonrası) başarısız oldu:", maturityError);
@@ -504,8 +507,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         activeConversation?.generatedDocs.analysisDoc,
         typeof activeConversation?.generatedDocs.testScenarios === 'object' ? activeConversation?.generatedDocs.testScenarios.content : activeConversation?.generatedDocs.testScenarios,
         typeof activeConversation?.generatedDocs.traceabilityMatrix === 'object' ? activeConversation?.generatedDocs.traceabilityMatrix.content : activeConversation?.generatedDocs.traceabilityMatrix,
-        commitTokenUsage,
-        saveDocumentVersion
+        saveDocumentVersion // Add saveDocumentVersion to the dependency array
     ]);
 
 
@@ -892,7 +894,6 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
                 conversation_id: currentConversationId,
                 role: 'assistant',
                 content: '',
-                thoughts: 'Düşünülüyor...',
                 timestamp: new Date().toISOString(),
                 created_at: new Date().toISOString(),
             };

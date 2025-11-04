@@ -57,20 +57,24 @@ export interface DocumentImpactAnalysis {
  */
 function handleGeminiError(error: any): never {
     console.error("Gemini API Hatası:", error);
-    const errorMessage = error?.message || String(error);
+    const errorMessage = (error?.message || String(error)).toLowerCase();
 
-    // 1. Check for the most specific error: Quota/Rate limit
-    if (errorMessage.includes('429') || errorMessage.includes('RESOURCE_EXHAUSTED') || errorMessage.includes('quota')) {
-        throw new Error("API Kota Limiti Aşıldı: Mevcut kotanızı aştınız. Lütfen planınızı ve fatura detaylarınızı kontrol edin veya bir süre sonra tekrar deneyin. Daha fazla bilgi için: https://ai.google.dev/gemini-api/docs/rate-limits");
+    if (errorMessage.includes('429') || errorMessage.includes('resource_exhausted') || errorMessage.includes('quota')) {
+        throw new Error("API Kota Limiti Aşıldı: Mevcut kotanızı aştınız. Lütfen planınızı kontrol edin veya bir süre sonra tekrar deneyin.");
     }
-
-    // 2. Check for other specific known errors
-    if (errorMessage.includes('API key not valid')) {
+    if (errorMessage.includes('api key not valid')) {
         throw new Error("Geçersiz API Anahtarı. Lütfen Geliştirici Panelindeki ayarları kontrol edin veya ortam değişkenlerini yapılandırın.");
     }
+    if (errorMessage.includes('internal error')) {
+        throw new Error("Gemini API'sinde geçici bir iç hata oluştu. Lütfen bir dakika bekleyip tekrar deneyin.");
+    }
+    if (errorMessage.includes('failed to fetch') || errorMessage.includes('network error')) {
+        throw new Error("Ağ bağlantı hatası. Lütfen internet bağlantınızı kontrol edin ve tekrar deneyin.");
+    }
     
-    // 3. Generic fallback
-    throw new Error(`Gemini API ile iletişim kurulamadı: ${errorMessage}`);
+    // Fallback for any other error
+    const displayMessage = error?.message || String(error);
+    throw new Error(`Beklenmedik bir hata oluştu: ${displayMessage}. Lütfen tekrar deneyin.`);
 }
 
 
@@ -217,44 +221,11 @@ const tools: FunctionDeclaration[] = [
 ];
 
 export const parseStreamingResponse = (content: string): { thinking: string | null; response: string } => {
-    const thinkingTagRegex = /<dusunce>([\s\S]*?)<\/dusunce>/g;
-    const thoughts: string[] = [];
-    let match;
-    let lastIndex = 0;
-
-    // 1. Find all COMPLETE thought blocks
-    while ((match = thinkingTagRegex.exec(content)) !== null) {
-        const thoughtContent = match[1].trim();
-        if (thoughtContent) {
-             thoughts.push(thoughtContent);
-        }
-        lastIndex = match.index + match[0].length;
-    }
-
-    // 2. Get the content AFTER the last complete thought
-    let remainingContent = content.substring(lastIndex);
-    
-    // 3. Check if the remaining content contains a PARTIAL thought
-    const partialMatch = remainingContent.match(/<dusunce>([\s\S]*)/);
-
-    let response = '';
-    
-    if (partialMatch) {
-        // If there's a partial thought, add it to our thoughts array
-        const partialThought = partialMatch[1].trim();
-        if (partialThought) {
-            thoughts.push(partialThought);
-        }
-        // The visible response is empty because we're still in a thought block
-        response = ''; 
-    } else {
-        // If there's no partial thought, the remaining content is the visible response
-        response = remainingContent.trim();
-    }
-
-    const combinedThoughts = thoughts.length > 0 ? thoughts.join('\n') : null;
-
-    return { thinking: combinedThoughts, response };
+    // "Thinking process" has been disabled per user request.
+    // This function now strips any lingering <dusunce> tags from the response
+    // and returns null for the 'thinking' part.
+    const response = content.replace(/<dusunce>[\s\S]*?<\/dusunce>/g, '').trim();
+    return { thinking: null, response };
 };
 
 export const geminiService = {
@@ -266,13 +237,14 @@ export const geminiService = {
 
             const analysisDocContent = generatedDocs.analysisDoc || "Henüz bir doküman oluşturulmadı.";
             
-            // Check if a real analysis document exists to decide which system prompt to use.
             const hasRealAnalysisDoc = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
-            
-            // promptService'den GÜNCELLENMİŞ prompt'ları alıyoruz
-            const systemInstruction = !hasRealAnalysisDoc
-                ? promptService.getPrompt('continueConversation')
-                : promptService.getPrompt('proactiveAnalystSystemInstruction').replace('{analysis_document_content}', analysisDocContent);
+
+            // Per user request, the 'isDeepMode' check has been removed. 
+            // The AI will now always receive the full document context to provide better contextual responses,
+            // even in Normal mode (at the cost of higher token usage).
+            const systemInstruction = hasRealAnalysisDoc
+                ? promptService.getPrompt('proactiveAnalystSystemInstruction').replace('{analysis_document_content}', analysisDocContent)
+                : promptService.getPrompt('continueConversation');
             
             const geminiHistory = convertMessagesToGeminiFormat(history);
 
@@ -391,15 +363,9 @@ export const geminiService = {
             yield { type: 'error', message: errorMessage };
             handleGeminiError(error);
         } finally {
-            if (responseGenerated) {
-                try {
-                    const { report, tokens } = await geminiService.checkAnalysisMaturity(history, generatedDocs, 'gemini-2.5-flash-lite'); 
-                    yield { type: 'usage_update', tokens };
-                    yield { type: 'maturity_update', report };
-                } catch (maturityError) {
-                    console.warn("Arka plan olgunluk kontrolü başarısız oldu:", maturityError);
-                }
-            }
+            // The expensive, automatic maturity check that ran after every message has been removed
+            // as requested by the user to optimize token usage. This check is now only triggered
+            // when documents are explicitly changed, handled in useAppLogic.ts.
         }
     },
     
