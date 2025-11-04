@@ -507,7 +507,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         activeConversation?.generatedDocs.analysisDoc,
         typeof activeConversation?.generatedDocs.testScenarios === 'object' ? activeConversation?.generatedDocs.testScenarios.content : activeConversation?.generatedDocs.testScenarios,
         typeof activeConversation?.generatedDocs.traceabilityMatrix === 'object' ? activeConversation?.generatedDocs.traceabilityMatrix.content : activeConversation?.generatedDocs.traceabilityMatrix,
-        saveDocumentVersion // Add saveDocumentVersion to the dependency array
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     ]);
 
 
