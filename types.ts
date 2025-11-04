@@ -197,8 +197,8 @@ export interface Prompt {
     id: string;
     name: string;
     description: string;
-    // FIX: Added 'is_system_template' to allow its use in prompt definitions in promptService.ts.
     is_system_template?: boolean;
+    document_type?: 'analysis' | 'test' | 'traceability' | 'visualization';
     versions: PromptVersion[];
     activeVersionId: string;
 }

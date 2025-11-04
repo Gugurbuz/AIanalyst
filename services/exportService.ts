@@ -222,7 +222,8 @@ const exportAsDocx = (content: string, filename: string): void => {
             
             if (!inTable) { // This is the header row
                 inTable = true;
-                tableRows.push(new TableRow({ children: cells, isHeader: true }));
+                // FIX: Replaced incorrect 'isHeader' with 'tableHeader' to correctly define a table header row in the docx library.
+                tableRows.push(new TableRow({ children: cells, tableHeader: true }));
             } else if (!trimmedLine.includes('---')) { // This is a body row
                 tableRows.push(new TableRow({ children: cells }));
             }

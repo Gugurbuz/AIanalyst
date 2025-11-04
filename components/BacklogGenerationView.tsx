@@ -102,7 +102,9 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
                 ? (generatedDocs.traceabilityMatrix as SourcedDocument).content
                 : generatedDocs.traceabilityMatrix;
 
+            // FIX: Correctly call the 'generateBacklogSuggestions' method which now exists on geminiService.
             const { suggestions: result, reasoning, tokens } = await geminiService.generateBacklogSuggestions(
+                generatedDocs.requestDoc,
                 generatedDocs.analysisDoc,
                 testScenariosContent,
                 traceabilityMatrixContent,

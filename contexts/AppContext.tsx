@@ -1,5 +1,5 @@
 // contexts/AppContext.tsx
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, ReactNode } from 'react';
 import { useAppLogic } from '../hooks/useAppLogic';
 import type { User } from '../types';
 import type { AppData } from '../index';
@@ -10,7 +10,7 @@ type AppContextType = ReturnType<typeof useAppLogic>;
 const AppContext = createContext<AppContextType | null>(null);
 
 interface AppProviderProps {
-    children: React.ReactNode;
+    children: ReactNode;
     user: User;
     initialData: AppData;
     onLogout: () => void;

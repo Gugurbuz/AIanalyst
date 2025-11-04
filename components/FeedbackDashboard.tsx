@@ -43,6 +43,7 @@ export const FeedbackDashboard: React.FC<FeedbackDashboardProps> = ({ isOpen, on
         try {
             // FIX: The geminiService.analyzeFeedback now returns an object with the analysis text.
             // Destructure the `analysis` property to get the string result.
+            // FIX: Correctly call the 'analyzeFeedback' method which now exists on geminiService.
             const { analysis: result } = await geminiService.analyzeFeedback(feedbackData);
             setAnalysis(result);
         } catch (e) {

@@ -34,6 +34,23 @@ interface DocumentCanvasProps {
 
 // --- Helper Functions for Structured Document Conversion ---
 
+const jsonToMarkdownTable = (jsonString: string): string => {
+    try {
+        const cleanedJsonString = jsonString.replace(/^```json\s*|```\s*$/g, '').trim();
+        if (!cleanedJsonString) return "<!-- Boş JSON verisi -->";
+        const data = JSON.parse(cleanedJsonString);
+        if (!Array.isArray(data) || data.length === 0) return "<!-- Geçerli bir tablo verisi bulunamadı -->";
+        const headers = Object.keys(data[0]);
+        const headerLine = `| ${headers.join(' | ')} |`;
+        const separatorLine = `| ${headers.map(() => '---').join(' | ')} |`;
+        const bodyLines = data.map(row => `| ${headers.map(header => (row[header] || '').toString().replace(/\n/g, '<br/>')).join(' | ')} |`);
+        return [headerLine, separatorLine, ...bodyLines].join('\n');
+    } catch (error) {
+        console.error("JSON'dan Markdown tablosuna dönüştürme hatası:", error);
+        return `JSON'dan tabloya dönüştürme hatası:\n\n${jsonString}`;
+    }
+};
+
 function structuredDocToMarkdown(doc: StructuredAnalysisDoc): string {
     let markdown = '';
     doc.sections.forEach(section => {
@@ -240,7 +257,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     
     // Parse final JSON only when streaming stops.
     useEffect(() => {
-        if (!isStreaming && localContent) {
+        if (!isStreaming && localContent && !isTable) {
             try {
                 const parsed = JSON.parse(localContent);
                 if (isStructuredAnalysisDoc(parsed)) {
@@ -256,7 +273,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                 setDocObject(null);
             }
         }
-    }, [isStreaming, localContent]);
+    }, [isStreaming, localContent, isTable]);
 
     
     // Clear lint issues when content changes from parent
@@ -280,6 +297,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                 
                 setIsSummarizing(true); // Reuse this state for the conversion loading indicator
                 try {
+                    // FIX: Correctly call the 'convertHtmlToAnalysisJson' method which now exists on geminiService.
                     const { json: newDocObject, tokens } = await geminiService.convertHtmlToAnalysisJson(htmlContent);
                     onAddTokens(tokens);
                     const finalContentString = JSON.stringify(newDocObject, null, 2);
@@ -287,6 +305,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                     // Generate a summary of the change by comparing markdown versions
                     const oldMarkdown = structuredDocToMarkdown(docObject);
                     const newMarkdown = structuredDocToMarkdown(newDocObject);
+                    // FIX: Correctly call the 'summarizeDocumentChange' method which now exists on geminiService.
                     const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(oldMarkdown, newMarkdown);
                     onAddTokens(summaryTokens);
                     
@@ -304,11 +323,13 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
             if (localContent !== originalContentRef.current) {
                 setIsSummarizing(true);
                 try {
+                    // FIX: Correctly call the 'summarizeDocumentChange' method which now exists on geminiService.
                     const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(originalContentRef.current, localContent);
                     onAddTokens(summaryTokens);
                     onContentChange(localContent, summary);
                     
                     // After content is updated, check for structural issues
+                    // FIX: Correctly call the 'lintDocument' method which now exists on geminiService.
                     const { issues, tokens: lintTokens } = await geminiService.lintDocument(localContent);
                     onAddTokens(lintTokens);
                     setLintIssues(issues);
@@ -383,6 +404,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const handleFixIssue = async (issue: LintingIssue) => {
         setIsFixing(true);
         try {
+            // FIX: Correctly call the 'fixDocumentLinterIssues' method which now exists on geminiService.
             const { fixedContent, tokens } = await geminiService.fixDocumentLinterIssues(content, issue);
             onAddTokens(tokens);
             onContentChange(fixedContent, `AI Tarafından Numaralandırma Düzeltildi: ${issue.section}`);
@@ -399,39 +421,34 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     }, [documentVersions, currentDocType]);
 
     const displayContent = useMemo(() => {
-        // When not streaming, show the accurately parsed final version.
+        if (isTable && !isStreaming) {
+            return jsonToMarkdownTable(localContent);
+        }
+
         if (!isStreaming) {
             if (isStructured && docObject) {
                 return structuredDocToMarkdown(docObject);
             }
-            // Fallback for plain markdown or other non-structured content.
             return localContent;
         }
 
-        // --- NEW STREAMING LOGIC ---
-        // For tables, streaming preview is complex, show raw for now.
-        if (isTable) return localContent;
-
-        // 1. Try to parse the incomplete JSON. If it's valid at any point, render it perfectly.
+        // Streaming Logic
         try {
             const parsed = JSON.parse(localContent);
             if (isStructuredAnalysisDoc(parsed)) {
                 return structuredDocToMarkdown(parsed);
             }
         } catch (e) {
-            // 2. If parsing fails (the common case), fall back to stripping syntax.
-            // This shows a clean text stream instead of raw JSON.
             const knownKeys = /"sections"|"subSections"|"requirements"|"title"|"content"|"id"|"text"/g;
             return localContent
-                .replace(knownKeys, '') // Remove known JSON keys
-                .replace(/[\{\}\[\]",:]/g, ' ') // Replace all JSON syntax characters with spaces
-                .replace(/\\n/g, '\n') // Handle escaped newlines
-                .replace(/\\"/g, '"') // Handle escaped quotes
-                .replace(/\s+/g, ' ') // Collapse multiple spaces into one
+                .replace(knownKeys, '')
+                .replace(/[\{\}\[\]",:]/g, ' ')
+                .replace(/\\n/g, '\n')
+                .replace(/\\"/g, '"')
+                .replace(/\s+/g, ' ')
                 .trim();
         }
         
-        // Final fallback for any weird edge cases.
         return localContent;
 
     }, [isStreaming, isTable, localContent, isStructured, docObject]);

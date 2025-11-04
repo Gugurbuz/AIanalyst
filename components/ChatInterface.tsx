@@ -1,3 +1,4 @@
+
 // FIX: Add type definitions for the experimental Web Speech API.
 // This resolves errors where 'SpeechRecognition' and 'webkitSpeechRecognition'
 // were not recognized by TypeScript.
@@ -68,8 +69,6 @@ interface ChatInterfaceProps {
     activeConversationId: string | null;
     onStopGeneration: () => void;
     initialText?: string | null;
-    isDeepAnalysisMode: boolean;
-    onDeepAnalysisModeChange: (isOn: boolean) => void;
     onSuggestNextFeature: () => void;
     isConversationStarted: boolean;
     nextAction: NextAction;
@@ -91,15 +90,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     activeConversationId, 
     onStopGeneration, 
     initialText, 
-    isDeepAnalysisMode, 
-    onDeepAnalysisModeChange,
     onSuggestNextFeature,
     isConversationStarted,
     nextAction 
 }) => {
     const [input, setInput] = useState('');
     const [attachedFile, setAttachedFile] = useState<File | null>(null);
-    const [isModeSelectorOpen, setIsModeSelectorOpen] = useState(false);
     
     // --- Speech Recognition State ---
     const [isListening, setIsListening] = useState(false);
@@ -108,18 +104,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const modeSelectorRef = useRef<HTMLDivElement>(null);
-
-    // Effect for closing mode selector on outside click
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (modeSelectorRef.current && !modeSelectorRef.current.contains(event.target as Node)) {
-                setIsModeSelectorOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
 
     // Effect for initializing and managing Speech Recognition
     useEffect(() => {
@@ -249,11 +233,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             handleSubmit(e as any);
         }
     }
-    
-    const handleModeChange = (isDeep: boolean) => {
-        onDeepAnalysisModeChange(isDeep);
-        setIsModeSelectorOpen(false);
-    }
 
     return (
         <div className="w-full bg-white dark:bg-slate-800 rounded-lg p-3">
@@ -266,47 +245,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     accept=".txt,.md"
                  />
                  <div className="flex-1 flex flex-col border border-slate-300 dark:border-slate-600 rounded-lg focus-within:ring-2 focus-within:ring-indigo-500 bg-slate-100 dark:bg-slate-700 transition-shadow">
-                    {isDeepAnalysisMode && (
-                        <div className="text-center text-xs p-1.5 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-200 font-semibold border-b border-indigo-200 dark:border-indigo-800">
-                            Derin Analiz Modu Aktif (Yanıtlar daha yavaş olabilir)
-                        </div>
-                    )}
+                    
                     {(isConversationStarted || !nextAction.disabled) && (
                         <div className="flex flex-wrap items-center justify-center gap-2 p-2 border-b border-slate-200 dark:border-slate-600">
-                             <div className="flex items-center gap-1 border-r border-slate-300 dark:border-slate-600 pr-2">
-                                <button 
-                                    type="button"
-                                    onClick={() => fileInputRef.current?.click()}
-                                    title="Dosya Ekle"
-                                    disabled={isLoading}
-                                    className="p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors"
-                                >
-                                    <Paperclip className="h-5 w-5" />
-                                </button>
-                                <div ref={modeSelectorRef} className="relative">
-                                    <button 
-                                        type="button"
-                                        onClick={() => setIsModeSelectorOpen(!isModeSelectorOpen)}
-                                        title="Analiz Modunu Değiştir"
-                                        disabled={isLoading}
-                                        className={`p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors ${isDeepAnalysisMode ? 'text-indigo-500' : 'text-slate-500 dark:text-slate-400'}`}
-                                    >
-                                        <Bot className="h-5 w-5" />
-                                    </button>
-                                    {isModeSelectorOpen && (
-                                        <div className="origin-bottom-left absolute bottom-full left-0 mb-2 w-56 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-30 animate-fade-in-up" style={{animationDuration: '0.1s'}}>
-                                            <button onClick={() => handleModeChange(false)} className={`w-full text-left flex flex-col px-3 py-2 text-sm ${!isDeepAnalysisMode ? 'bg-indigo-50 dark:bg-indigo-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
-                                                <span className={`font-semibold ${!isDeepAnalysisMode ? 'text-indigo-700 dark:text-indigo-200' : 'text-slate-800 dark:text-slate-200'}`}>Normal Analiz</span>
-                                                <span className="text-xs text-slate-500 dark:text-slate-400">Hızlı ve verimli. (gemini-2.5-flash)</span>
-                                            </button>
-                                            <button onClick={() => handleModeChange(true)} className={`w-full text-left flex flex-col px-3 py-2 text-sm ${isDeepAnalysisMode ? 'bg-indigo-50 dark:bg-indigo-900/50' : 'hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
-                                                <span className={`font-semibold ${isDeepAnalysisMode ? 'text-indigo-700 dark:text-indigo-200' : 'text-slate-800 dark:text-slate-200'}`}>Derin Analiz</span>
-                                                <span className="text-xs text-slate-500 dark:text-slate-400">Daha kapsamlı, yavaş yanıt. (gemini-2.5-pro)</span>
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
                             <button
                                 onClick={nextAction.action}
                                 disabled={isLoading || nextAction.disabled}
@@ -315,15 +256,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                             >
                                 {nextAction.icon}
                                 {nextAction.label}
-                            </button>
-                            <button
-                                onClick={onSuggestNextFeature}
-                                disabled={isLoading || !isConversationStarted}
-                                title="AI'nın mevcut analize dayanarak bir sonraki adımı önermesini sağlayın"
-                                className="px-3 py-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 rounded-md shadow-sm hover:bg-slate-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-2"
-                            >
-                                <Lightbulb className="h-5 w-5" />
-                                Fikir Üret
                             </button>
                         </div>
                     )}
@@ -338,6 +270,26 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         </div>
                     )}
                     <div className="relative flex-1 flex items-end">
+                        <div className="absolute top-2 left-2 flex items-center gap-1">
+                             <button 
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                title="Dosya Ekle"
+                                disabled={isLoading}
+                                className="p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors"
+                            >
+                                <Paperclip className="h-5 w-5" />
+                            </button>
+                             <button
+                                type="button"
+                                onClick={onSuggestNextFeature}
+                                disabled={isLoading || !isConversationStarted}
+                                title="AI'nın mevcut analize dayanarak bir sonraki adımı önermesini sağlayın"
+                                className="p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors"
+                            >
+                                <Lightbulb className="h-5 w-5" />
+                            </button>
+                        </div>
                         <textarea
                             ref={textareaRef}
                             value={input}
@@ -345,7 +297,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                             onKeyDown={handleKeyDown}
                             placeholder="Bir iş analisti gibi sorun, Asisty yanıtlasın..."
                             disabled={isLoading}
-                            className="w-full py-4 pl-4 pr-12 bg-transparent focus:outline-none disabled:opacity-50 resize-none overflow-y-auto"
+                            className="w-full py-4 pl-24 pr-12 bg-transparent focus:outline-none disabled:opacity-50 resize-none overflow-y-auto"
                             style={{ lineHeight: '1.5rem', maxHeight: '256px' }}
                         />
                         <button

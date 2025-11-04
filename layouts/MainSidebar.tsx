@@ -1,3 +1,4 @@
+
 // layouts/MainSidebar.tsx
 import React, { useRef } from 'react';
 import { useAppContext } from '../contexts/AppContext';
@@ -45,7 +46,7 @@ export const MainSidebar: React.FC = () => {
                     <button
                         key={item.id}
                         onClick={item.action}
-                        title={item.id === 'backlog' ? `${item.label} (Geliştirici Panelini açmak için 5 kez tıklayın)` : item.label}
+                        title={item.label}
                         className={`w-16 h-16 flex flex-col items-center justify-center rounded-lg transition-colors duration-200
                             ${currentView === item.id 
                                 ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400' 
