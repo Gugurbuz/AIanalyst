@@ -8,12 +8,13 @@ import { PromptSuggestions } from '../components/PromptSuggestions';
 import { ShareModal } from '../components/ShareModal';
 import { ProjectBoard } from '../components/ProjectBoard';
 import { DocumentWorkspace } from '../components/DocumentWorkspace';
-import { NewAnalysisModal } from '../components/NewAnalysisModal';
 import { FeatureSuggestionsModal } from '../components/FeatureSuggestionsModal';
 import { RegenerateConfirmationModal } from '../components/RegenerateConfirmationModal';
 import { DeveloperPanel } from '../components/DeveloperPanel';
 import { FeedbackDashboard } from '../components/FeedbackDashboard';
 import { UpgradeModal } from '../components/UpgradeModal';
+import { LongTextModal } from '../components/LongTextModal';
+import { RequestConfirmationModal } from '../components/RequestConfirmationModal';
 import { AlertTriangle, FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, X } from 'lucide-react';
 import { MainSidebar } from './MainSidebar'; // New Main Sidebar component for primary navigation
 import { Sidebar } from '../components/Sidebar'; // This is now the conversation list
@@ -275,7 +276,6 @@ export const MainAppLayout: React.FC = () => {
             </div>
 
             {/* All modals remain here */}
-            {context.isNewAnalysisModalOpen && <NewAnalysisModal isOpen={context.isNewAnalysisModalOpen} onClose={() => context.setIsNewAnalysisModalOpen(false)} onStartFromScratch={context.handleStartFromScratch} onStartWithDocument={context.handleStartWithDocument} isProcessing={context.isProcessing} />}
             {context.isShareModalOpen && context.activeConversation && <ShareModal isOpen={context.isShareModalOpen} onClose={() => context.setIsShareModalOpen(false)} conversation={context.activeConversation} onUpdateShareSettings={(id, updates) => context.updateConversation(id, updates)} />}
             {context.showUpgradeModal && <UpgradeModal isOpen={context.showUpgradeModal} onClose={() => context.setShowUpgradeModal(false)} />}
             {context.isFeatureSuggestionsModalOpen && <FeatureSuggestionsModal isOpen={context.isFeatureSuggestionsModalOpen} onClose={() => context.setIsFeatureSuggestionsModalOpen(false)} isLoading={context.isFetchingSuggestions} suggestions={context.featureSuggestions} onSelectSuggestion={(s) => context.sendMessage(s)} error={context.suggestionError} onRetry={context.handleSuggestNextFeature} />}
@@ -310,6 +310,24 @@ export const MainAppLayout: React.FC = () => {
                     isOpen={context.isFeedbackDashboardOpen}
                     onClose={context.handleToggleFeedbackDashboard}
                     feedbackData={context.allFeedback}
+                />
+            )}
+             {context.longTextPrompt && (
+                <LongTextModal
+                    isOpen={!!context.longTextPrompt}
+                    onClose={() => context.setLongTextPrompt(null)}
+                    onSelectChoice={(choice) => {
+                        context.longTextPrompt?.callback(choice);
+                    }}
+                />
+            )}
+            {context.requestConfirmation && (
+                <RequestConfirmationModal
+                    isOpen={!!context.requestConfirmation}
+                    summary={context.requestConfirmation.summary}
+                    onConfirm={context.handleConfirmRequest}
+                    onReject={context.handleRejectRequest}
+                    onClose={() => context.setRequestConfirmation(null)}
                 />
             )}
         </div>

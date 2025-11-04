@@ -11,14 +11,18 @@ interface PublicViewProps {
     conversation: Conversation;
 }
 
+// FIX: Add `requestDoc` to `defaultGeneratedDocs` to match the `GeneratedDocs` type definition.
 const defaultGeneratedDocs: GeneratedDocs = {
+    requestDoc: '',
     analysisDoc: '',
     testScenarios: '',
     visualization: '',
     traceabilityMatrix: '',
 };
 
+// FIX: Add `request` key to map to `requestDoc` to satisfy the `Record<DocumentType, keyof GeneratedDocs>` type.
 const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs> = {
+    request: 'requestDoc',
     analysis: 'analysisDoc',
     test: 'testScenarios',
     traceability: 'traceabilityMatrix',

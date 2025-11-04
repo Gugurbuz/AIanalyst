@@ -6,7 +6,7 @@ import { Visualizations } from './Visualizations';
 import { MaturityCheckReport } from './MaturityCheckReport';
 import { TemplateSelector } from './TemplateSelector';
 import { ExportDropdown } from './ExportDropdown';
-import { GanttChartSquare, Projector, RefreshCw, PlusCircle, Check, FileText, Beaker, GitBranch } from 'lucide-react';
+import { GanttChartSquare, Projector, RefreshCw, PlusCircle, Check, FileText, Beaker, GitBranch, FileInput } from 'lucide-react';
 import { BacklogGenerationView } from './BacklogGenerationView';
 import { geminiService } from '../services/geminiService';
 import type { DocumentImpactAnalysis } from '../services/geminiService';
@@ -59,8 +59,8 @@ interface DocumentWorkspaceProps {
         test: (event: React.ChangeEvent<HTMLSelectElement>) => void;
         traceability: (event: React.ChangeEvent<HTMLSelectElement>) => void;
     };
-    activeDocTab: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation';
-    setActiveDocTab: (tab: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation') => void;
+    activeDocTab: 'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation';
+    setActiveDocTab: (tab: 'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation') => void;
     onPrepareQuestionForAnswer: (question: string) => void;
     diagramType: 'mermaid' | 'bpmn';
     setDiagramType: (type: 'mermaid' | 'bpmn') => void;
@@ -187,6 +187,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
         : generatedDocs.traceabilityMatrix;
 
     const allTabs = [
+        { id: 'request', name: 'Talep', isStale: false, content: generatedDocs.requestDoc, icon: <FileInput className="h-4 w-4 mr-2" /> },
         { id: 'analysis', name: 'İş Analizi', isStale: false, content: generatedDocs.analysisDoc, icon: <FileText className="h-4 w-4 mr-2" /> },
         { id: 'viz', name: 'Görselleştirme', isStale: generatedDocs.isVizStale, content: vizContent, icon: <GanttChartSquare className="h-4 w-4 mr-2" /> },
         { id: 'test', name: 'Test Senaryoları', isStale: generatedDocs.isTestStale, content: testScenariosContent, icon: <Beaker className="h-4 w-4 mr-2" /> },
@@ -196,11 +197,11 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     ];
 
     const visibleTabs = useMemo(() => {
-        return allTabs.filter(tab => tab.id === 'analysis' || tab.id === 'maturity' || !!tab.content);
+        return allTabs.filter(tab => (tab.id === 'analysis' || tab.id === 'maturity' || tab.id === 'request') ? !!tab.content : tab.content);
     }, [generatedDocs, vizContent]);
 
     const creatableDocs = useMemo(() => {
-        return allTabs.filter(tab => (tab.id !== 'analysis' && tab.id !== 'maturity') && !tab.content);
+        return allTabs.filter(tab => (tab.id !== 'analysis' && tab.id !== 'maturity' && tab.id !== 'request') && !tab.content);
     }, [generatedDocs, vizContent]);
     
     const handleCreateClick = (type: 'viz' | 'test' | 'traceability' | 'backlog-generation') => {
@@ -336,6 +337,25 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             
             {/* Content Area */}
             <div className="flex-1 overflow-y-auto relative min-h-0">
+                 {activeDocTab === 'request' && (
+                    <div className="relative h-full">
+                        <DocumentCanvas
+                            key="request"
+                            content={generatedDocs.requestDoc} 
+                            onContentChange={(newContent, reason) => onUpdateDocument('requestDoc', newContent, reason)} 
+                            docKey="analysisDoc" // Use analysisDoc key for modifySelection compatibility
+                            onModifySelection={onModifySelection} 
+                            inlineModificationState={inlineModificationState} 
+                            isGenerating={isProcessing} 
+                            isStreaming={false}
+                            placeholder="Henüz bir talep dokümanı oluşturulmadı. Yeni bir sohbete başladığınızda veya uzun bir metin yapıştırdığınızda burası otomatik olarak dolacaktır."
+                            filename={`${conversation.title}-talep`}
+                            documentVersions={conversation.documentVersions}
+                            onAddTokens={onAddTokens}
+                            onRestoreVersion={onRestoreVersion}
+                        />
+                    </div>
+                )}
                 {activeDocTab === 'analysis' && (
                     <div className="relative h-full">
                         <DocumentCanvas

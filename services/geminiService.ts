@@ -34,6 +34,7 @@ export type StreamChunk =
     | { type: 'expert_run_update'; checklist: ExpertStep[]; isComplete: boolean; finalMessage?: string; }
     | { type: 'generative_suggestion'; suggestion: GenerativeSuggestion }
     | { type: 'usage_update'; tokens: number }
+    | { type: 'request_confirmation'; summary: string }
     | { type: 'error'; message: string };
 
 
@@ -182,6 +183,20 @@ const tools: FunctionDeclaration[] = [
         parameters: { type: Type.OBJECT, properties: {} }
     },
     {
+        name: 'saveRequestDocument',
+        description: "Kullanıcının ilk iş talebini birkaç soru-cevap turundan sonra anladığında ve netleştirdiğinde, anladığın talebin özetini 'Talep' dokümanına kaydetmek için bu aracı çağır.",
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                request_summary: {
+                    type: Type.STRING,
+                    description: 'Kullanıcının talebinin netleştirilmiş, 1-2 paragraflık özeti.'
+                }
+            },
+            required: ['request_summary']
+        }
+    },
+    {
         name: 'performGenerativeTask',
         description: "Kullanıcı, dokümanın bir bölümünü 'genişlet', 'iyileştir', 'detaylandır' gibi bir komutla değiştirmek istediğinde bu aracı kullan. Bu araç, AI'nın proaktif olarak öneriler sunmasını sağlar.",
         parameters: {
@@ -201,40 +216,43 @@ const tools: FunctionDeclaration[] = [
     }
 ];
 
-// --- GÜNCELLENMİŞ FONKSİYON ---
-// Bu fonksiyon artık BİRDEN FAZLA <dusunce> etiketini bulup
-// birleştirecek şekilde güncellendi.
 export const parseStreamingResponse = (content: string): { thinking: string | null; response: string } => {
     const thinkingTagRegex = /<dusunce>([\s\S]*?)<\/dusunce>/g;
     const thoughts: string[] = [];
     let match;
     let lastIndex = 0;
 
-    // 1. Regex kullanarak TÜM düşünce etiketlerini bul
+    // 1. Find all COMPLETE thought blocks
     while ((match = thinkingTagRegex.exec(content)) !== null) {
-        thoughts.push(match[1].trim());
-        // Son etiketin bittiği indeksi kaydet
+        const thoughtContent = match[1].trim();
+        if (thoughtContent) {
+             thoughts.push(thoughtContent);
+        }
         lastIndex = match.index + match[0].length;
     }
 
-    // 2. Hiç düşünce etiketi bulunamadı
-    if (thoughts.length === 0) {
-        // Stream hala devam ediyor olabilir, yarım etiketi kontrol et
-        // Örn: "<dusunce>Kullanıcı..."
-        const partialMatch = content.match(/<dusunce>([\s\S]*)/);
-        if (partialMatch) {
-            // Sadece düşünce var, henüz cevap yok
-            return { thinking: partialMatch[1].trim(), response: '' };
+    // 2. Get the content AFTER the last complete thought
+    let remainingContent = content.substring(lastIndex);
+    
+    // 3. Check if the remaining content contains a PARTIAL thought
+    const partialMatch = remainingContent.match(/<dusunce>([\s\S]*)/);
+
+    let response = '';
+    
+    if (partialMatch) {
+        // If there's a partial thought, add it to our thoughts array
+        const partialThought = partialMatch[1].trim();
+        if (partialThought) {
+            thoughts.push(partialThought);
         }
-        // Düşünce etiketi yoksa, tüm içerik yanıttır
-        return { thinking: null, response: content.trim() };
+        // The visible response is empty because we're still in a thought block
+        response = ''; 
+    } else {
+        // If there's no partial thought, the remaining content is the visible response
+        response = remainingContent.trim();
     }
 
-    // 3. Bulunan tüm düşünceleri birleştir (UI'da alt alta göstermek için)
-    const combinedThoughts = thoughts.join('\n');
-
-    // 4. Yanıt, son düşünce etiketinden sonraki tüm içeriktir
-    const response = content.substring(lastIndex).trim();
+    const combinedThoughts = thoughts.length > 0 ? thoughts.join('\n') : null;
 
     return { thinking: combinedThoughts, response };
 };
@@ -320,7 +338,12 @@ export const geminiService = {
                                     yield docChunk;
                                 }
                                 yield { type: 'chat_stream_chunk', chunk: "İş analizi dokümanını oluşturdum. Çalışma alanından inceleyebilirsiniz." };
-
+                            } else if (functionName === 'saveRequestDocument') {
+                                responseGenerated = true; 
+                                const args = fc.args as { request_summary: string };
+                                if (args.request_summary) {
+                                    yield { type: 'request_confirmation', summary: args.request_summary };
+                                }
                             } else if (functionName === 'generateTestScenarios') {
                                 responseGenerated = true;
                                 yield { type: 'status_update', message: 'Test senaryoları hazırlanıyor...' };

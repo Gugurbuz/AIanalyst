@@ -73,7 +73,7 @@ export interface MaturityReport {
     maturity_level: MaturityLevel; // Kalitatif değerlendirme
 }
 
-export type DocumentType = 'analysis' | 'test' | 'traceability' | 'mermaid' | 'bpmn' | 'maturity_report';
+export type DocumentType = 'analysis' | 'test' | 'traceability' | 'mermaid' | 'bpmn' | 'maturity_report' | 'request';
 
 export interface DocumentVersion {
     id: string;
@@ -113,6 +113,7 @@ export interface SourcedDocument {
 }
 
 export interface GeneratedDocs {
+    requestDoc: string;
     analysisDoc: string;
     testScenarios: SourcedDocument | string;
     visualization: string; // Legacy, for backward compatibility

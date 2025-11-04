@@ -11,6 +11,7 @@ import type { AppData } from '../index';
 
 
 const defaultGeneratedDocs: GeneratedDocs = {
+    requestDoc: '',
     analysisDoc: '',
     testScenarios: '',
     visualization: '',
@@ -18,6 +19,7 @@ const defaultGeneratedDocs: GeneratedDocs = {
 };
 
 const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs> = {
+    request: 'requestDoc',
     analysis: 'analysisDoc',
     test: 'testScenarios',
     traceability: 'traceabilityMatrix',
@@ -27,6 +29,7 @@ const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs> = {
 };
 
 const keyToDocumentTypeMap: Record<keyof GeneratedDocs, DocumentType | null> = {
+    requestDoc: 'request',
     analysisDoc: 'analysis',
     testScenarios: 'test',
     traceabilityMatrix: 'traceability',
@@ -111,7 +114,6 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
     const [appMode, setAppMode] = useState<AppMode>('analyst'); // Kept for compatibility, but currentView is preferred
     const [isConversationListOpen, setIsConversationListOpen] = useState(false);
     const [isWorkspaceVisible, setIsWorkspaceVisible] = useState(true);
-    const [isNewAnalysisModalOpen, setIsNewAnalysisModalOpen] = useState(false);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [isFeatureSuggestionsModalOpen, setIsFeatureSuggestionsModalOpen] = useState(false);
@@ -120,7 +122,10 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
     const [suggestionError, setSuggestionError] = useState<string | null>(null);
     const [isRegenerateModalOpen, setIsRegenerateModalOpen] = useState(false);
     const regenerateModalData = useRef<{ docType: 'analysis' | 'test' | 'traceability', newTemplateId: string } | null>(null);
-    const [activeDocTab, setActiveDocTab] = useState<'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation'>('analysis');
+    const [activeDocTab, setActiveDocTab] = useState<'request' |'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation'>('analysis');
+    const [longTextPrompt, setLongTextPrompt] = useState<{ content: string; callback: (choice: 'analyze' | 'save') => void } | null>(null);
+    const [requestConfirmation, setRequestConfirmation] = useState<{ summary: string } | null>(null);
+
     
     // --- Developer & Feedback Panel State ---
     const [isDeveloperPanelOpen, setIsDeveloperPanelOpen] = useState(false);
@@ -630,23 +635,9 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         return newConv;
     }, [user.id, saveDocumentVersion, commitTokenUsage, selectedTemplates]);
     
-     const handleNewConversation = useCallback(() => {
-        setIsNewAnalysisModalOpen(true);
-    }, []);
-
-    const handleStartFromScratch = () => {
+    const handleNewConversation = useCallback(() => {
         createNewConversation();
-        setIsNewAnalysisModalOpen(false);
-    }
-    
-    const handleStartWithDocument = (documentContent: string, title: string) => {
-        createNewConversation(
-            { analysisDoc: documentContent },
-            title || 'Mevcut Analiz'
-        );
-        setIsNewAnalysisModalOpen(false);
-        setActiveDocTab('analysis');
-    }
+    }, [createNewConversation]);
     
     const updateConversationTitle = async (id: string, newTitle: string) => {
         updateConversation(id, { title: newTitle });
@@ -720,6 +711,8 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
             } else if (chunk.type === 'visualization_update' && activeConversationId) {
                 const vizKey = diagramType === 'mermaid' ? 'mermaidViz' : 'bpmnViz';
                 saveDocumentVersion(vizKey, { code: chunk.content, sourceHash: '' }, "AI Tarafından Oluşturuldu");
+            } else if (chunk.type === 'request_confirmation' && activeConversationId) {
+                setRequestConfirmation({ summary: chunk.summary });
             } else if (chunk.type === 'chat_stream_chunk' && activeConversationId) {
                 accumulatedMessage += chunk.chunk;
                 const { thinking, response } = parseStreamingResponse(accumulatedMessage);
@@ -789,29 +782,83 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         return { docResponses, finalMessage: accumulatedMessage, finalSuggestion };
     }, [activeConversationId, diagramType, commitTokenUsage, saveDocumentVersion, user.id]);
 
-    const sendMessage = useCallback(async (content: string, isSystemMessage: boolean = false) => {
-        if (!content.trim()) return;
+    const _saveLongTextAsAnalysisDocument = async (content: string) => {
+        setIsProcessing(true);
+        let convId = activeConversationId;
 
-        if (!userProfile || userProfile.tokens_used >= userProfile.token_limit) {
-            if (streamControllerRef.current) {
-                streamControllerRef.current.abort('Token limit reached');
+        if (!convId) {
+            const newConv = await createNewConversation(undefined, "Yapıştırılan Doküman");
+            if (!newConv) {
+                setError("Sohbet oluşturulamadı.");
+                setIsProcessing(false);
+                return;
             }
-            setShowUpgradeModal(true);
-            return;
+            convId = newConv.id;
         }
 
+        const templateId = selectedTemplates.analysis;
+        await saveDocumentVersion('analysisDoc', content, "Kullanıcı tarafından yapıştırıldı", templateId);
+
+        const assistantMessageId = uuidv4();
+        const feedbackMessage: Message = {
+            id: assistantMessageId,
+            conversation_id: convId,
+            role: 'system',
+            content: "[SİSTEM]: Uzun metin, 'İş Analizi Dokümanı' olarak kaydedildi. Çalışma alanından inceleyebilirsiniz.",
+            timestamp: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+        };
+
+        setConversations(prev =>
+            prev.map(c =>
+                c.id === convId
+                    ? { ...c, messages: [...c.messages, feedbackMessage] }
+                    : c
+            )
+        );
+        await supabase.from('conversation_details').insert(feedbackMessage);
+
+        setIsProcessing(false);
+        setActiveDocTab('analysis');
+    };
+    
+    const _saveLongTextAsRequestAndStartAnalysis = async (content: string) => {
+        setIsProcessing(true);
+        let convId = activeConversationId;
+    
+        if (!convId || (activeConversation && activeConversation.messages.length > 0)) {
+            const newConv = await createNewConversation(undefined, "Yeni Talep Analizi");
+            if (!newConv) {
+                setError("Yeni sohbet oluşturulamadı.");
+                setIsProcessing(false);
+                return;
+            }
+            convId = newConv.id;
+        }
+    
+        await saveDocumentVersion('requestDoc', content, "Kullanıcı tarafından yapıştırıldı");
+    
+        setActiveDocTab('request');
+        setIsProcessing(false);
+    
+        // Send a system message to kick off the analysis
+        await sendMessage("[SİSTEM]: Kullanıcının talebi 'Talep' dokümanına kaydedildi. Lütfen bu talebi analiz etmeye başla ve netleştirici sorular sor.", true);
+    };
+
+    const _processSendMessage = useCallback(async (content: string, isSystemMessage: boolean = false) => {
         setMessageToEdit(null);
 
+        let conversationForApi: Conversation & { generatedDocs: GeneratedDocs };
+        let currentConversationId: string | null = activeConversationId;
+        
         const now = new Date().toISOString();
         const userMessageData = {
-            role: 'user' as const,
+            role: (isSystemMessage ? 'system' : 'user') as 'system' | 'user',
             content: content.trim(),
             timestamp: now,
             created_at: now,
         };
 
-        let conversationForApi: Conversation & { generatedDocs: GeneratedDocs };
-        let currentConversationId: string | null = activeConversationId;
 
         if (!currentConversationId) {
             const newConv = await createNewConversation(undefined, content.trim());
@@ -923,7 +970,57 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
             }
             return;
         }
-    }, [activeConversationId, conversations, createNewConversation, isDeepAnalysisMode, selectedTemplates, processStream, userProfile, saveDocumentVersion, allTemplates]);
+    }, [activeConversationId, conversations, createNewConversation, isDeepAnalysisMode, selectedTemplates, processStream, allTemplates]);
+
+
+    const sendMessage = useCallback(async (content: string, isSystemMessage: boolean = false) => {
+        if (!content.trim()) return;
+
+        if (!userProfile || userProfile.tokens_used >= userProfile.token_limit) {
+            if (streamControllerRef.current) streamControllerRef.current.abort('Token limit reached');
+            setShowUpgradeModal(true);
+            return;
+        }
+        
+        const LONG_MESSAGE_THRESHOLD = 1500;
+        if (content.trim().length > LONG_MESSAGE_THRESHOLD && !isSystemMessage) {
+            setLongTextPrompt({
+                content: content.trim(),
+                callback: (choice) => {
+                    if (choice === 'analyze') {
+                        _saveLongTextAsRequestAndStartAnalysis(content.trim());
+                    } else if (choice === 'save') {
+                        _saveLongTextAsAnalysisDocument(content.trim());
+                    }
+                    setLongTextPrompt(null);
+                },
+            });
+            return;
+        }
+        
+        await _processSendMessage(content, isSystemMessage);
+
+    }, [_processSendMessage, _saveLongTextAsAnalysisDocument, _saveLongTextAsRequestAndStartAnalysis, userProfile?.tokens_used, userProfile?.token_limit]);
+    
+    const handleConfirmRequest = async () => {
+        if (!requestConfirmation || !activeConversationId) return;
+
+        await saveDocumentVersion('requestDoc', requestConfirmation.summary, "AI tarafından özetlenen talep onayı");
+        
+        // Send a system message to continue the flow
+        await sendMessage("[SİSTEM]: Kullanıcı talep özetini onayladı ve 'Talep' dokümanına kaydedildi. Şimdi bu talebe dayanarak analizi derinleştirmeye devam et.", true);
+
+        setRequestConfirmation(null); // Close modal
+    };
+
+    const handleRejectRequest = async () => {
+        if (!requestConfirmation || !activeConversationId) return;
+
+        // Send a system message to get the AI to re-evaluate
+        await sendMessage("[SİSTEM]: Kullanıcı sunulan talep özetini reddetti. Lütfen daha fazla soru sorarak veya farklı bir açıdan yaklaşarak talebi daha doğru anlamaya çalış.", true);
+
+        setRequestConfirmation(null); // Close modal
+    };
 
 
      const handleGenerateDoc = useCallback(async (
@@ -1434,7 +1531,6 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         currentView,
         isConversationListOpen,
         isWorkspaceVisible,
-        isNewAnalysisModalOpen,
         isShareModalOpen,
         showUpgradeModal,
         isFeatureSuggestionsModalOpen,
@@ -1460,6 +1556,8 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         analysisTemplates,
         testTemplates,
         traceabilityTemplates,
+        longTextPrompt,
+        requestConfirmation,
         
         // Handlers
         onLogout,
@@ -1470,7 +1568,6 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         setCurrentView,
         setIsConversationListOpen,
         setIsWorkspaceVisible,
-        setIsNewAnalysisModalOpen,
         setIsShareModalOpen,
         setShowUpgradeModal,
         setIsFeatureSuggestionsModalOpen,
@@ -1479,8 +1576,6 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         handleToggleDeveloperPanel,
         handleToggleFeedbackDashboard,
         handleNewConversation,
-        handleStartFromScratch,
-        handleStartWithDocument,
         updateConversationTitle,
         deleteConversation,
         updateConversation,
@@ -1503,5 +1598,9 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         handleApplySuggestion,
         handleDeepAnalysisModeChange,
         setIsExpertMode,
+        setLongTextPrompt,
+        setRequestConfirmation,
+        handleConfirmRequest,
+        handleRejectRequest,
     };
 };
