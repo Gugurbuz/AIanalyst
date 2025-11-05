@@ -113,11 +113,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
     const toolsMenuRef = useRef<HTMLDivElement>(null);
     const toolsButtonRef = useRef<HTMLButtonElement>(null);
-    
-    // --- Drag and Drop State ---
-    const [isDraggingOver, setIsDraggingOver] = useState(false);
-    const dragCounter = useRef(0);
-
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -264,69 +259,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             handleSubmit(e as any);
         }
     }
-    
-    // --- Drag and Drop Handlers ---
-    const handleDragEnter = (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dragCounter.current++;
-        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-            setIsDraggingOver(true);
-        }
-    };
-
-    const handleDragLeave = (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dragCounter.current--;
-        if (dragCounter.current === 0) {
-            setIsDraggingOver(false);
-        }
-    };
-
-    const handleDragOver = (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-    };
-
-    const handleDrop = (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsDraggingOver(false);
-        dragCounter.current = 0;
-
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            const droppedFile = e.dataTransfer.files[0];
-            const allowedExtensions = ['.txt', '.md'];
-            const fileExtension = '.' + droppedFile.name.split('.').pop()?.toLowerCase();
-            
-            if (allowedExtensions.includes(fileExtension)) {
-                setAttachedFile(droppedFile);
-            } else {
-                alert('Geçersiz dosya türü. Lütfen .txt veya .md uzantılı bir dosya sürükleyin.');
-            }
-            e.dataTransfer.clearData();
-        }
-    };
-
 
     return (
-        <div 
-            className="w-full bg-white dark:bg-slate-800 rounded-lg p-3 relative"
-            onDragEnter={handleDragEnter}
-            onDragLeave={handleDragLeave}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-        >
-             {isDraggingOver && (
-                <div className="absolute inset-0 bg-indigo-50/80 dark:bg-indigo-900/40 border-4 border-dashed border-indigo-500 rounded-lg z-30 flex items-center justify-center pointer-events-none">
-                    <div className="text-center font-bold text-indigo-600 dark:text-indigo-300">
-                        <Paperclip className="h-8 w-8 mx-auto mb-2" />
-                        <p>Dosyayı buraya bırakın</p>
-                        <p className="text-sm font-normal">Sadece .txt veya .md dosyaları</p>
-                    </div>
-                </div>
-            )}
+        <div className="w-full bg-white dark:bg-slate-800 rounded-lg p-3">
             <form onSubmit={handleSubmit} className="flex items-end space-x-3">
                  <input
                     type="file"

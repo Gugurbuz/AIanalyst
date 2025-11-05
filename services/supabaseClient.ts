@@ -43,14 +43,9 @@ function createMockClient(): SupabaseClient {
             signOut: () => Promise.resolve({ error: null }),
             getUser: () => Promise.resolve({ data: { user: null }, error: null }),
             getSession: () => Promise.resolve({ data: { session: null }, error: null }),
-            onAuthStateChange: (_callback: (event: string, session: any) => void) => {
-                // Immediately call the callback with a null session to simulate the initial state check.
-                // This prevents the app from getting stuck in a loading state.
-                _callback('INITIAL_SESSION', null);
-                return {
-                    data: { subscription: { unsubscribe: () => {} } },
-                };
-            },
+            onAuthStateChange: (_callback: any) => ({
+                data: { subscription: { unsubscribe: () => {} } },
+            }),
         },
         // Add other top-level properties to satisfy the SupabaseClient type.
         storage: {},
