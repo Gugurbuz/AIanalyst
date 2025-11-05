@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3e%3cpath fill='%234f46e5' d='M50 5L0 95h25l25-50 25 50h25L50 5z'/%3e%3ccircle fill='%23a5b4fc' cx='50' cy='58' r='10'/%3e%3c/svg%3e" />
@@ -98,39 +98,42 @@
 
       /* --- Custom BPMN.io Theme Styling --- */
 
-      /* Context Pad (Action Menu on element select) */
-      .djs-context-pad {
-        background-color: #f8fafc; /* slate-50 */
-        border-radius: 8px;
-        border: 1px solid #e2e8f0; /* slate-200 */
-        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-        padding: 4px;
+      .dark .djs-shape .djs-visual> :first-child {
+        fill: #334155 !important; /* slate-700 */
+        stroke: #94a3b8 !important; /* slate-400 */
+      }
+      .dark .djs-shape.selected .djs-visual > :first-child {
+        stroke: #818cf8 !important; /* indigo-400 */
+      }
+      .dark .djs-connection .djs-visual > :first-child {
+          stroke: #94a3b8 !important; /* slate-400 */
+      }
+      .dark .djs-label {
+        color: #cbd5e1 !important; /* slate-300 */
       }
       .dark .djs-context-pad {
         background-color: #1e293b; /* slate-800 */
         border-color: #334155; /* slate-700 */
       }
 
-      .djs-context-pad .entry {
-        background-color: #ffffff; /* white */
-        border-radius: 6px;
-        border: 1px solid transparent;
-        color: #475569; /* slate-600 */
-        transition: background-color 0.2s, border-color 0.2s;
-      }
       .dark .djs-context-pad .entry {
         background-color: #334155; /* slate-700 */
         color: #cbd5e1; /* slate-300 */
-      }
-
-      .djs-context-pad .entry:hover {
-        background-color: #f1f5f9; /* slate-100 */
-        border-color: #cbd5e1; /* slate-300 */
       }
       .dark .djs-context-pad .entry:hover {
         background-color: #475569; /* slate-600 */
         border-color: #64748b; /* slate-500 */
       }
+      .dark .djs-palette {
+        background-color: #1e293b; /* slate-800 */
+        border-right-color: #334155; /* slate-700 */
+      }
+      .dark .djs-palette .entry {
+        color: #cbd5e1; /* slate-300 */
+      }
+       .dark .djs-palette .entry:hover {
+        background-color: #475569; /* slate-600 */
+       }
 
       /* Animation for the new error banner */
       .error-banner-enter {

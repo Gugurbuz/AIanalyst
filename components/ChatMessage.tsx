@@ -5,6 +5,7 @@ import { User, Bot, Copy, Check } from 'lucide-react';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { Feedback } from './Feedback';
 import ThinkingProcess from './ThinkingProcess';
+import { LoadingSpinner } from './LoadingSpinner';
 
 interface ChatMessageProps {
   message: Message;
@@ -12,6 +13,7 @@ interface ChatMessageProps {
     messageId: string,
     feedback: { rating: 'up' | 'down' | null; comment?: string }
   ) => void;
+  onRetry: (failedAssistantMessageId: string) => void;
   isFirstInGroup: boolean;
   isLastInGroup: boolean;
 }
@@ -19,6 +21,7 @@ interface ChatMessageProps {
 export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
   onFeedback,
+  onRetry,
   isFirstInGroup,
   isLastInGroup
 }) => {
@@ -95,7 +98,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                     {copyText ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
                 </button>
             ) : (
-                message.role === 'assistant' && !message.generativeSuggestion && (
+                message.role === 'assistant' && !message.generativeSuggestion && !message.isStreaming && !message.error && message.content && (
                      <Feedback
                       msg={message}
                       onUpdate={(feedbackData) => onFeedback(message.id, feedbackData)}
@@ -115,9 +118,28 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                     />
                 )}
                 
-                <div className={isUser ? "dark [--tw-prose-invert-body:theme(colors.white)] [--tw-prose-invert-headings:theme(colors.white)] [--tw-prose-invert-bold:theme(colors.white)]" : ""}>
-                    <MarkdownRenderer content={message.content} />
-                </div>
+                {message.role === 'assistant' && message.isStreaming && !message.content && (
+                    <LoadingSpinner />
+                )}
+
+                {message.error && (
+                    <div className="text-red-700 dark:text-red-300">
+                        <p className="font-semibold">Bir Hata Oluştu</p>
+                        <p className="text-sm mt-1">{message.error.message}</p>
+                        <button
+                            onClick={() => onRetry(message.id)}
+                            className="mt-3 px-3 py-1 text-xs font-semibold text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        >
+                            Tekrar Dene
+                        </button>
+                    </div>
+                )}
+                
+                {!message.error && message.content && (
+                    <div className={isUser ? "dark [--tw-prose-invert-body:theme(colors.white)] [--tw-prose-invert-headings:theme(colors.white)] [--tw-prose-invert-bold:theme(colors.white)]" : ""}>
+                        <MarkdownRenderer content={message.content} />
+                    </div>
+                )}
              </div>
         </div>
     </div>

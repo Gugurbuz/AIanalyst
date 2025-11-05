@@ -1,6 +1,4 @@
 import { jsPDF } from 'jspdf';
-// FIX: Use the functional `autoTable` import instead of a side-effect import.
-// This resolves a module augmentation error with 'jspdf' by using a more direct and explicit approach.
 import autoTable from 'jspdf-autotable';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle, AlignmentType, convertInchesToTwip } from 'docx';
 
@@ -41,6 +39,151 @@ const exportAsSvg = (svgContent: string, filename: string): void => {
     URL.revokeObjectURL(url);
 };
 
+const exportAsPng = (svgContent: string, filename: string): void => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+
+    img.onload = () => {
+        // Add some padding for better aesthetics
+        const padding = 20;
+        canvas.width = img.width + padding * 2;
+        canvas.height = img.height + padding * 2;
+
+        if (ctx) {
+            // Fill background
+            ctx.fillStyle = document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff'; // slate-900 or white
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw the image with padding
+            ctx.drawImage(img, padding, padding);
+
+            const url = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    };
+    
+    img.onerror = (e) => {
+        console.error("Error loading SVG image for PNG conversion:", e);
+        alert("Diyagram PNG'ye dönüştürülürken bir hata oluştu.");
+    };
+
+    // Use a base64 data URI to handle SVG content more reliably.
+    // The trick `unescape(encodeURIComponent(svgContent))` is to handle multi-byte characters correctly before base64 encoding.
+    const dataUri = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgContent)))}`;
+    img.src = dataUri;
+};
+
+
+const exportAsHtml = (mermaidCode: string, filename: string): void => {
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${filename}</title>
+    <style>
+        body { 
+            font-family: sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f8fafc;
+        }
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #0f172a;
+            }
+        }
+    </style>
+</head>
+<body>
+    <pre class="mermaid">
+${mermaidCode.replace(/</g, "&lt;").replace(/>/g, "&gt;")}
+    </pre>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+</body>
+</html>`;
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${filename}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+};
+
+const exportBpmnAsHtml = (bpmnXml: string, filename: string): void => {
+    const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>${filename}</title>
+    <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.0.2/dist/assets/diagram-js.css">
+    <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.0.2/dist/assets/bpmn-font/css/bpmn.css">
+    <style>
+        html, body, #container {
+            height: 100%;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #ffffff;
+        }
+        @media (prefers-color-scheme: dark) {
+            body { background-color: #0f172a; }
+        }
+        /* Hide the bpmn.io logo */
+        .bjs-powered-by { display: none !important; }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <script src="https://unpkg.com/bpmn-js@17.0.2/dist/bpmn-viewer.development.js"></script>
+    <script>
+        const bpmnXML = \`${bpmnXml.replace(/`/g, '\\`')}\`;
+        const viewer = new BpmnJS({ container: '#container' });
+        async function openDiagram() {
+          try {
+            await viewer.importXML(bpmnXML);
+            viewer.get('canvas').zoom('fit-viewport');
+          } catch (err) {
+            console.error('Could not import BPMN 2.0 diagram', err);
+            const container = document.getElementById('container');
+            container.innerHTML = '<div style="color: red; text-align: center;"><h2>Error rendering BPMN</h2><pre>' + err.message + '</pre></div>';
+          }
+        }
+        openDiagram();
+    </script>
+</body>
+</html>`;
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${filename}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+};
+
 
 const parseMarkdownTable = (markdown: string): { head: string[][]; body: string[][] } => {
     const lines = markdown.trim().split('\n');
@@ -58,9 +201,7 @@ const parseMarkdownTable = (markdown: string): { head: string[][]; body: string[
     const head = [headers];
 
     const body = lines.slice(2).map(line => {
-        // Ensure we handle the start and end pipes correctly
         const cells = line.split('|');
-        // Remove the first and last empty strings if they exist, then trim
         return cells.slice(1, cells.length -1).map(cell => cell.trim());
     }).filter(row => row.length > 0 && row.some(cell => cell));
     
@@ -69,8 +210,6 @@ const parseMarkdownTable = (markdown: string): { head: string[][]; body: string[
 
 
 const exportAsPdf = (content: string, filename: string, isTable: boolean): void => {
-  // Note: Default jsPDF fonts have limited character support (e.g., for Turkish).
-  // For full Unicode support, a custom font would need to be embedded.
   const doc = new jsPDF({
     orientation: isTable ? 'landscape' : 'portrait'
   });
@@ -78,14 +217,12 @@ const exportAsPdf = (content: string, filename: string, isTable: boolean): void 
   if (isTable) {
     const { head, body } = parseMarkdownTable(content);
     if (head.length > 0 && body.length > 0) {
-        // The table content might contain HTML line breaks `<br>`. Replace them with newlines for jspdf-autotable.
         const cleanedBody = body.map(row => row.map(cell => cell.replace(/<br\s*\/?>/gi, '\n')));
-        // FIX: Changed from `doc.autoTable(...)` to the functional call `autoTable(doc, ...)`.
         autoTable(doc, { 
             head, 
             body: cleanedBody,
             styles: {
-                font: 'helvetica', // Using a standard font
+                font: 'helvetica',
                 fontSize: 8,
             },
             headStyles: {
@@ -97,82 +234,16 @@ const exportAsPdf = (content: string, filename: string, isTable: boolean): void 
             }
         });
     } else {
-        // Fallback for malformed tables
-        doc.text("Test senaryoları tablosu ayrıştırılamadı.", 10, 10);
+        doc.text("Tablo ayrıştırılamadı.", 10, 10);
         doc.text(content, 10, 20);
     }
   } else {
-    const lines = content.split('\n');
-    let y = 15;
-    const pageHeight = doc.internal.pageSize.height;
-    const margin = 15;
-    const contentWidth = doc.internal.pageSize.width - margin * 2;
-
-    lines.forEach(line => {
-        if (y > pageHeight - margin) {
-            doc.addPage();
-            y = margin;
-        }
-
-        let processedLine = line.trim();
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(11);
-        let x = 10;
-        
-        if (processedLine.startsWith('## ')) {
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(16);
-            processedLine = processedLine.substring(3);
-            y += 7; // Add extra space before main headers
-        } else if (processedLine.startsWith('### ')) {
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(14);
-            processedLine = processedLine.substring(4);
-            y += 5; // Add extra space before sub-headers
-        } else if (processedLine.startsWith('- ') || processedLine.startsWith('* ')) {
-            processedLine = `• ${processedLine.substring(2)}`;
-            x = 15;
-        } else if (/^\d+\.\s/.test(processedLine)) {
-            x = 15;
-        } else if (processedLine === '') {
-            y += 5; // Add space for empty lines (paragraphs)
-            return;
-        }
-
-        // Handle bold text with a simple regex
-        const boldRegex = /\*\*(.*?)\*\*/g;
-        let parts = [];
-        let lastIndex = 0;
-        let match;
-        while ((match = boldRegex.exec(processedLine)) !== null) {
-            if (match.index > lastIndex) {
-                parts.push({ text: processedLine.substring(lastIndex, match.index), bold: false });
-            }
-            parts.push({ text: match[1], bold: true });
-            lastIndex = match.index + match[0].length;
-        }
-        if (lastIndex < processedLine.length) {
-            parts.push({ text: processedLine.substring(lastIndex), bold: false });
-        }
-        
-        let currentX = x;
-        parts.forEach(part => {
-            doc.setFont('helvetica', part.bold ? 'bold' : 'normal');
-            doc.text(part.text, currentX, y, {
-                maxWidth: contentWidth - (currentX - margin),
-            });
-            // Approximate text width to position the next part
-            currentX += doc.getStringUnitWidth(part.text) * doc.getFontSize() / doc.internal.scaleFactor;
-        });
-
-        const splitText = doc.splitTextToSize(processedLine, contentWidth);
-        y += (splitText.length * 6) + 2; // Adjust y position based on number of wrapped lines
-    });
+    // Basic text export for non-table content
+    doc.text(content, 10, 10);
   }
   doc.save(`${filename}.pdf`);
 };
 
-// New function to export as .docx
 const exportAsDocx = (content: string, filename: string): void => {
     const lines = content.split('\n');
     const children: (Paragraph | Table)[] = [];
@@ -181,7 +252,7 @@ const exportAsDocx = (content: string, filename: string): void => {
 
     const createParagraph = (line: string) => {
         const runs: TextRun[] = [];
-        const parts = line.split(/(\*\*.*?\*\*)/g); // Split by bold tags
+        const parts = line.split(/(\*\*.*?\*\*)/g);
         parts.forEach(part => {
             if (part.startsWith('**') && part.endsWith('**')) {
                 runs.push(new TextRun({ text: part.slice(2, -2), bold: true }));
@@ -198,7 +269,6 @@ const exportAsDocx = (content: string, filename: string): void => {
         const isTableLine = trimmedLine.startsWith('|') && trimmedLine.endsWith('|');
 
         if (inTable && !isTableLine) {
-            // End of table
             if (tableRows.length > 0) {
                  children.push(new Table({
                     rows: tableRows,
@@ -212,22 +282,15 @@ const exportAsDocx = (content: string, filename: string): void => {
         if (isTableLine) {
             const cells = trimmedLine.split('|').slice(1, -1).map(cell => new TableCell({
                 children: [createParagraph(cell.trim())],
-                borders: {
-                    top: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" },
-                    bottom: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" },
-                    left: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" },
-                    right: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" },
-                },
+                borders: { top: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" }, bottom: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" }, left: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" }, right: { style: BorderStyle.SINGLE, size: 1, color: "D3D3D3" } },
             }));
             
-            if (!inTable) { // This is the header row
+            if (!inTable) { 
                 inTable = true;
-                // FIX: Replaced incorrect 'isHeader' with 'tableHeader' to correctly define a table header row in the docx library.
                 tableRows.push(new TableRow({ children: cells, tableHeader: true }));
-            } else if (!trimmedLine.includes('---')) { // This is a body row
+            } else if (!trimmedLine.includes('---')) {
                 tableRows.push(new TableRow({ children: cells }));
             }
-            // Skip the separator line
             return;
         }
 
@@ -243,20 +306,16 @@ const exportAsDocx = (content: string, filename: string): void => {
          else if (trimmedLine) {
             children.push(createParagraph(trimmedLine));
         } else {
-            children.push(new Paragraph('')); // Empty line
+            children.push(new Paragraph(''));
         }
     });
 
-    // Add any remaining table
     if (inTable && tableRows.length > 0) {
         children.push(new Table({ rows: tableRows, width: { size: 100, type: WidthType.PERCENTAGE } }));
     }
 
     const doc = new Document({
-        sections: [{
-            properties: {},
-            children: children,
-        }],
+        sections: [{ properties: {}, children: children }],
     });
 
     Packer.toBlob(doc).then(blob => {
@@ -272,4 +331,4 @@ const exportAsDocx = (content: string, filename: string): void => {
 };
 
 
-export const exportService = { exportAsMarkdown, exportAsPdf, exportAsMermaid, exportAsSvg, exportAsDocx };
+export const exportService = { exportAsMarkdown, exportAsPdf, exportAsSvg, exportAsPng, exportAsHtml, exportAsDocx, exportBpmnAsHtml };

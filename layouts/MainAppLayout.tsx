@@ -1,7 +1,5 @@
-
-
 // layouts/MainAppLayout.tsx
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { useAppContext } from '../contexts/AppContext';
 import { Header } from '../components/Header';
 import { ChatInterface } from '../components/ChatInterface';
@@ -16,9 +14,8 @@ import { DeveloperPanel } from '../components/DeveloperPanel';
 import { FeedbackDashboard } from '../components/FeedbackDashboard';
 import { UpgradeModal } from '../components/UpgradeModal';
 import { LongTextModal } from '../components/LongTextModal';
-import { RequestConfirmationModal } from '../components/RequestConfirmationModal';
 import { ResetConfirmationModal } from '../components/ResetConfirmationModal';
-import { AlertTriangle, FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, X, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { AlertTriangle, FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, X, PanelLeftClose, PanelLeftOpen, PanelRightOpen, PanelRightClose } from 'lucide-react';
 import { MainSidebar } from './MainSidebar';
 import { Sidebar } from '../components/Sidebar';
 
@@ -49,7 +46,14 @@ const AnalystWorkspace = () => {
 
     return (
         <div className={`grid ${gridLayoutClass} h-full w-full`}>
-            <div className={`flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-900 ${isWorkspaceVisible ? 'lg:col-span-2' : 'col-span-1'}`}>
+            <div className={`relative flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-900 ${isWorkspaceVisible ? 'lg:col-span-2' : 'col-span-1'}`}>
+                 <button
+                    onClick={() => context.setIsWorkspaceVisible(!context.isWorkspaceVisible)}
+                    title={context.isWorkspaceVisible ? "Çalışma Alanını Gizle" : "Çalışma Alanını Göster"}
+                    className="absolute top-4 right-4 z-10 p-2 rounded-md bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400"
+                >
+                    {context.isWorkspaceVisible ? <PanelRightClose className="h-5 w-5" /> : <PanelRightOpen className="h-5 w-5" />}
+                </button>
                 <main className="flex-1 overflow-y-auto p-4">
                      <div className="max-w-4xl mx-auto w-full">
                          {activeConversation && activeConversation.messages.filter(m => m.role !== 'system').length > 0 ? (
@@ -59,6 +63,7 @@ const AnalystWorkspace = () => {
                                 onFeedbackUpdate={context.handleFeedbackUpdate}
                                 onEditLastUserMessage={context.handleEditLastUserMessage}
                                 onApplySuggestion={context.handleApplySuggestion}
+                                onRetry={context.handleRetryMessage}
                             />
                         ) : (
                             <div className="flex flex-col items-center justify-center h-full pt-10">
@@ -78,6 +83,10 @@ const AnalystWorkspace = () => {
                             onSuggestNextFeature={context.handleSuggestNextFeature}
                             isConversationStarted={!!context.activeConversation && context.activeConversation.messages.filter(m => m.role !== 'system').length > 0}
                             nextAction={nextBestAction}
+                            isDeepAnalysisMode={context.isDeepAnalysisMode}
+                            onDeepAnalysisModeChange={context.handleDeepAnalysisModeChange}
+                            isExpertMode={context.isExpertMode}
+                            setIsExpertMode={context.setIsExpertMode}
                         />
                     </div>
                 </footer>
@@ -146,6 +155,18 @@ const useNextBestAction = (conversation: any, callbacks: any) => {
 export const MainAppLayout: React.FC = () => {
     const context = useAppContext();
 
+     useEffect(() => {
+        const root = window.document.documentElement;
+        const isDark = context.theme === 'dark';
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        
+        if (context.theme === 'system') {
+            root.classList.toggle('dark', prefersDark);
+        } else {
+            root.classList.toggle('dark', isDark);
+        }
+    }, [context.theme]);
+
     return (
         <div className="font-sans bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 h-screen flex flex-col overflow-hidden">
              {context.error && (
@@ -163,16 +184,7 @@ export const MainAppLayout: React.FC = () => {
                 theme={context.theme}
                 onThemeChange={context.setTheme}
                 onOpenShareModal={() => context.setIsShareModalOpen(true)}
-                saveStatus={context.saveStatus}
-                maturityScore={context.displayedMaturityScore}
-                isProcessing={context.isProcessing}
                 userProfile={context.userProfile}
-                isExpertMode={context.isExpertMode}
-                setIsExpertMode={context.setIsExpertMode}
-                isDeepAnalysisMode={context.isDeepAnalysisMode}
-                onDeepAnalysisModeChange={context.handleDeepAnalysisModeChange}
-                isWorkspaceVisible={context.isWorkspaceVisible}
-                onToggleWorkspace={() => context.setIsWorkspaceVisible(!context.isWorkspaceVisible)}
             />
             <div className="flex-1 flex min-h-0 relative">
                 <MainSidebar />
@@ -195,7 +207,7 @@ export const MainAppLayout: React.FC = () => {
                                 <button
                                     onClick={() => context.setIsConversationListOpen(!context.isConversationListOpen)}
                                     title={context.isConversationListOpen ? "Sohbet Listesini Gizle" : "Sohbet Listesini Göster"}
-                                    className="absolute top-1/2 -right-3 -translate-y-1/2 z-10 w-6 h-12 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-r-md flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-600"
+                                    className="absolute top-1/2 -translate-y-1/2 -right-3 z-10 w-6 h-12 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-r-md flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-600"
                                 >
                                     {context.isConversationListOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
                                 </button>
@@ -224,9 +236,6 @@ export const MainAppLayout: React.FC = () => {
             )}
              {context.longTextPrompt && (
                 <LongTextModal isOpen={!!context.longTextPrompt} onClose={() => context.setLongTextPrompt(null)} onSelectChoice={(choice) => { context.longTextPrompt?.callback(choice); }} />
-            )}
-            {context.requestConfirmation && (
-                <RequestConfirmationModal isOpen={!!context.requestConfirmation} summary={context.requestConfirmation.summary} onConfirm={context.handleConfirmRequest} onReject={context.handleRejectRequest} onClose={() => context.setRequestConfirmation(null)} />
             )}
             {context.resetConfirmation && (
                  <ResetConfirmationModal isOpen={!!context.resetConfirmation} onClose={() => context.setResetConfirmation(null)} onConfirm={context.handleConfirmReset} documentName={context.resetConfirmation.changedDocName} impactedDocs={context.resetConfirmation.impactedDocNames} />

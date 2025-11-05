@@ -21,6 +21,7 @@ const defaultGeneratedDocs: GeneratedDocs = {
 };
 
 // FIX: Add `request` key to map to `requestDoc` to satisfy the `Record<DocumentType, keyof GeneratedDocs>` type.
+// @FIX: Add 'visualization' key to map to 'visualization' property, satisfying the Record<DocumentType, ...> type requirement.
 const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs> = {
     request: 'requestDoc',
     analysis: 'analysisDoc',
@@ -29,6 +30,7 @@ const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs> = {
     mermaid: 'mermaidViz',
     bpmn: 'bpmnViz',
     maturity_report: 'maturityReport',
+    visualization: 'visualization',
 };
 
 const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {

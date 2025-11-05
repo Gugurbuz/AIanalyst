@@ -11,9 +11,11 @@ declare global {
 
 interface BPMNViewerProps {
     xml: string;
+    setSvgContentGetter?: (getter: () => Promise<string | null>) => void;
+    isPaletteVisible?: boolean;
 }
 
-export const BPMNViewer: React.FC<BPMNViewerProps> = ({ xml }) => {
+export const BPMNViewer: React.FC<BPMNViewerProps> = ({ xml, setSvgContentGetter, isPaletteVisible = true }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const modelerRef = useRef<any>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -22,26 +24,57 @@ export const BPMNViewer: React.FC<BPMNViewerProps> = ({ xml }) => {
     useEffect(() => {
         if (!containerRef.current) return;
         
-        // Ensure BpmnJS is available
         if (!window.BpmnJS) {
             setError("BPMN Kütüphanesi yüklenemedi.");
             setIsLoading(false);
             return;
         }
 
-        // Initialize modeler
         const modeler = new window.BpmnJS({
             container: containerRef.current,
-            keyboard: {
-                bindTo: window
-            },
+            keyboard: { bindTo: window },
         });
         modelerRef.current = modeler;
+        
+        if (setSvgContentGetter) {
+            setSvgContentGetter(() => async () => {
+                if (!modelerRef.current) return null;
+                
+                // Strengthened safeguard: Check if the diagram has any elements before exporting.
+                try {
+                    const elementRegistry = modelerRef.current.get('elementRegistry');
+                    if (!elementRegistry || elementRegistry.getAll().length <= 1) { 
+                        console.warn("BPMN export aborted: Diagram is empty or not fully rendered.");
+                        return null;
+                    }
+                } catch (e) {
+                    console.error("Could not get BPMN element registry:", e);
+                    return null; // Return null if safeguard fails
+                }
+
+                try {
+                    const { svg } = await modelerRef.current.saveSVG();
+                    return svg;
+                } catch (err) {
+                    console.error("BPMN SVG export error:", err);
+                    return null;
+                }
+            });
+        }
         
         return () => {
             modeler.destroy();
         };
-    }, []);
+    }, [setSvgContentGetter]);
+
+    useEffect(() => {
+        if (modelerRef.current) {
+            const palette = modelerRef.current.get('palette');
+            if (palette && palette._container) {
+                palette._container.style.display = isPaletteVisible ? 'block' : 'none';
+            }
+        }
+    }, [isPaletteVisible]);
 
     useEffect(() => {
         const importXml = async () => {

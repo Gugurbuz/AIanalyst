@@ -52,6 +52,8 @@ export interface Message {
     generativeSuggestion?: GenerativeSuggestion;
     thoughts?: string | null;
     created_at: string;
+    isStreaming?: boolean;
+    error?: { message: string };
 }
 
 export type MaturityLevel = 'Zayıf' | 'Gelişime Açık' | 'İyi' | 'Mükemmel';
@@ -73,7 +75,8 @@ export interface MaturityReport {
     maturity_level: MaturityLevel; // Kalitatif değerlendirme
 }
 
-export type DocumentType = 'analysis' | 'test' | 'traceability' | 'mermaid' | 'bpmn' | 'maturity_report' | 'request';
+// FIX: Add 'visualization' to DocumentType to align with its usage in system prompts.
+export type DocumentType = 'analysis' | 'test' | 'traceability' | 'mermaid' | 'bpmn' | 'maturity_report' | 'request' | 'visualization';
 
 export interface DocumentVersion {
     id: string;
@@ -198,7 +201,7 @@ export interface Prompt {
     name: string;
     description: string;
     is_system_template?: boolean;
-    document_type?: 'analysis' | 'test' | 'traceability' | 'visualization';
+    document_type?: DocumentType;
     versions: PromptVersion[];
     activeVersionId: string;
 }
@@ -255,6 +258,33 @@ export interface AnalysisSection {
 export interface StructuredAnalysisDoc {
     sections: AnalysisSection[];
 }
+
+export interface IsBirimiTalep {
+  dokumanTipi: "IsBirimiTalep";
+  dokumanNo: string;
+  tarih: string;
+  revizyon: string;
+  talepAdi: string;
+  talepSahibi: string;
+  mevcutDurumProblem: string;
+  talepAmaciGerekcesi: string;
+  kapsam: {
+    inScope: string[];
+    outOfScope: string[];
+  };
+  beklenenIsFaydalari: string[];
+}
+
+export function isIsBirimiTalep(obj: any): obj is IsBirimiTalep {
+    return obj &&
+        obj.dokumanTipi === "IsBirimiTalep" &&
+        typeof obj.dokumanNo === 'string' &&
+        typeof obj.talepAdi === 'string' &&
+        typeof obj.kapsam === 'object' &&
+        Array.isArray(obj.kapsam.inScope) &&
+        Array.isArray(obj.kapsam.outOfScope);
+}
+
 
 // NEW: Structured types for JSON-based document generation
 export interface StructuredTestScenario {

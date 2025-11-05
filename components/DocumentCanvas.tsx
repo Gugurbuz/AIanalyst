@@ -8,11 +8,12 @@ import { Template, DocumentVersion, LintingIssue, StructuredAnalysisDoc, isStruc
 import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, Edit, Eye, Wrench, X, History } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 import { VersionHistoryModal } from './VersionHistoryModal';
+import { AnalysisDocumentViewer } from './AnalysisDocumentViewer';
 
 interface DocumentCanvasProps {
     content: string;
     onContentChange: (newContent: string, reason: string) => void;
-    docKey: 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix';
+    docKey: 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix' | 'requestDoc';
     onModifySelection: (selectedText: string, userPrompt: string, docKey: 'analysisDoc' | 'testScenarios') => void;
     inlineModificationState: { docKey: 'analysisDoc' | 'testScenarios'; originalText: string } | null;
     isGenerating: boolean;
@@ -34,20 +35,36 @@ interface DocumentCanvasProps {
 
 // --- Helper Functions for Structured Document Conversion ---
 
-const jsonToMarkdownTable = (jsonString: string): string => {
+const jsonToMarkdownTable = (content: string): string => {
+    const trimmedContent = (content || '').trim();
+
+    // If it's not JSON (doesn't start with { or [), it could be Markdown already or something else.
+    // Let the Markdown renderer handle it by returning it as is.
+    if (!trimmedContent.startsWith('[') && !trimmedContent.startsWith('{')) {
+        return content;
+    }
+
     try {
-        const cleanedJsonString = jsonString.replace(/^```json\s*|```\s*$/g, '').trim();
+        const cleanedJsonString = trimmedContent.replace(/^```json\s*|```\s*$/g, '').trim();
         if (!cleanedJsonString) return "<!-- Boş JSON verisi -->";
+        
         const data = JSON.parse(cleanedJsonString);
-        if (!Array.isArray(data) || data.length === 0) return "<!-- Geçerli bir tablo verisi bulunamadı -->";
+        
+        if (!Array.isArray(data) || data.length === 0) {
+            return "<!-- Geçerli bir tablo verisi bulunamadı -->";
+        }
+
         const headers = Object.keys(data[0]);
         const headerLine = `| ${headers.join(' | ')} |`;
         const separatorLine = `| ${headers.map(() => '---').join(' | ')} |`;
-        const bodyLines = data.map(row => `| ${headers.map(header => (row[header] || '').toString().replace(/\n/g, '<br/>')).join(' | ')} |`);
+        const bodyLines = data.map(row => `| ${headers.map(header => (row[header] === null || row[header] === undefined ? '' : row[header]).toString().replace(/\n/g, '<br/>')).join(' | ')} |`);
+
         return [headerLine, separatorLine, ...bodyLines].join('\n');
     } catch (error) {
-        console.error("JSON'dan Markdown tablosuna dönüştürme hatası:", error);
-        return `JSON'dan tabloya dönüştürme hatası:\n\n${jsonString}`;
+        // If JSON.parse fails, it's not valid JSON. Return the original content.
+        // It might be an incomplete JSON stream or already markdown.
+        console.warn("Could not parse table content as JSON, returning as is.", error);
+        return content;
     }
 };
 
@@ -238,6 +255,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     
     const documentTypeMap: Record<string, DocumentVersion['document_type']> = {
         analysisDoc: 'analysis',
+        requestDoc: 'request',
         testScenarios: 'test',
         traceabilityMatrix: 'traceability',
     };
@@ -245,6 +263,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     
     const docNameMap: Record<string, string> = {
          analysisDoc: 'Analiz Dokümanı',
+        requestDoc: 'Talep Dokümanı',
         testScenarios: 'Test Senaryoları',
         traceabilityMatrix: 'İzlenebilirlik Matrisi',
     };
@@ -257,9 +276,11 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     
     // Parse final JSON only when streaming stops.
     useEffect(() => {
-        if (!isStreaming && localContent && !isTable) {
+        if (!isStreaming && localContent && docKey === 'analysisDoc' && !isTable) {
             try {
-                const parsed = JSON.parse(localContent);
+                // Attempt to remove markdown code blocks if they exist
+                const cleanedContent = localContent.replace(/^```json\s*|```\s*$/g, '').trim();
+                const parsed = JSON.parse(cleanedContent);
                 if (isStructuredAnalysisDoc(parsed)) {
                     setIsStructured(true);
                     setDocObject(parsed);
@@ -272,8 +293,12 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                 setIsStructured(false);
                 setDocObject(null);
             }
+        } else {
+            // Reset for other doc types or if streaming/table
+             setIsStructured(false);
+             setDocObject(null);
         }
-    }, [isStreaming, localContent, isTable]);
+    }, [isStreaming, localContent, isTable, docKey]);
 
     
     // Clear lint issues when content changes from parent
@@ -282,6 +307,8 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     }, [content]);
 
     const handleToggleEditing = async () => {
+        if (docKey !== 'analysisDoc' && docKey !== 'requestDoc') return;
+
         if (isEditing) { // Finishing edit
             setIsEditing(false); // Switch to view mode immediately
 
@@ -439,7 +466,8 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                 return structuredDocToMarkdown(parsed);
             }
         } catch (e) {
-            const knownKeys = /"sections"|"subSections"|"requirements"|"title"|"content"|"id"|"text"/g;
+            // Heuristic to clean up streaming JSON for better readability
+            const knownKeys = /"sections"|"subSections"|"requirements"|"title"|"content"|"id"|"text"|"kapsam"|"inScope"|"outOfScope"/g;
             return localContent
                 .replace(knownKeys, '')
                 .replace(/[\{\}\[\]",:]/g, ' ')
@@ -481,6 +509,8 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     }
 
     const currentVersion = filteredHistory.length > 0 ? Math.max(...filteredHistory.map(v => v.version_number)) : 0;
+    const canEdit = docKey === 'analysisDoc' || docKey === 'requestDoc';
+
 
     return (
         <div className="flex flex-col h-full relative">
@@ -508,7 +538,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                              <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
                         </>
                     )}
-                     <button onClick={() => setIsAiModalOpen(true)} disabled={!selection} title="AI ile düzenle" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1 text-indigo-600 dark:text-indigo-400 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed">
+                     <button onClick={() => setIsAiModalOpen(true)} disabled={!selection || (docKey !== 'analysisDoc' && docKey !== 'testScenarios')} title="AI ile düzenle" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1 text-indigo-600 dark:text-indigo-400 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed">
                         <Sparkles className="h-4 w-4" /> <span className="text-sm font-semibold">Oluştur</span>
                     </button>
                 </div>
@@ -535,7 +565,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                             <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Oluşturuluyor</span>
                         </div>
                     )}
-                     {!isTable && (
+                     {canEdit && (
                          <button 
                             onClick={handleToggleEditing}
                             disabled={isSummarizing || isStreaming}
@@ -553,35 +583,38 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                     <ExportDropdown content={displayContent} filename={filename} isTable={isTable} />
                 </div>
             </div>
-            <div className="p-2 md:p-6 flex-1 relative" onMouseUp={handleSelection}>
+            <div className="flex-1 relative" onMouseUp={handleSelection}>
                  {(isEditing && isStructured && docObject) ? (
                     <div
                         ref={editorRef}
                         contentEditable
                         suppressContentEditableWarning
                         dangerouslySetInnerHTML={{ __html: structuredDocToHtml(docObject) }}
-                        className="prose prose-slate dark:prose-invert max-w-none w-full h-full p-4 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 overflow-y-auto"
+                        className="prose prose-slate dark:prose-invert max-w-none w-full h-full p-6 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 overflow-y-auto"
                     />
                 ) : (isEditing && !isTable) ? (
                     <textarea
                         ref={textareaRef}
                         value={localContent}
                         onChange={(e) => setLocalContent(e.target.value)}
-                        className="w-full h-full p-2 bg-transparent border-none focus:outline-none resize-none font-sans text-base leading-relaxed"
+                        className="w-full h-full p-6 bg-transparent border-none focus:outline-none resize-none font-sans text-base leading-relaxed"
                         placeholder={placeholder}
                     />
-                ) : (
-                    <div className="h-full overflow-y-auto p-2">
-                        <MarkdownRenderer
-                            content={displayContent}
-                            rephrasingText={
-                                inlineModificationState && inlineModificationState.docKey === docKey
-                                    ? inlineModificationState.originalText
-                                    : null
-                            }
-                            highlightedUserSelectionText={selection?.text || null}
-                        />
-                    </div>
+                ) : ((isStructured && docObject && !isTable) ? (
+                        <AnalysisDocumentViewer doc={docObject} />
+                    ) : (
+                        <div className="h-full overflow-y-auto p-2 md:p-6">
+                            <MarkdownRenderer
+                                content={displayContent}
+                                rephrasingText={
+                                    inlineModificationState && inlineModificationState.docKey === docKey
+                                        ? inlineModificationState.originalText
+                                        : null
+                                }
+                                highlightedUserSelectionText={selection?.text || null}
+                            />
+                        </div>
+                    )
                 )}
             </div>
              {isAiModalOpen && selection && (

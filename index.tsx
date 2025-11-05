@@ -47,91 +47,84 @@ const Main = () => {
     }>({});
     
     useEffect(() => {
-        const bootstrap = () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const shareId = urlParams.get('share');
+        const urlParams = new URLSearchParams(window.location.search);
+        const shareId = urlParams.get('share');
 
-            if (shareId) {
-                const fetchPublicData = async () => {
-                    const { data, error } = await supabase
-                        .from('conversations')
-                        .select('*, conversation_details(*), documents(*), document_versions(*)')
-                        .eq('share_id', shareId)
-                        .eq('is_shared', true)
-                        .single();
+        if (shareId) {
+            const fetchPublicData = async () => {
+                const { data, error } = await supabase
+                    .from('conversations')
+                    .select('*, conversation_details(*), documents(*), document_versions(*)')
+                    .eq('share_id', shareId)
+                    .eq('is_shared', true)
+                    .single();
 
-                    if (error || !data) {
-                        setLoadResult({ error: 'Bu analize erişilemiyor. Linkin doğru olduğundan emin olun veya paylaşım ayarları değiştirilmiş olabilir.' });
-                    } else {
-                        const convWithDetails = {
-                            ...data,
-                            messages: (data.conversation_details || []).sort(
-                                (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                            ),
-                            documents: data.documents || [],
-                            documentVersions: (data.document_versions || []).sort(
-                                (a: DocumentVersion, b: DocumentVersion) => a.version_number - b.version_number
-                            )
-                        };
-                        setLoadResult({ publicConversation: convWithDetails as Conversation });
-                    }
-                    setIsLoading(false);
-                };
-                fetchPublicData();
-                return () => {}; // No subscription to clean up
-            }
-
-            // Normal authentication flow
-            const { data: { subscription } } = authService.onAuthStateChange(async (_event, session) => {
-                setSession(session);
-                if (session) {
-                    const [profileResult, conversationsResult, templatesResult] = await Promise.all([
-                        authService.getProfile(session.user.id),
-                        supabase
-                            .from('conversations')
-                            .select('*, conversation_details(*), document_versions(*), documents(*)')
-                            .eq('user_id', session.user.id)
-                            .order('created_at', { ascending: false }),
-                        authService.fetchTemplates(session.user.id)
-                    ]);
-                    
-                    if (conversationsResult.error) {
-                        setLoadResult({ error: 'Sohbetler yüklenirken bir hata oluştu.' });
-                    } else {
-                        const conversationsWithDetails = (conversationsResult.data || []).map((conv: any) => ({
-                            ...conv,
-                            messages: (conv.conversation_details || []).sort(
-                                (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                            ),
-                            documentVersions: (conv.document_versions || []).sort(
-                                (a: DocumentVersion, b: DocumentVersion) => a.version_number - b.version_number
-                            ),
-                            documents: conv.documents || [],
-                        }));
-
-                        setLoadResult({
-                            appData: {
-                                conversations: conversationsWithDetails as Conversation[],
-                                profile: profileResult,
-                                templates: templatesResult,
-                            }
-                        });
-                    }
+                if (error || !data) {
+                    setLoadResult({ error: 'Bu analize erişilemiyor. Linkin doğru olduğundan emin olun veya paylaşım ayarları değiştirilmiş olabilir.' });
                 } else {
-                    setLoadResult({});
+                    const convWithDetails = {
+                        ...data,
+                        messages: (data.conversation_details || []).sort(
+                            (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                        ),
+                        documents: data.documents || [],
+                        documentVersions: (data.document_versions || []).sort(
+                            (a: DocumentVersion, b: DocumentVersion) => a.version_number - b.version_number
+                        )
+                    };
+                    setLoadResult({ publicConversation: convWithDetails as Conversation });
                 }
                 setIsLoading(false);
-            });
-            
-            return () => {
-                subscription?.unsubscribe();
             };
-        };
-
-        const subscriptionCleanup = bootstrap();
-        return () => {
-            subscriptionCleanup();
+            fetchPublicData();
+            return () => {}; // No subscription to clean up
         }
+
+        // Normal authentication flow
+        const { data: { subscription } } = authService.onAuthStateChange(async (_event, session) => {
+            setSession(session);
+            if (session) {
+                const [profileResult, conversationsResult, templatesResult] = await Promise.all([
+                    authService.getProfile(session.user.id),
+                    supabase
+                        .from('conversations')
+                        .select('*, conversation_details(*), document_versions(*), documents(*)')
+                        .eq('user_id', session.user.id)
+                        .order('created_at', { ascending: false }),
+                    authService.fetchTemplates(session.user.id)
+                ]);
+                
+                if (conversationsResult.error) {
+                    setLoadResult({ error: 'Sohbetler yüklenirken bir hata oluştu.' });
+                } else {
+                    const conversationsWithDetails = (conversationsResult.data || []).map((conv: any) => ({
+                        ...conv,
+                        messages: (conv.conversation_details || []).sort(
+                            (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                        ),
+                        documentVersions: (conv.document_versions || []).sort(
+                            (a: DocumentVersion, b: DocumentVersion) => a.version_number - b.version_number
+                        ),
+                        documents: conv.documents || [],
+                    }));
+
+                    setLoadResult({
+                        appData: {
+                            conversations: conversationsWithDetails as Conversation[],
+                            profile: profileResult,
+                            templates: templatesResult,
+                        }
+                    });
+                }
+            } else {
+                setLoadResult({});
+            }
+            setIsLoading(false);
+        });
+        
+        return () => {
+            subscription?.unsubscribe();
+        };
     }, []);
 
 

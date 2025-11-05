@@ -1,7 +1,6 @@
-
 // components/DocumentWorkspace.tsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import type { Conversation, Template, MaturityReport, GeneratedDocs, Document, DocumentType, SourcedDocument, DocumentVersion } from '../types';
+import type { Conversation, Template, MaturityReport, GeneratedDocs, Document, DocumentType, SourcedDocument, DocumentVersion, IsBirimiTalep } from '../types';
 import { DocumentCanvas } from './DocumentCanvas';
 import { Visualizations } from './Visualizations';
 import { MaturityCheckReport } from './MaturityCheckReport';
@@ -11,6 +10,8 @@ import { geminiService } from '../services/geminiService';
 import type { DocumentImpactAnalysis } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
 import { GanttChartSquare, Projector, RefreshCw, Check, FileText, Beaker, GitBranch, FileInput, CheckSquare } from 'lucide-react';
+import { RequestDocumentViewer } from './RequestDocumentViewer';
+import { isIsBirimiTalep } from '../types';
 
 
 function usePrevious<T>(value: T): T | undefined {
@@ -106,6 +107,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     const [isVisualizing, setIsVisualizing] = useState(false);
     const [vizError, setVizError] = useState<string | null>(null);
     const [isAnalyzingChange, setIsAnalyzingChange] = useState(false);
+    const [parsedRequestDoc, setParsedRequestDoc] = useState<IsBirimiTalep | null>(null);
     
     const { generatedDocs, id: conversationId } = conversation;
     const prevAnalysisDoc = usePrevious(generatedDocs.analysisDoc);
@@ -118,6 +120,23 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             .eq('document_type', docType);
         if (error) console.error(`Failed to update staleness for ${docType}:`, error);
     };
+
+    useEffect(() => {
+        if (generatedDocs.requestDoc) {
+            try {
+                const parsed = JSON.parse(generatedDocs.requestDoc);
+                if (isIsBirimiTalep(parsed)) {
+                    setParsedRequestDoc(parsed);
+                } else {
+                    setParsedRequestDoc(null);
+                }
+            } catch (e) {
+                setParsedRequestDoc(null);
+            }
+        } else {
+            setParsedRequestDoc(null);
+        }
+    }, [generatedDocs.requestDoc]);
 
     useEffect(() => {
         if (prevAnalysisDoc !== undefined && generatedDocs.analysisDoc !== prevAnalysisDoc && !isProcessing) {
@@ -229,9 +248,16 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             </div>
             
             <div className="flex-1 overflow-y-auto relative min-h-0">
-                {activeDocTab === 'request' && (generatedDocs.requestDoc ?
-                    <DocumentCanvas key="request" content={generatedDocs.requestDoc} onContentChange={(newContent, reason) => onUpdateDocument('requestDoc', newContent, reason)} docKey="analysisDoc" onModifySelection={onModifySelection} inlineModificationState={inlineModificationState} isGenerating={isProcessing} isStreaming={false} filename={`${conversation.title}-talep`} documentVersions={conversation.documentVersions} onAddTokens={onAddTokens} onRestoreVersion={onRestoreVersion} />
-                    : <DocumentEmptyState icon={<FileInput />} title="Talep Dokümanı" description="Yeni bir sohbete başladığınızda veya uzun bir metin yapıştırdığınızda burası otomatik olarak dolacaktır." buttonText="" onAction={()=>{}} isDisabled={true} />
+                {activeDocTab === 'request' && (
+                    generatedDocs.requestDoc ? (
+                        parsedRequestDoc ? (
+                            <RequestDocumentViewer document={parsedRequestDoc} />
+                        ) : (
+                            <DocumentCanvas key="request" content={generatedDocs.requestDoc} onContentChange={(newContent, reason) => onUpdateDocument('requestDoc', newContent, reason)} docKey="analysisDoc" onModifySelection={onModifySelection} inlineModificationState={inlineModificationState} isGenerating={isProcessing} isStreaming={false} filename={`${conversation.title}-talep`} documentVersions={conversation.documentVersions} onAddTokens={onAddTokens} onRestoreVersion={onRestoreVersion} />
+                        )
+                    ) : (
+                        <DocumentEmptyState icon={<FileInput />} title="Talep Dokümanı" description="Yeni bir sohbete başladığınızda veya uzun bir metin yapıştırdığınızda burası otomatik olarak dolacaktır." buttonText="" onAction={()=>{}} isDisabled={true} />
+                    )
                 )}
                 {activeDocTab === 'analysis' && (generatedDocs.analysisDoc ?
                     <DocumentCanvas key="analysis" content={generatedDocs.analysisDoc} onContentChange={(newContent, reason) => onUpdateDocument('analysisDoc', newContent, reason)} docKey="analysisDoc" onModifySelection={onModifySelection} inlineModificationState={inlineModificationState} isGenerating={isProcessing} isStreaming={generatingDocType === 'analysis'} templates={templates.analysis} selectedTemplate={selectedTemplates.analysis} onTemplateChange={onTemplateChange.analysis} filename={`${conversation.title}-analiz`} documentVersions={conversation.documentVersions} onAddTokens={onAddTokens} onRestoreVersion={onRestoreVersion} />

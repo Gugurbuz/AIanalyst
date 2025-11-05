@@ -19,6 +19,7 @@ const defaultGeneratedDocs: GeneratedDocs = {
     isBacklogStale: false,
 };
 
+// @FIX: Add 'visualization' key to map to 'visualization' property, satisfying the Record<DocumentType, ...> type requirement.
 const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs> = {
     request: 'requestDoc',
     analysis: 'analysisDoc',
@@ -27,6 +28,7 @@ const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs> = {
     mermaid: 'mermaidViz',
     bpmn: 'bpmnViz',
     maturity_report: 'maturityReport',
+    visualization: 'visualization',
 };
 
 const keyToDocumentTypeMap: Record<keyof GeneratedDocs, DocumentType | null> = {

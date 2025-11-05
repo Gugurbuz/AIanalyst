@@ -12,6 +12,7 @@ interface ChatMessageHistoryProps {
   ) => void;
   onEditLastUserMessage: () => void;
   onApplySuggestion: (suggestion: GenerativeSuggestion, messageId: string) => void;
+  onRetry: (failedAssistantMessageId: string) => void;
 }
 
 export const ChatMessageHistory: React.FC<ChatMessageHistoryProps> = ({
@@ -20,6 +21,7 @@ export const ChatMessageHistory: React.FC<ChatMessageHistoryProps> = ({
   onFeedbackUpdate, // Prop'u burada alıyoruz
   onEditLastUserMessage,
   onApplySuggestion,
+  onRetry,
 }) => {
   const visibleMessages = chatHistory.filter(
     (msg) => msg && msg.role !== 'system'
@@ -57,6 +59,7 @@ export const ChatMessageHistory: React.FC<ChatMessageHistoryProps> = ({
             onFeedback={onFeedbackUpdate}
             isFirstInGroup={isFirstInGroup}
             isLastInGroup={isLastInGroup}
+            onRetry={onRetry}
           />
         );
       })}

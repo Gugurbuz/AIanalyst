@@ -13,7 +13,8 @@ const getApiKey = (): string => {
 
 export type StreamChunk = 
     | { type: 'text_chunk'; text: string }
-    | { type: 'doc_stream_chunk'; docKey: 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix'; chunk: string }
+    // FIX: Add 'requestDoc' to the docKey union type to allow streaming this document type.
+    | { type: 'doc_stream_chunk'; docKey: 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix' | 'requestDoc'; chunk: string }
     | { type: 'visualization_update'; content: string; }
     | { type: 'chat_response'; content: string }
     | { type: 'chat_stream_chunk'; chunk: string }
@@ -83,7 +84,54 @@ const convertMessagesToGeminiFormat = (history: Message[]): Content[] => {
     }));
 };
 
-const tools: FunctionDeclaration[] = [ /* tools definition remains the same */ ];
+const tools: FunctionDeclaration[] = [
+    {
+        name: 'generateAnalysisDocument',
+        description: 'Kullanıcı bir dokümanı "güncelle", "oluştur", "yeniden yaz" veya "yeniden oluştur" gibi bir komut verdiğinde BU ARACI KULLAN. Araç, mevcut konuşma geçmişini ve talebi kullanarak tam bir iş analizi dokümanı JSON nesnesi üretir.',
+        parameters: {
+            type: Type.OBJECT,
+            properties: {}, // No parameters needed, it uses context
+        },
+    },
+    {
+        name: 'saveRequestDocument',
+        description: 'Kullanıcının ilk talebi netleştiğinde, bu talebi özetlemek ve "Talep Dokümanı" olarak OTOMATİK OLARAK KAYDETMEK için kullanılır. Kullanıcıdan onay isteme, doğrudan bu aracı çağır. Bu araç, sadece sohbetin başında, ilk talep oluşturulurken kullanılmalıdır.',
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                request_summary: {
+                    type: Type.STRING,
+                    description: 'Kullanıcının ilk talebinin kısa ve net bir özeti.'
+                }
+            },
+            required: ['request_summary'],
+        },
+    },
+    {
+        name: 'generateTestScenarios',
+        description: 'Kullanıcı test senaryoları oluşturulmasını istediğinde veya analiz dokümanı yeterince olgunlaştığında bu aracı kullan. Mevcut analiz dokümanından test senaryoları oluşturur.',
+        parameters: {
+            type: Type.OBJECT,
+            properties: {},
+        },
+    },
+    {
+        name: 'generateTraceabilityMatrix',
+        description: 'Kullanıcı gereksinimler ve testler arasında bir izlenebilirlik matrisi istediğinde veya hem analiz hem de test dokümanları mevcut olduğunda bu aracı kullan.',
+        parameters: {
+            type: Type.OBJECT,
+            properties: {},
+        },
+    },
+    {
+        name: 'generateVisualization',
+        description: 'Kullanıcı süreç akışını görselleştirmek istediğinde veya bir süreci "çiz", "görselleştir" veya "diyagramını yap" dediğinde bu aracı kullan.',
+        parameters: {
+            type: Type.OBJECT,
+            properties: {},
+        },
+    }
+];
 
 export const parseStreamingResponse = (content: string): { thinking: string | null; response: string } => {
     const response = content.replace(/<dusunce>[\s\S]*?<\/dusunce>/g, '').trim();
@@ -130,6 +178,33 @@ const analysisSchema = {
     required: ['sections'],
 };
 
+const isBirimiTalepSchema = {
+    type: Type.OBJECT,
+    properties: {
+        dokumanTipi: { type: Type.STRING, enum: ["IsBirimiTalep"] },
+        dokumanNo: { type: Type.STRING },
+        tarih: { type: Type.STRING },
+        revizyon: { type: Type.STRING },
+        talepAdi: { type: Type.STRING },
+        talepSahibi: { type: Type.STRING },
+        mevcutDurumProblem: { type: Type.STRING },
+        talepAmaciGerekcesi: { type: Type.STRING },
+        kapsam: {
+            type: Type.OBJECT,
+            properties: {
+                inScope: { type: Type.ARRAY, items: { type: Type.STRING } },
+                outOfScope: { type: Type.ARRAY, items: { type: Type.STRING } },
+            },
+            required: ['inScope', 'outOfScope']
+        },
+        beklenenIsFaydalari: { type: Type.ARRAY, items: { type: Type.STRING } },
+    },
+    required: [
+        'dokumanTipi', 'dokumanNo', 'tarih', 'revizyon', 'talepAdi', 'talepSahibi',
+        'mevcutDurumProblem', 'talepAmaciGerekcesi', 'kapsam', 'beklenenIsFaydalari'
+    ]
+};
+
 
 export const geminiService = {
     handleUserMessageStream: async function* (history: Message[], generatedDocs: GeneratedDocs, templates: { analysis: string; test: string; traceability: string; visualization: string; }, model: GeminiModel): AsyncGenerator<StreamChunk> {
@@ -174,12 +249,16 @@ export const geminiService = {
                     try {
                         if (functionName === 'generateAnalysisDocument') {
                             yield { type: 'status_update', message: 'Analiz dokümanı hazırlanıyor...' };
-                            const docStream = this.generateAnalysisDocument(generatedDocs.requestDoc, history, templates.analysis, model);
-                            for await (const docChunk of docStream) yield docChunk;
-                            yield { type: 'chat_stream_chunk', chunk: "İş analizi dokümanını oluşturdum. Çalışma alanından inceleyebilirsiniz." };
+                            const { json, tokens } = await this.generateAnalysisDocument(generatedDocs.requestDoc, history, templates.analysis, model);
+                            yield { type: 'usage_update', tokens };
+                            yield { type: 'doc_stream_chunk', docKey: 'analysisDoc', chunk: json };
+                            yield { type: 'chat_stream_chunk', chunk: "İş analizi dokümanını güncelledim. Çalışma alanından inceleyebilirsiniz." };
                         } else if (functionName === 'saveRequestDocument') {
                             const args = fc.args as { request_summary: string };
-                            if (args.request_summary) yield { type: 'request_confirmation', summary: args.request_summary };
+                            if (args.request_summary) {
+                                // This now directly yields the content to be saved, removing the modal confirmation step.
+                                yield { type: 'doc_stream_chunk', docKey: 'requestDoc', chunk: args.request_summary };
+                            }
                         } else if (functionName === 'generateTestScenarios') {
                             yield { type: 'status_update', message: 'Test senaryoları hazırlanıyor...' };
                             const docStream = this.generateTestScenarios(generatedDocs.analysisDoc, templates.test, model);
@@ -466,21 +545,23 @@ export const geminiService = {
         return { code: match ? match[1].trim() : text, tokens };
     },
 
-    generateAnalysisDocument: async function* (requestDoc: string, history: Message[], template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
+    generateAnalysisDocument: async (requestDoc: string, history: Message[], template: string, model: GeminiModel): Promise<{ json: string, tokens: number }> => {
         const prompt = template
             .replace('{request_document_content}', requestDoc)
             .replace('{conversation_history}', JSON.stringify(history.filter(m => m.role === 'user' || m.role === 'assistant'), null, 2));
-        const stream = generateContentStream(prompt, model, { responseMimeType: "application/json", responseSchema: analysisSchema });
-        let totalTokens = 0;
-        for await (const chunk of stream) {
-            if (chunk.text) {
-                yield { type: 'doc_stream_chunk', docKey: 'analysisDoc', chunk: chunk.text };
-            }
-            if (chunk.usageMetadata?.totalTokenCount) {
-                totalTokens = chunk.usageMetadata.totalTokenCount;
-            }
+
+        const config = { responseMimeType: "application/json", responseSchema: analysisSchema };
+        
+        const { text: jsonString, tokens } = await generateContent(prompt, model, config);
+        
+        try {
+            JSON.parse(jsonString);
+        } catch(e) {
+            console.error("Generated analysis document is not valid JSON", jsonString);
+            throw new Error("AI, geçersiz bir doküman yapısı döndürdü. Lütfen tekrar deneyin.");
         }
-        if (totalTokens > 0) yield { type: 'usage_update', tokens: totalTokens };
+
+        return { json: jsonString, tokens };
     },
 
     generateTestScenarios: async function* (analysisDoc: string, template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
@@ -537,6 +618,21 @@ export const geminiService = {
         } catch (e) {
             console.error("Failed to parse feature suggestions:", e);
             return { suggestions: [], tokens };
+        }
+    },
+    
+    parseTextToRequestDocument: async (rawText: string): Promise<{ jsonString: string, tokens: number }> => {
+        const prompt = promptService.getPrompt('parseTextToRequestDocument').replace('{raw_text}', rawText);
+        const config = { responseMimeType: "application/json", responseSchema: isBirimiTalepSchema };
+        const { text: jsonString, tokens } = await generateContent(prompt, 'gemini-2.5-flash', config);
+        try {
+            // Validate that the output is valid JSON before returning
+            JSON.parse(jsonString);
+            return { jsonString, tokens };
+        } catch (e) {
+            console.error("Failed to parse IsBirimiTalep JSON:", e, "Received string:", jsonString);
+            // Fallback to just saving the raw text if parsing fails
+            throw new Error("AI, metni yapısal bir talep dokümanına dönüştüremedi.");
         }
     },
 };

@@ -4,7 +4,7 @@ import { useState, useRef, useCallback } from 'react';
 import type { Theme, GeminiModel, GeneratedDocs } from '../types';
 
 export const useUIState = () => {
-    const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'dark');
+    const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'light');
     const [currentView, setCurrentView] = useState<'analyst' | 'backlog'>('analyst');
     const [isConversationListOpen, setIsConversationListOpen] = useState(false);
     const [isWorkspaceVisible, setIsWorkspaceVisible] = useState(true);
@@ -25,7 +25,6 @@ export const useUIState = () => {
     const [displayedMaturityScore, setDisplayedMaturityScore] = useState<{ score: number; justification: string } | null>(null);
     const maturityScoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [longTextPrompt, setLongTextPrompt] = useState<{ content: string; callback: (choice: 'analyze' | 'save') => void } | null>(null);
-    const [requestConfirmation, setRequestConfirmation] = useState<{ summary: string } | null>(null);
     const [resetConfirmation, setResetConfirmation] = useState<{ changedDocKey: keyof GeneratedDocs; changedDocName: string; impactedDocNames: string[] } | null>(null);
     const [error, setError] = useState<string | null>(null);
     const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -89,8 +88,6 @@ export const useUIState = () => {
         maturityScoreTimerRef,
         longTextPrompt,
         setLongTextPrompt,
-        requestConfirmation,
-        setRequestConfirmation,
         resetConfirmation,
         setResetConfirmation,
         error,

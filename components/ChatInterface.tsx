@@ -1,4 +1,3 @@
-
 // FIX: Add type definitions for the experimental Web Speech API.
 // This resolves errors where 'SpeechRecognition' and 'webkitSpeechRecognition'
 // were not recognized by TypeScript.
@@ -53,7 +52,7 @@ declare global {
 }
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
-import { Paperclip, Mic, X, Send, StopCircle, Bot, Lightbulb } from 'lucide-react';
+import { Paperclip, Mic, X, Send, StopCircle, Bot, Lightbulb, Sparkles, BrainCircuit } from 'lucide-react';
 
 interface NextAction {
     label: string;
@@ -72,6 +71,10 @@ interface ChatInterfaceProps {
     onSuggestNextFeature: () => void;
     isConversationStarted: boolean;
     nextAction: NextAction;
+    isDeepAnalysisMode: boolean;
+    onDeepAnalysisModeChange: (isOn: boolean) => void;
+    isExpertMode: boolean;
+    setIsExpertMode: (isOn: boolean) => void;
 }
 
 // Helper to read file content as a promise
@@ -92,7 +95,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     initialText, 
     onSuggestNextFeature,
     isConversationStarted,
-    nextAction 
+    nextAction,
+    isDeepAnalysisMode,
+    onDeepAnalysisModeChange,
+    isExpertMode,
+    setIsExpertMode
 }) => {
     const [input, setInput] = useState('');
     const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -102,8 +109,32 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     const [isSpeechSupported, setIsSpeechSupported] = useState(false);
     const recognitionRef = useRef<SpeechRecognition | null>(null);
 
+    // --- Tools Menu State ---
+    const [isToolsMenuOpen, setIsToolsMenuOpen] = useState(false);
+    const toolsMenuRef = useRef<HTMLDivElement>(null);
+    const toolsButtonRef = useRef<HTMLButtonElement>(null);
+    
+    // --- Drag and Drop State ---
+    const [isDraggingOver, setIsDraggingOver] = useState(false);
+    const dragCounter = useRef(0);
+
+
     const fileInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+     // Effect for closing tools menu on outside click
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (
+                toolsMenuRef.current && !toolsMenuRef.current.contains(event.target as Node) &&
+                toolsButtonRef.current && !toolsButtonRef.current.contains(event.target as Node)
+            ) {
+                setIsToolsMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     // Effect for initializing and managing Speech Recognition
     useEffect(() => {
@@ -233,9 +264,69 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             handleSubmit(e as any);
         }
     }
+    
+    // --- Drag and Drop Handlers ---
+    const handleDragEnter = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current++;
+        if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+            setIsDraggingOver(true);
+        }
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter.current--;
+        if (dragCounter.current === 0) {
+            setIsDraggingOver(false);
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDraggingOver(false);
+        dragCounter.current = 0;
+
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const droppedFile = e.dataTransfer.files[0];
+            const allowedExtensions = ['.txt', '.md'];
+            const fileExtension = '.' + droppedFile.name.split('.').pop()?.toLowerCase();
+            
+            if (allowedExtensions.includes(fileExtension)) {
+                setAttachedFile(droppedFile);
+            } else {
+                alert('Geçersiz dosya türü. Lütfen .txt veya .md uzantılı bir dosya sürükleyin.');
+            }
+            e.dataTransfer.clearData();
+        }
+    };
+
 
     return (
-        <div className="w-full bg-white dark:bg-slate-800 rounded-lg p-3">
+        <div 
+            className="w-full bg-white dark:bg-slate-800 rounded-lg p-3 relative"
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+        >
+             {isDraggingOver && (
+                <div className="absolute inset-0 bg-indigo-50/80 dark:bg-indigo-900/40 border-4 border-dashed border-indigo-500 rounded-lg z-30 flex items-center justify-center pointer-events-none">
+                    <div className="text-center font-bold text-indigo-600 dark:text-indigo-300">
+                        <Paperclip className="h-8 w-8 mx-auto mb-2" />
+                        <p>Dosyayı buraya bırakın</p>
+                        <p className="text-sm font-normal">Sadece .txt veya .md dosyaları</p>
+                    </div>
+                </div>
+            )}
             <form onSubmit={handleSubmit} className="flex items-end space-x-3">
                  <input
                     type="file"
@@ -270,7 +361,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         </div>
                     )}
                     <div className="relative flex-1 flex items-end">
-                        <div className="absolute top-2 left-2 flex items-center gap-1">
+                        <div className="absolute top-2 left-2 flex items-center gap-1 z-10">
                              <button 
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
@@ -289,6 +380,53 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                             >
                                 <Lightbulb className="h-5 w-5" />
                             </button>
+                             <div className="relative">
+                                <button
+                                    ref={toolsButtonRef}
+                                    type="button"
+                                    onClick={() => setIsToolsMenuOpen(prev => !prev)}
+                                    title="AI Modları"
+                                    disabled={isLoading}
+                                    className={`p-1.5 rounded-full transition-colors disabled:opacity-50 ${isDeepAnalysisMode || isExpertMode ? 'text-indigo-500 bg-indigo-100 dark:bg-indigo-900/50' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'}`}
+                                >
+                                    <Sparkles className="h-5 w-5" />
+                                </button>
+                                {isToolsMenuOpen && (
+                                     <div ref={toolsMenuRef} className="absolute bottom-full mb-2 w-80 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 p-2 z-20">
+                                        <div className="p-2">
+                                            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-2">Modlar</h3>
+                                            <ul>
+                                                <li className="flex items-start justify-between p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700">
+                                                    <div className="flex items-start gap-3">
+                                                        <Bot className="h-5 w-5 text-indigo-500 mt-0.5" />
+                                                        <div>
+                                                            <label htmlFor="expert-mode-toggle-chat" className="font-semibold text-sm text-slate-700 dark:text-slate-300 cursor-pointer">Exper Modu</label>
+                                                            <p className="text-xs text-slate-500 dark:text-slate-400">AI'nın tüm analiz sürecini otomatik olarak yürütmesini sağlar.</p>
+                                                        </div>
+                                                    </div>
+                                                    <label className="relative inline-flex items-center cursor-pointer ml-2">
+                                                        <input type="checkbox" className="sr-only peer" checked={isExpertMode} onChange={(e) => setIsExpertMode(e.target.checked)} disabled={isLoading} />
+                                                        <div className="w-9 h-5 bg-slate-200 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-500 peer-checked:bg-indigo-600"></div>
+                                                    </label>
+                                                </li>
+                                                 <li className="flex items-start justify-between p-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700">
+                                                    <div className="flex items-start gap-3">
+                                                        <BrainCircuit className="h-5 w-5 text-indigo-500 mt-0.5" />
+                                                        <div>
+                                                            <label htmlFor="deep-analysis-toggle-chat" className="font-semibold text-sm text-slate-700 dark:text-slate-300 cursor-pointer">Derin Analiz</label>
+                                                            <p className="text-xs text-slate-500 dark:text-slate-400">Daha yavaş ama kapsamlı yanıtlar için gemini-2.5-pro modelini kullanır.</p>
+                                                        </div>
+                                                    </div>
+                                                    <label className="relative inline-flex items-center cursor-pointer ml-2">
+                                                        <input type="checkbox" className="sr-only peer" checked={isDeepAnalysisMode} onChange={(e) => onDeepAnalysisModeChange(e.target.checked)} disabled={isLoading} />
+                                                        <div className="w-9 h-5 bg-slate-200 rounded-full peer dark:bg-slate-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-slate-500 peer-checked:bg-indigo-600"></div>
+                                                    </label>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <textarea
                             ref={textareaRef}
@@ -297,7 +435,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                             onKeyDown={handleKeyDown}
                             placeholder="Bir iş analisti gibi sorun, Asisty yanıtlasın..."
                             disabled={isLoading}
-                            className="w-full py-4 pl-24 pr-12 bg-transparent focus:outline-none disabled:opacity-50 resize-none overflow-y-auto"
+                            className="w-full py-4 pl-36 pr-12 bg-transparent focus:outline-none disabled:opacity-50 resize-none overflow-y-auto"
                             style={{ lineHeight: '1.5rem', maxHeight: '256px' }}
                         />
                         <button
@@ -305,11 +443,27 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                             onClick={toggleListening}
                             title={isSpeechSupported ? (isListening ? 'Kaydı Durdur' : 'Sesle Yaz') : 'Tarayıcı desteklemiyor'}
                             disabled={isLoading || !isSpeechSupported}
-                            className={`absolute right-3 bottom-3 p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors ${isListening ? 'text-red-500 animate-pulse' : ''}`}
+                            className={`absolute right-3 bottom-3 p-1.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors ${isListening ? 'bg-red-100 dark:bg-red-800 text-red-600 animate-pulse' : ''}`}
                         >
                             <Mic className="h-5 w-5" />
                         </button>
                     </div>
+                     {(isExpertMode || isDeepAnalysisMode) && (
+                        <div className="flex flex-wrap items-center gap-2 px-3 py-2 text-xs border-t border-slate-200 dark:border-slate-600">
+                            {isExpertMode && (
+                                <div className="flex items-center gap-1.5 px-2 py-1 bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200 rounded-full font-medium">
+                                    <Bot className="h-3.5 w-3.5" />
+                                    Exper Modu
+                                </div>
+                            )}
+                            {isDeepAnalysisMode && (
+                                <div className="flex items-center gap-1.5 px-2 py-1 bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200 rounded-full font-medium">
+                                    <BrainCircuit className="h-3.5 w-3.5" />
+                                    Derin Analiz
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
                  {isLoading ? (
                      <button
