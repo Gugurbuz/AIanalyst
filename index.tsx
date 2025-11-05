@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
@@ -37,7 +38,7 @@ export interface AppData {
 
 const Main = () => {
     const [isLoading, setIsLoading] = useState(true);
-    const [session, setSession] = useState<Session | null>(null);
+    const [session, setSession] = useState<Session | null | undefined>(undefined);
     const [authFlowStep, setAuthFlowStep] = useState<'landing' | 'login' | 'signup'>('landing');
 
     const [loadResult, setLoadResult] = useState<{
@@ -46,44 +47,73 @@ const Main = () => {
         appData?: AppData;
     }>({});
     
+    // Effect 1: Handle auth state and public share links. Runs once.
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const shareId = urlParams.get('share');
 
         if (shareId) {
             const fetchPublicData = async () => {
-                const { data, error } = await supabase
-                    .from('conversations')
-                    .select('*, conversation_details(*), documents(*), document_versions(*)')
-                    .eq('share_id', shareId)
-                    .eq('is_shared', true)
-                    .single();
+                try {
+                    const { data, error } = await supabase
+                        .from('conversations')
+                        .select('*, conversation_details(*), documents(*), document_versions(*)')
+                        .eq('share_id', shareId)
+                        .eq('is_shared', true)
+                        .single();
 
-                if (error || !data) {
-                    setLoadResult({ error: 'Bu analize erişilemiyor. Linkin doğru olduğundan emin olun veya paylaşım ayarları değiştirilmiş olabilir.' });
-                } else {
-                    const convWithDetails = {
-                        ...data,
-                        messages: (data.conversation_details || []).sort(
-                            (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                        ),
-                        documents: data.documents || [],
-                        documentVersions: (data.document_versions || []).sort(
-                            (a: DocumentVersion, b: DocumentVersion) => a.version_number - b.version_number
-                        )
-                    };
-                    setLoadResult({ publicConversation: convWithDetails as Conversation });
+                    if (error || !data) {
+                        setLoadResult({ error: 'Bu analize erişilemiyor. Linkin doğru olduğundan emin olun veya paylaşım ayarları değiştirilmiş olabilir.' });
+                    } else {
+                        const convWithDetails = {
+                            ...data,
+                            messages: (data.conversation_details || []).sort(
+                                (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                            ),
+                            documents: data.documents || [],
+                            documentVersions: (data.document_versions || []).sort(
+                                (a: DocumentVersion, b: DocumentVersion) => a.version_number - b.version_number
+                            )
+                        };
+                        setLoadResult({ publicConversation: convWithDetails as Conversation });
+                    }
+                } catch (e) {
+                    setLoadResult({ error: e instanceof Error ? e.message : 'Veri yüklenirken bir hata oluştu.' });
+                } finally {
+                    setIsLoading(false);
                 }
-                setIsLoading(false);
             };
             fetchPublicData();
-            return () => {}; // No subscription to clean up
+            return; 
         }
 
-        // Normal authentication flow
-        const { data: { subscription } } = authService.onAuthStateChange(async (_event, session) => {
+        // If not a public link, set up the auth listener.
+        const { data: { subscription } } = authService.onAuthStateChange((_event, session) => {
             setSession(session);
-            if (session) {
+        });
+
+        return () => {
+            subscription?.unsubscribe();
+        };
+    }, []);
+
+    // Effect 2: Load data based on session state.
+    useEffect(() => {
+        // Don't do anything until the session has been checked, or if it's a public share view.
+        const urlParams = new URLSearchParams(window.location.search);
+        if (session === undefined || urlParams.get('share')) {
+            return;
+        }
+
+        const loadAppData = async () => {
+            if (!session) {
+                setLoadResult({});
+                setIsLoading(false);
+                return;
+            }
+            
+            setIsLoading(true);
+            try {
                 const [profileResult, conversationsResult, templatesResult] = await Promise.all([
                     authService.getProfile(session.user.id),
                     supabase
@@ -93,7 +123,7 @@ const Main = () => {
                         .order('created_at', { ascending: false }),
                     authService.fetchTemplates(session.user.id)
                 ]);
-                
+
                 if (conversationsResult.error) {
                     setLoadResult({ error: 'Sohbetler yüklenirken bir hata oluştu.' });
                 } else {
@@ -116,16 +146,16 @@ const Main = () => {
                         }
                     });
                 }
-            } else {
-                setLoadResult({});
+            } catch (error) {
+                console.error("Uygulama yüklenirken hata oluştu:", error);
+                setLoadResult({ error: error instanceof Error ? error.message : "Beklenmedik bir hata oluştu." });
+            } finally {
+                setIsLoading(false);
             }
-            setIsLoading(false);
-        });
-        
-        return () => {
-            subscription?.unsubscribe();
         };
-    }, []);
+
+        loadAppData();
+    }, [session]);
 
 
     if (isLoading) {
