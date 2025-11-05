@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient, Session } from '@supabase/supabase-js';
 
 /**
  * Creates a mock Supabase client that prevents the app from crashing
@@ -43,9 +43,16 @@ function createMockClient(): SupabaseClient {
             signOut: () => Promise.resolve({ error: null }),
             getUser: () => Promise.resolve({ data: { user: null }, error: null }),
             getSession: () => Promise.resolve({ data: { session: null }, error: null }),
-            onAuthStateChange: (_callback: any) => ({
-                data: { subscription: { unsubscribe: () => {} } },
-            }),
+            onAuthStateChange: (callback: (event: string, session: Session | null) => void) => {
+                // To prevent an infinite loading state, we must invoke the callback.
+                // We simulate the initial check by calling it asynchronously with a null session.
+                setTimeout(() => {
+                    callback('INITIAL_SESSION', null);
+                }, 0);
+                return {
+                    data: { subscription: { unsubscribe: () => {} } },
+                };
+            },
         },
         // Add other top-level properties to satisfy the SupabaseClient type.
         storage: {},

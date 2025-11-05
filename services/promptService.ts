@@ -88,8 +88,8 @@ Amacın, kullanıcının aklındakileri somut bir talebe dönüştürmesine yard
             versionId: 'default',
             name: 'Varsayılan',
             createdAt: new Date().toISOString(),
-            prompt: `Bir uzman iş analisti olarak, sana verilen **Talep Dokümanı** ve **Konuşma Geçmişi**'ni kullanarak, daha önce sana verdiğim JSON şemasına uygun bir iş analizi dokümanı JSON nesnesi oluştur. Mevcut bilgileri kullanarak şablondaki ilgili alanları doldur. Bilinmeyen veya konuşmada geçmeyen yerler için "[Belirlenecek]" metnini kullan. Sadece ve sadece bu JSON nesnesini bir string olarak döndür. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
-        
+            prompt: `Bir uzman iş analisti olarak, sana verilen **Talep Dokümanı** ve **Konuşma Geçmişi**'ni kullanarak, aşağıdaki JSON ŞABLONUNU doldurarak bir iş analizi dokümanı oluştur. Şablonun yapısını veya başlıklarını DEĞİŞTİRME. Sadece içeriği doldur. Eğer bir bölüm için bilgi yoksa, o bölümün 'content' alanına "[Belirlenecek]" yaz. Tüm gereksinim ID'lerini "REQ-" ön ekiyle başlat (örn: "REQ-R01"). Sadece ve sadece bu doldurulmuş JSON nesnesini bir string olarak döndür. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
+
 **Talep Dokümanı:**
 ---
 {request_document_content}
@@ -98,7 +98,121 @@ Amacın, kullanıcının aklındakileri somut bir talebe dönüştürmesine yard
 **Konuşma Geçmişi:**
 ---
 {conversation_history}
----`,
+---
+
+**DOLDURULACAK JSON ŞABLONU:**
+\`\`\`json
+{
+  "sections": [
+    {
+      "title": "Proje Özeti",
+      "content": "[Proje özetini buraya yazın]"
+    },
+    {
+      "title": "Talep Sahibi",
+      "content": "[Talep sahibini buraya yazın]"
+    },
+    {
+      "title": "İş Problemi ve Hedefler",
+      "subSections": [
+        {
+          "title": "İş Problemi",
+          "content": "[İş problemini detaylıca buraya yazın]"
+        },
+        {
+          "title": "Proje Hedefi",
+          "content": "[Proje hedefini detaylıca buraya yazın]"
+        }
+      ]
+    },
+    {
+      "title": "Kapsam",
+      "subSections": [
+        {
+          "title": "Kapsam İçi",
+          "content": "[Kapsam içi maddeleri Markdown listesi olarak buraya yazın]"
+        },
+        {
+          "title": "Kapsam Dışı",
+          "content": "[Kapsam dışı maddeleri Markdown listesi olarak buraya yazın]"
+        }
+      ]
+    },
+    {
+      "title": "Başarı Ölçütleri (Hipotez)",
+       "subSections": [
+        {
+          "title": "Ölçütler",
+          "content": "[BC-001, BC-002 gibi başarı ölçütlerini Markdown listesi olarak buraya yazın]"
+        }
+      ]
+    },
+    {
+      "title": "Mevcut Durum Analizi",
+      "subSections": [
+        { "title": "Mevcut Bildirim Kanalları ve Süreçleri", "content": "[Belirlenecek]" },
+        { "title": "Mevcut Rıza Yönetimi", "content": "[Belirlenecek]" },
+        { "title": "Mevcut Veri Kaynakları", "content": "[Belirlenecek]" }
+      ]
+    },
+    {
+      "title": "Yeni Sistem Gereksinimleri",
+      "content": "Bu bölümde, projenin hedeflerine ulaşmak için geliştirilmesi gereken sistem özelliklerine dair gereksinimler bulunmaktadır.",
+      "subSections": [
+        {
+          "title": "Rıza Yönetimi",
+          "content": "Müşterilerin iletişim rızalarının toplanması ve yönetilmesi, hangi kanaldan hangi tür bildirim almak istediğini seçebilme özelliği sağlanmalıdır.",
+          "requirements": [
+            { "id": "REQ-R01", "text": "Müşterilerin iletişim rızalarını (SMS, e-posta, push) yönetebilmeleri sağlanmalıdır." },
+            { "id": "REQ-R02", "text": "Müşteriler, almak istedikleri bildirim türlerini (planlı, plansız, başlangıç, bitiş, güncelleme vb.) seçebilmelidir." }
+          ]
+        },
+        {
+          "title": "Veri Kaynakları ve Entegrasyon",
+          "content": "Kesinti bilgileri (planlı/plansız, başlangıç/bitiş zamanı, etkilenen bölge vb.) ve müşteri iletişim bilgileri (telefon, e-posta, push token vb.) için entegrasyonlar gereklidir.",
+          "requirements": [
+             { "id": "REQ-V01", "text": "Kesinti bilgileri (planlı/plansız, başlangıç/bitiş zamanı, etkilenen bölge) ilgili sistemlerden alınmalıdır. (Kaynak sistem [Belirlenecek])." },
+             { "id": "REQ-V02", "text": "Müşteri iletişim bilgileri (telefon, e-posta, push token) ilgili sistemlerden alınmalıdır. (Kaynak sistem [Belirlenecek])." },
+             { "id": "REQ-V03", "text": "Kesinti ve müşteri bilgileri arasında entegrasyon sağlanmalıdır." }
+          ]
+        },
+        {
+          "title": "İletişim İçerikleri",
+          "content": "Bildirim mesajlarının içeriği planlı, plansız, başlangıç, bitiş, güncelleme senaryoları için tanımlanmalı ve dinamik alanlar içermelidir.",
+          "requirements": [
+            { "id": "REQ-I01", "text": "Planlı kesinti başlangıç bildirim içeriği tanımlanmalıdır." },
+            { "id": "REQ-I02", "text": "Plansız kesinti başlangıç bildirim içeriği tanımlanmalıdır." },
+            { "id": "REQ-I03", "text": "Kesinti bitiş bildirim içeriği tanımlanmalıdır." },
+            { "id": "REQ-I04", "text": "Kesinti güncelleme bildirim içeriği tanımlanmalıdır." },
+            { "id": "REQ-I05", "text": "Bildirim içerikleri dinamik alanlar (kesinti süresi, etkilenen mahalle vb.) içerebilmelidir." }
+          ]
+        },
+        {
+          "title": "Kanal Önceliklendirme ve Yedeklilik",
+          "content": "Müşterinin birden fazla iletişim rızası olması durumunda kanal önceliği ve bildirim başarısızlığı durumunda yedek kanal kullanımı belirlenmelidir.",
+          "requirements": [
+            { "id": "REQ-K01", "text": "Müşterinin birden fazla iletişim kanalı rızası olması durumunda bir kanal önceliklendirme mekanizması tanımlanmalıdır. (Öncelik sırası [Belirlenecek])" },
+            { "id": "REQ-K02", "text": "Bir kanal üzerinden bildirim başarısız olursa yedek bir kanal üzerinden bildirim gönderme mekanizması tanımlanmalıdır." }
+          ]
+        },
+        {
+          "title": "Geri Bildirim ve Şikayet Yönetimi",
+          "content": "Müşterilerin bildirimlere ilişkin geri bildirim ve şikayetlerini alacak bir mekanizma oluşturulmalıdır. Bu geri bildirimler süreç iyileştirme için kullanılmalıdır.",
+          "requirements": [
+            { "id": "REQ-G01", "text": "Müşterilerin bildirimlere ilişkin geri bildirimlerini iletebileceği bir kanal sağlanmalıdır. (Kanal [Belirlenecek])" },
+            { "id": "REQ-G02", "text": "Geri bildirimler, süreç iyileştirme amaçlı analiz edilebilir ve raporlanabilir olmalıdır." }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Zaman Çizelgesi ve Bütçe",
+      "content": "[Belirlenecek]"
+    }
+  ]
+}
+\`\`\`
+`,
           },
         ],
         activeVersionId: 'default',
