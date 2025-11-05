@@ -1,7 +1,7 @@
 // services/geminiService.ts
 
 import { GoogleGenAI, Type, Content, FunctionDeclaration, GenerateContentResponse } from "@google/genai";
-import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep, GenerativeSuggestion, LintingIssue, SourcedDocument, StructuredAnalysisDoc } from '../types';
+import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep, GenerativeSuggestion, LintingIssue, SourcedDocument, StructuredAnalysisDoc, VizData } from '../types';
 import { promptService } from './promptService';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -14,7 +14,7 @@ const getApiKey = (): string => {
 export type StreamChunk = 
     | { type: 'text_chunk'; text: string }
     // FIX: Add 'requestDoc' to the docKey union type to allow streaming this document type.
-    | { type: 'doc_stream_chunk'; docKey: 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix' | 'requestDoc'; chunk: string }
+    | { type: 'doc_stream_chunk'; docKey: 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix' | 'requestDoc' | 'mermaidViz' | 'bpmnViz'; chunk: any }
     | { type: 'visualization_update'; content: string; }
     | { type: 'chat_response'; content: string }
     | { type: 'chat_stream_chunk'; chunk: string }
@@ -211,7 +211,6 @@ export const geminiService = {
         let totalTokens = 0;
         try {
             const ai = new GoogleGenAI({ apiKey: getApiKey() });
-
             const hasRequestDoc = !!generatedDocs.requestDoc?.trim();
             const hasRealAnalysisDoc = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
             const isStartingConversation = !hasRequestDoc && !hasRealAnalysisDoc && history.filter(m => m.role !== 'system').length <= 1;
@@ -228,56 +227,87 @@ export const geminiService = {
                 config: { systemInstruction, tools: [{ functionDeclarations: tools }] }
             });
 
+            let fullText = "";
             let functionCalls: any[] = [];
-            let firstChunkProcessed = false;
-            
+
             for await (const chunk of responseStream) {
                 if (chunk.usageMetadata?.totalTokenCount) totalTokens = chunk.usageMetadata.totalTokenCount;
-
-                if (!firstChunkProcessed) {
-                    firstChunkProcessed = true;
-                    if (chunk.functionCalls) functionCalls = chunk.functionCalls;
+                if (chunk.text) {
+                    fullText += chunk.text;
+                    yield { type: 'chat_stream_chunk', chunk: chunk.text };
                 }
-                
-                if (functionCalls.length > 0) break; 
-                if (chunk.text) yield { type: 'chat_stream_chunk', chunk: chunk.text };
+                if (chunk.functionCalls) {
+                    functionCalls.push(...chunk.functionCalls);
+                }
             }
 
             if (functionCalls.length > 0) {
+                 if (fullText.trim()) { // Clear the streamed text if a tool is being called
+                    yield { type: 'chat_response', content: '' };
+                 }
+
                 for (const fc of functionCalls) {
                     const functionName = fc.name;
+                    let step: ExpertStep | null = null;
+                    
                     try {
+                        // Announce the action
+                        switch (functionName) {
+                            case 'generateAnalysisDocument':
+                                step = { id: 'analysis', name: 'İş Analizi Dokümanı Oluşturma', status: 'in_progress' };
+                                break;
+                            case 'generateTestScenarios':
+                                step = { id: 'test', name: 'Test Senaryoları Oluşturma', status: 'in_progress' };
+                                break;
+                            case 'generateTraceabilityMatrix':
+                                step = { id: 'traceability', name: 'İzlenebilirlik Matrisi Oluşturma', status: 'in_progress' };
+                                break;
+                            case 'generateVisualization':
+                                step = { id: 'viz', name: 'Süreç Akışını Görselleştirme', status: 'in_progress' };
+                                break;
+                        }
+                        if (step) {
+                            yield { type: 'expert_run_update', checklist: [step], isComplete: false };
+                        }
+
+                        // Execute the action
                         if (functionName === 'generateAnalysisDocument') {
-                            yield { type: 'status_update', message: 'Analiz dokümanı hazırlanıyor...' };
                             const { json, tokens } = await this.generateAnalysisDocument(generatedDocs.requestDoc, history, templates.analysis, model);
                             yield { type: 'usage_update', tokens };
                             yield { type: 'doc_stream_chunk', docKey: 'analysisDoc', chunk: json };
-                            yield { type: 'chat_stream_chunk', chunk: "İş analizi dokümanını güncelledim. Çalışma alanından inceleyebilirsiniz." };
                         } else if (functionName === 'saveRequestDocument') {
                             const args = fc.args as { request_summary: string };
                             if (args.request_summary) {
-                                // This now directly yields the content to be saved, removing the modal confirmation step.
                                 yield { type: 'doc_stream_chunk', docKey: 'requestDoc', chunk: args.request_summary };
                             }
                         } else if (functionName === 'generateTestScenarios') {
-                            yield { type: 'status_update', message: 'Test senaryoları hazırlanıyor...' };
                             const docStream = this.generateTestScenarios(generatedDocs.analysisDoc, templates.test, model);
                             for await (const docChunk of docStream) yield docChunk;
-                            yield { type: 'chat_stream_chunk', chunk: "Test senaryolarını oluşturdum. Çalışma alanından inceleyebilirsiniz." };
                         } else if (functionName === 'generateTraceabilityMatrix') {
-                            yield { type: 'status_update', message: 'İzlenebilirlik matrisi oluşturuluyor...' };
                             const testContent = typeof generatedDocs.testScenarios === 'object' ? generatedDocs.testScenarios.content : generatedDocs.testScenarios;
                             const docStream = this.generateTraceabilityMatrix(generatedDocs.analysisDoc, testContent, templates.traceability, model);
                             for await (const docChunk of docStream) yield docChunk;
-                            yield { type: 'chat_stream_chunk', chunk: "İzlenebilirlik matrisini oluşturdum. Çalışma alanından inceleyebilirsiniz." };
                         } else if (functionName === 'generateVisualization') {
-                            yield { type: 'status_update', message: 'Süreç akışı görselleştiriliyor...' };
                             const { code, tokens: vizTokens } = await this.generateDiagram(generatedDocs.analysisDoc, 'mermaid', templates.visualization, model);
                             yield { type: 'usage_update', tokens: vizTokens };
                             yield { type: 'visualization_update', content: code };
-                            yield { type: 'chat_stream_chunk', chunk: "Süreç akış diyagramını oluşturdum. Çalışma alanından inceleyebilirsiniz." };
                         }
+
+                        // Announce completion
+                        if (step) {
+                            step.status = 'completed';
+                            yield { type: 'expert_run_update', checklist: [step], isComplete: true };
+                            yield { type: 'chat_stream_chunk', chunk: `İşlem tamamlandı: ${step.name}. Çalışma alanından inceleyebilirsiniz.` };
+                        } else if (functionName === 'saveRequestDocument'){
+                             yield { type: 'chat_stream_chunk', chunk: "Anladım. Talebinizi bir 'Talep Dokümanı' olarak özetleyip kaydettim. Çalışma alanındaki 'Talep' sekmesinden inceleyebilirsiniz."};
+                        }
+
                     } catch (e: any) {
+                        if (step) {
+                            step.status = 'error';
+                            step.details = e.message;
+                            yield { type: 'expert_run_update', checklist: [step], isComplete: true };
+                        }
                         yield { type: 'error', message: e.message };
                         yield { type: 'chat_stream_chunk', chunk: `\`${functionName}\` aracını çalıştırırken bir hata oluştu: ${e.message}` };
                     }
@@ -289,6 +319,104 @@ export const geminiService = {
         }
     },
     
+    runExpertAnalysisStream: async function* (userMessage: Message, generatedDocs: GeneratedDocs, templates: { analysis: string; test: string; traceability: string; visualization: string; }, diagramType: 'mermaid' | 'bpmn'): AsyncGenerator<StreamChunk> {
+        let totalTokens = 0;
+        
+        const checklist: ExpertStep[] = [
+            { id: 'analysis', name: 'İş Analizi Dokümanı Oluşturma', status: 'pending' },
+            { id: 'viz', name: 'Süreç Akışını Görselleştirme', status: 'pending' },
+            { id: 'test', name: 'Test Senaryoları Oluşturma', status: 'pending' },
+            { id: 'traceability', name: 'İzlenebilirlik Matrisi Oluşturma', status: 'pending' },
+        ];
+    
+        const updateStatus = (id: ExpertStep['id'], status: ExpertStep['status'], details?: string) => {
+            const index = checklist.findIndex(step => step.id === id);
+            if (index !== -1) {
+                checklist[index].status = status;
+                if (details) checklist[index].details = details;
+            }
+            return checklist;
+        };
+    
+        try {
+            yield { type: 'expert_run_update', checklist: [...checklist], isComplete: false };
+    
+            // Step 1: Generate Analysis Document
+            yield { type: 'expert_run_update', checklist: updateStatus('analysis', 'in_progress'), isComplete: false };
+            let analysisDocContent = '';
+            try {
+                const { json, tokens } = await this.generateAnalysisDocument(generatedDocs.requestDoc || userMessage.content, [userMessage], templates.analysis, 'gemini-2.5-pro');
+                totalTokens += tokens;
+                analysisDocContent = json;
+                yield { type: 'usage_update', tokens };
+                yield { type: 'doc_stream_chunk', docKey: 'analysisDoc', chunk: analysisDocContent };
+                yield { type: 'expert_run_update', checklist: updateStatus('analysis', 'completed'), isComplete: false };
+            } catch (e: any) {
+                yield { type: 'expert_run_update', checklist: updateStatus('analysis', 'error', e.message), isComplete: false };
+                throw new Error(`Analiz dokümanı oluşturulurken hata: ${e.message}`);
+            }
+    
+            // Step 2: Generate Visualization
+            yield { type: 'expert_run_update', checklist: updateStatus('viz', 'in_progress'), isComplete: false };
+            try {
+                const vizTemplateName = diagramType === 'bpmn' ? 'generateBPMN' : 'generateVisualization';
+                const vizTemplate = promptService.getPrompt(vizTemplateName);
+                const { code, tokens } = await this.generateDiagram(analysisDocContent, diagramType, vizTemplate, 'gemini-2.5-pro');
+                totalTokens += tokens;
+                yield { type: 'usage_update', tokens };
+                yield { type: 'visualization_update', content: code };
+                yield { type: 'expert_run_update', checklist: updateStatus('viz', 'completed'), isComplete: false };
+            } catch (e: any) {
+                yield { type: 'expert_run_update', checklist: updateStatus('viz', 'error', e.message), isComplete: false };
+            }
+    
+            // Step 3: Generate Test Scenarios
+            yield { type: 'expert_run_update', checklist: updateStatus('test', 'in_progress'), isComplete: false };
+            let testScenariosContent = '';
+            try {
+                const stream = this.generateTestScenarios(analysisDocContent, templates.test, 'gemini-2.5-pro');
+                for await (const chunk of stream) {
+                    if (chunk.type === 'doc_stream_chunk') testScenariosContent += chunk.chunk;
+                    else if (chunk.type === 'usage_update') totalTokens += chunk.tokens;
+                }
+                yield { type: 'usage_update', tokens: 0 }; // Tokens are counted inside the stream
+                yield { type: 'doc_stream_chunk', docKey: 'testScenarios', chunk: { content: testScenariosContent, sourceHash: '' } }; // Send as object
+                yield { type: 'expert_run_update', checklist: updateStatus('test', 'completed'), isComplete: false };
+            } catch (e: any) {
+                yield { type: 'expert_run_update', checklist: updateStatus('test', 'error', e.message), isComplete: false };
+            }
+    
+            // Step 4: Generate Traceability Matrix
+            if (testScenariosContent) {
+                yield { type: 'expert_run_update', checklist: updateStatus('traceability', 'in_progress'), isComplete: false };
+                let traceabilityContent = '';
+                try {
+                    const stream = this.generateTraceabilityMatrix(analysisDocContent, testScenariosContent, templates.traceability, 'gemini-2.5-pro');
+                    for await (const chunk of stream) {
+                        if (chunk.type === 'doc_stream_chunk') traceabilityContent += chunk.chunk;
+                        else if (chunk.type === 'usage_update') totalTokens += chunk.tokens;
+                    }
+                    yield { type: 'usage_update', tokens: 0 };
+                    yield { type: 'doc_stream_chunk', docKey: 'traceabilityMatrix', chunk: { content: traceabilityContent, sourceHash: '' } }; // Send as object
+                    yield { type: 'expert_run_update', checklist: updateStatus('traceability', 'completed'), isComplete: false };
+                } catch (e: any) {
+                    yield { type: 'expert_run_update', checklist: updateStatus('traceability', 'error', e.message), isComplete: false };
+                }
+            } else {
+                 yield { type: 'expert_run_update', checklist: updateStatus('traceability', 'error', "Test senaryoları oluşturulamadığı için atlandı."), isComplete: false };
+            }
+    
+            const finalMessage = "Exper modu tamamlandı. Tüm dokümanlar sizin için oluşturuldu ve çalışma alanında güncellendi. İnceleyebilirsiniz.";
+            yield { type: 'expert_run_update', checklist, isComplete: true, finalMessage };
+    
+        } catch (error: any) {
+            yield { type: 'error', message: error.message };
+            yield { type: 'expert_run_update', checklist, isComplete: true, finalMessage: `Exper modu bir hatayla karşılaştı: ${error.message}` };
+        } finally {
+             if (totalTokens > 0) yield { type: 'usage_update', tokens: totalTokens };
+        }
+    },
+
     checkAnalysisMaturity: async (history: Message[], generatedDocs: GeneratedDocs, model: GeminiModel, modelConfig?: object): Promise<{ report: MaturityReport, tokens: number }> => {
         const schema = {
             type: Type.OBJECT,

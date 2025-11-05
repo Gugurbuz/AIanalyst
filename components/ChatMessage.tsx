@@ -77,7 +77,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
       id: s.id,
       name: s.name,
       description: s.details || '',
-      status: s.status === 'in_progress' ? 'pending' : s.status,
+      status: s.status,
   }));
   
   const allSteps = [...expertSteps];
@@ -113,16 +113,16 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                 {message.expertRunChecklist && (
                     <ThinkingProcess
                       steps={allSteps}
-                      isThinking={message.expertRunChecklist?.some(s => s.status === 'in_progress' || s.status === 'pending')}
-                      error={message.expertRunChecklist?.find(s => s.status === 'error')?.details || null}
+                      isThinking={message.isStreaming || false}
+                      error={message.error?.message || null}
                     />
                 )}
                 
-                {message.role === 'assistant' && message.isStreaming && !message.content && (
+                {message.role === 'assistant' && message.isStreaming && !message.content && !message.expertRunChecklist && (
                     <LoadingSpinner />
                 )}
 
-                {message.error && (
+                {message.error && !message.expertRunChecklist && (
                     <div className="text-red-700 dark:text-red-300">
                         <p className="font-semibold">Bir Hata Oluştu</p>
                         <p className="text-sm mt-1">{message.error.message}</p>

@@ -231,8 +231,7 @@ export interface ThinkingStep {
   id: string;
   name: string; // Bu, "Başlık" olacak
   description: string; // YENİ: Bu, "Açıklama" metni olacak
-  // FIX: Add 'in_progress' to the status to make it compatible with ExpertStep and prevent type errors.
-  status: 'pending' | 'completed' | 'error' | 'in_progress';
+  status: 'pending' | 'in_progress' | 'completed' | 'error';
   result?: any;
   error?: string;
 }

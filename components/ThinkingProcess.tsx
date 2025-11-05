@@ -1,6 +1,6 @@
 import React from 'react';
 import { ThinkingStep } from '../types';
-import { CheckCircle, RefreshCw, AlertCircle } from 'lucide-react';
+import { CheckCircle, RefreshCw, AlertCircle, Circle } from 'lucide-react';
 
 interface ThinkingProcessProps {
   steps: ThinkingStep[];
@@ -24,8 +24,9 @@ const ThinkingProcess: React.FC<ThinkingProcessProps> = ({ steps, isThinking, er
   const getStepIcon = (status: ThinkingStep['status']) => {
     switch (status) {
       case 'in_progress':
-      case 'pending':
         return <RefreshCw className="animate-spin h-4 w-4 text-indigo-400 flex-shrink-0" />;
+      case 'pending':
+        return <Circle className="h-4 w-4 text-slate-400 flex-shrink-0" />;
       case 'completed':
         return <CheckCircle className="h-4 w-4 text-emerald-500 flex-shrink-0" />;
       case 'error':

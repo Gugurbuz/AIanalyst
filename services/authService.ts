@@ -27,9 +27,6 @@ export const authService = {
         if (error) {
             throw error;
         }
-        // Force a page reload to ensure a clean state and re-initialization of the Supabase client.
-        // This definitively solves issues with stale sessions or configurations across logins.
-        window.location.reload();
     },
 
     getCurrentUser: async (): Promise<User | null> => {

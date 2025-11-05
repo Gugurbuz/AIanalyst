@@ -119,7 +119,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
     const conversationState = useConversationState({ user, initialData });
     
     const { activeConversation, conversations, setConversations, activeConversationId, setActiveConversationId, commitTokenUsage, saveDocumentVersion, selectedTemplates, updateConversation, allTemplates, updateConversationTitle, deleteConversation } = conversationState;
-    const { isDeepAnalysisMode, setError, setDisplayedMaturityScore, maturityScoreTimerRef, setActiveDocTab, diagramType, setDiagramType, setIsDeepAnalysisMode, setIsFeatureSuggestionsModalOpen, setIsFetchingSuggestions, setFeatureSuggestions, setSuggestionError } = uiState;
+    const { isDeepAnalysisMode, setError, setDisplayedMaturityScore, maturityScoreTimerRef, setActiveDocTab, diagramType, setDiagramType, setIsDeepAnalysisMode, setIsFeatureSuggestionsModalOpen, setIsFetchingSuggestions, setFeatureSuggestions, setSuggestionError, isExpertMode, setIsExpertMode } = uiState;
     
     // FIX: Correctly use useState for local state management.
     const [isProcessing, setIsProcessing] = useState(false);
@@ -259,9 +259,96 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
             return c;
         }));
     }, [setConversations, user.id]);
+
+    const runExpertMode = async (content: string) => {
+        let convId = activeConversationId;
+        if (!convId) {
+            const newConv = await createNewConversation({}, content.trim());
+            if (!newConv) { setError("Sohbet oluşturulamadı."); return; }
+            convId = newConv.id;
+        }
+
+        const userMessage: Message = { id: uuidv4(), conversation_id: convId, role: 'user', content: content.trim(), timestamp: new Date().toISOString(), created_at: new Date().toISOString() };
+        const assistantMessageId = uuidv4();
+        const assistantPlaceholder: Message = {
+            id: assistantMessageId,
+            conversation_id: convId,
+            role: 'assistant',
+            content: '',
+            timestamp: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            isStreaming: true,
+            expertRunChecklist: [], // Initialize with an empty checklist
+        };
+
+        setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: [...c.messages, userMessage, assistantPlaceholder] } : c));
+        await supabase.from('conversation_details').insert(userMessage);
+
+        setIsProcessing(true);
+        streamControllerRef.current = new AbortController();
+
+        try {
+            const currentConv = conversations.find(c => c.id === convId)!;
+            const generatedDocsForApi = buildGeneratedDocs(currentConv.documents);
+            const templates = {
+                analysis: allTemplates.find(t => t.id === selectedTemplates.analysis)?.prompt || '',
+                test: allTemplates.find(t => t.id === selectedTemplates.test)?.prompt || '',
+                traceability: allTemplates.find(t => t.id === selectedTemplates.traceability)?.prompt || '',
+                visualization: allTemplates.find(t => t.document_type === 'visualization' && t.name.includes('Mermaid'))?.prompt || '',
+            };
+
+            const stream = geminiService.runExpertAnalysisStream(userMessage, generatedDocsForApi, templates, diagramType);
+
+            let finalMessage = "";
+            let totalTokens = 0;
+
+            for await (const chunk of stream) {
+                if (streamControllerRef.current.signal.aborted) break;
+
+                switch (chunk.type) {
+                    case 'expert_run_update':
+                        setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? { ...m, expertRunChecklist: chunk.checklist, content: chunk.finalMessage || m.content } : m) } : c));
+                        if (chunk.finalMessage) finalMessage = chunk.finalMessage;
+                        break;
+                    case 'doc_stream_chunk':
+                        await saveDocumentVersion(chunk.docKey, chunk.chunk, "Exper Modu Tarafından Oluşturuldu");
+                        break;
+                    case 'visualization_update':
+                         const vizDocKey = diagramType === 'bpmn' ? 'bpmnViz' : 'mermaidViz';
+                         const vizData: VizData = { code: chunk.content, sourceHash: simpleHash(generatedDocsForApi.analysisDoc) };
+                         await saveDocumentVersion(vizDocKey, vizData, "Exper Modu Tarafından Oluşturuldu");
+                        break;
+                    case 'usage_update':
+                        totalTokens += chunk.tokens;
+                        break;
+                    case 'error':
+                        throw new Error(chunk.message);
+                }
+            }
+
+            commitTokenUsage(totalTokens);
+
+            const finalAssistantMessageData: Message = { ...assistantPlaceholder, content: finalMessage, isStreaming: false };
+            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? { ...m, ...finalAssistantMessageData } : m) } : c));
+            await supabase.from('conversation_details').upsert(finalAssistantMessageData);
+
+        } catch (err: any) {
+            if (err.name !== 'AbortError') {
+                setError(err.message);
+                setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? { ...m, isStreaming: false, error: { message: err.message } } : m) } : c));
+            }
+        } finally {
+            setIsProcessing(false);
+        }
+    };
     
     const sendMessage = useCallback(async (content: string, isSystemMessage: boolean = false, forceConvId?: string) => {
         if (!content.trim()) return;
+
+        if (isExpertMode) {
+            await runExpertMode(content);
+            return;
+        }
 
         if (!conversationState.userProfile || conversationState.userProfile.tokens_used >= conversationState.userProfile.token_limit) {
             uiState.setShowUpgradeModal(true);
@@ -279,7 +366,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         
         const userMessage: Message = { id: uuidv4(), conversation_id: convId, role: isSystemMessage ? 'system' : 'user', content: content.trim(), timestamp: new Date().toISOString(), created_at: new Date().toISOString() };
         const assistantMessageId = uuidv4();
-        const assistantPlaceholder: Message = { id: assistantMessageId, conversation_id: convId, role: 'assistant', content: '', timestamp: new Date().toISOString(), created_at: new Date().toISOString(), isStreaming: true };
+        const assistantPlaceholder: Message = { id: assistantMessageId, conversation_id: convId, role: 'assistant', content: '', timestamp: new Date().toISOString(), created_at: new Date().toISOString(), isStreaming: true, expertRunChecklist: [] };
 
         setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: [...c.messages, userMessage, assistantPlaceholder] } : c));
         const { error: insertError } = await supabase.from('conversation_details').insert(userMessage);
@@ -320,11 +407,17 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
                         accumulatedMessage += chunk.chunk;
                         setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? { ...m, content: accumulatedMessage } : m) } : c));
                         break;
+                    case 'chat_response': // Used to clear text when a tool is called
+                        accumulatedMessage = chunk.content;
+                        setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? { ...m, content: accumulatedMessage } : m) } : c));
+                        break;
+                    case 'expert_run_update':
+                        setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? { ...m, expertRunChecklist: chunk.checklist } : m) } : c));
+                        break;
                     case 'doc_stream_chunk':
                         if (chunk.docKey === 'requestDoc') {
                              await saveDocumentVersion('requestDoc', chunk.chunk, "AI Tarafından Özetlendi ve Kaydedildi");
                              setActiveDocTab('request');
-                             accumulatedMessage += "Anladım. Talebinizi bir 'Talep Dokümanı' olarak özetleyip kaydettim. Çalışma alanındaki 'Talep' sekmesinden inceleyebilirsiniz.";
                         } else if (chunk.docKey === 'analysisDoc') {
                             finalDocContent.analysisDoc = chunk.chunk;
                             updateStreamingContent(convId, 'analysisDoc', chunk.chunk, true); 
@@ -338,9 +431,6 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
                             code: chunk.content, 
                             sourceHash: simpleHash(generatedDocsForApi.analysisDoc) 
                         };
-                        break;
-                    case 'status_update':
-                        setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? { ...m, content: chunk.message, isStreaming: true } : m) } : c));
                         break;
                     case 'usage_update':
                         finalTokens = chunk.tokens;
@@ -367,10 +457,18 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
             }
 
             const finalAssistantMessageData: Message = { ...assistantPlaceholder, content: accumulatedMessage.trim(), isStreaming: false };
-            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? finalAssistantMessageData : m) } : c));
+            setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? { ...m, content: finalAssistantMessageData.content, isStreaming: false } : m) } : c));
             
-            if (finalAssistantMessageData.content) {
-                await supabase.from('conversation_details').upsert(finalAssistantMessageData);
+            if (finalAssistantMessageData.content || (finalAssistantMessageData.expertRunChecklist && finalAssistantMessageData.expertRunChecklist.length > 0)) {
+                await supabase.from('conversation_details').upsert({
+                    id: finalAssistantMessageData.id,
+                    conversation_id: finalAssistantMessageData.conversation_id,
+                    role: finalAssistantMessageData.role,
+                    content: finalAssistantMessageData.content,
+                    created_at: finalAssistantMessageData.created_at,
+                    // Ensure expertRunChecklist is saved if it exists
+                    expertRunChecklist: finalAssistantMessageData.expertRunChecklist,
+                });
             } else {
                  setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: c.messages.filter(m => m.id !== assistantMessageId) } : c));
             }
@@ -383,7 +481,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         } finally {
             setIsProcessing(false);
         }
-    }, [conversationState.userProfile, uiState.setShowUpgradeModal, activeConversationId, createNewConversation, setConversations, setError, isDeepAnalysisMode, selectedTemplates, commitTokenUsage, conversations, conversationState.allTemplates, updateStreamingContent, saveDocumentVersion, setActiveDocTab]);
+    }, [conversationState.userProfile, uiState.setShowUpgradeModal, activeConversationId, createNewConversation, setConversations, setError, isDeepAnalysisMode, selectedTemplates, commitTokenUsage, conversations, conversationState.allTemplates, updateStreamingContent, saveDocumentVersion, setActiveDocTab, isExpertMode, runExpertMode]);
     
     const handleRetryMessage = useCallback(async (failedAssistantMessageId: string) => {
         if (!activeConversationId) return;
@@ -544,7 +642,7 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
             setGeneratingDocType(null);
         }
     }, [activeConversation, setError, setGeneratingDocType, setIsProcessing, isDeepAnalysisMode, selectedTemplates, allTemplates, commitTokenUsage, saveDocumentVersion, setConversations, diagramType, updateStreamingContent]);
-
+    
     const handleFeedbackUpdate = useCallback((messageId: string, feedback: { rating: 'up' | 'down' | null; comment?: string }) => {
         // Logic to update feedback
     }, []);
@@ -638,6 +736,6 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
         handleConfirmReset,
         handleEvaluateDocument,
         updateConversationTitle,
-        deleteConversation
+        deleteConversation,
     };
 };
