@@ -103,9 +103,10 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
                 : generatedDocs.traceabilityMatrix;
 
             // FIX: Correctly call the 'generateBacklogSuggestions' method which now exists on geminiService.
+            // FIX: Stringify object/array document content before passing it to the service function.
             const { suggestions: result, reasoning, tokens } = await geminiService.generateBacklogSuggestions(
-                generatedDocs.requestDoc,
-                generatedDocs.analysisDoc,
+                JSON.stringify(generatedDocs.requestDoc, null, 2),
+                JSON.stringify(generatedDocs.analysisDoc, null, 2),
                 testScenariosContent,
                 traceabilityMatrixContent,
                 'gemini-2.5-pro' // Use a more powerful model for this complex task

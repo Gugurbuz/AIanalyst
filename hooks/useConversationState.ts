@@ -8,8 +8,8 @@ import type { AppData } from '../index';
 import type { User, Conversation, Message, GeneratedDocs, FeedbackItem, Template, DocumentVersion, Document, DocumentType, UserProfile, SourcedDocument } from '../types';
 
 const defaultGeneratedDocs: GeneratedDocs = {
-    requestDoc: '',
-    analysisDoc: '',
+    requestDoc: null,
+    analysisDoc: null,
     testScenarios: '',
     visualization: '',
     traceabilityMatrix: '',

@@ -149,8 +149,8 @@ export interface SourcedDocument {
 }
 
 export interface GeneratedDocs {
-    requestDoc: string;
-    analysisDoc: string;
+    requestDoc: IsBirimiTalep | null;
+    analysisDoc: Block[] | null;
     testScenarios: SourcedDocument | string;
     visualization: string; // Legacy, for backward compatibility
     visualizationType?: 'mermaid' | 'bpmn'; // Legacy

@@ -229,15 +229,18 @@ export const geminiService = {
     handleUserMessageStream: async function* (history: Message[], generatedDocs: GeneratedDocs, templates: { analysis: string; test: string; traceability: string; visualization: string; }, model: GeminiModel): AsyncGenerator<StreamChunk> {
         try {
             const ai = new GoogleGenAI({ apiKey: getApiKey() });
-            const hasRequestDoc = !!generatedDocs.requestDoc?.trim();
-            const hasRealAnalysisDoc = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
+            // FIX: Check for the existence of the `requestDoc` object directly, as it doesn't have a `.trim()` method.
+            const hasRequestDoc = !!generatedDocs.requestDoc;
+            // FIX: Stringify `analysisDoc` (which is a Block[] object) before calling `.includes()` to check for placeholder content.
+            const hasRealAnalysisDoc = !!generatedDocs.analysisDoc && !JSON.stringify(generatedDocs.analysisDoc).includes("Bu bölüme projenin temel hedefini");
             const isStartingConversation = !hasRequestDoc && !hasRealAnalysisDoc && history.filter(m => m.role !== 'system').length <= 1;
 
             const systemInstruction = isStartingConversation
                 ? promptService.getPrompt('continueConversation')
                 : promptService.getPrompt('proactiveAnalystSystemInstruction')
-                    .replace('{analysis_document_content}', generatedDocs.analysisDoc || "...")
-                    .replace('{request_document_content}', generatedDocs.requestDoc || "...");
+                    // FIX: Stringify complex objects (`analysisDoc`, `requestDoc`) before passing them to the string `.replace()` method.
+                    .replace('{analysis_document_content}', generatedDocs.analysisDoc ? JSON.stringify(generatedDocs.analysisDoc, null, 2) : "...")
+                    .replace('{request_document_content}', generatedDocs.requestDoc ? JSON.stringify(generatedDocs.requestDoc, null, 2) : "...");
             
             const geminiHistory = convertMessagesToGeminiFormat(history);
             
@@ -408,7 +411,7 @@ export const geminiService = {
             **Mevcut Proje Dokümanları:**
             ---
             **1. İş Analizi Dokümanı:**
-            ${generatedDocs.analysisDoc || "Henüz oluşturulmadı."}
+            ${generatedDocs.analysisDoc ? JSON.stringify(generatedDocs.analysisDoc) : "Henüz oluşturulmadı."}
             ---
             **2. Test Senaryoları:**
             ${testScenariosContent || "Henüz oluşturulmadı."}
