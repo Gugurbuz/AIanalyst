@@ -27,7 +27,7 @@ export interface Feedback {
 }
 
 export interface ExpertStep {
-    id: 'analysis' | 'viz' | 'test' | 'traceability';
+    id: 'request' | 'analysis' | 'viz' | 'test' | 'traceability';
     name: string;
     status: 'pending' | 'in_progress' | 'completed' | 'error';
     details?: string;

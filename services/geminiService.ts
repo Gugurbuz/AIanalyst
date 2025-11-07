@@ -13,7 +13,6 @@ const getApiKey = (): string => {
 
 export type StreamChunk = 
     | { type: 'text_chunk'; text: string }
-    // FIX: Add 'requestDoc' to the docKey union type to allow streaming this document type.
     | { type: 'doc_stream_chunk'; docKey: 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix' | 'requestDoc' | 'mermaidViz' | 'bpmnViz'; chunk: any }
     | { type: 'visualization_update'; content: string; }
     | { type: 'chat_response'; content: string }
@@ -45,20 +44,32 @@ function handleGeminiError(error: any): never {
     throw new Error(`Beklenmedik bir hata oluştu: ${error?.message || error}`);
 }
 
-const generateContent = async (prompt: string, model: GeminiModel, modelConfig?: object): Promise<{ text: string, tokens: number }> => {
+const generateContent = async (prompt: string, model: GeminiModel, modelConfig?: any): Promise<{ text: string, tokens: number }> => {
     try {
         const ai = new GoogleGenAI({ apiKey: getApiKey() });
-        const response = await ai.models.generateContent({ model, contents: prompt, ...(modelConfig && { config: modelConfig }) });
-        return { text: response.text || '', tokens: response.usageMetadata?.totalTokenCount || 0 };
+        const config = modelConfig?.generationConfig || modelConfig;
+        const response = await ai.models.generateContent({
+            model,
+            contents: prompt,
+            config,
+        });
+        const text = response.text;
+        const tokens = response.usageMetadata?.totalTokenCount || 0;
+        return { text, tokens };
     } catch (error) {
         handleGeminiError(error);
     }
 };
 
-const generateContentStream = async function* (prompt: string, model: GeminiModel, modelConfig?: object): AsyncGenerator<GenerateContentResponse> {
+const generateContentStream = async function* (prompt: string, model: GeminiModel, modelConfig?: any): AsyncGenerator<GenerateContentResponse> {
     try {
         const ai = new GoogleGenAI({ apiKey: getApiKey() });
-        const responseStream = await ai.models.generateContentStream({ model, contents: prompt, ...(modelConfig && { config: modelConfig }) });
+        const config = modelConfig?.generationConfig || modelConfig;
+        const responseStream = await ai.models.generateContentStream({
+            model,
+            contents: prompt,
+            config,
+        });
         for await (const chunk of responseStream) yield chunk;
     } catch (error) {
         handleGeminiError(error);
@@ -222,19 +233,27 @@ export const geminiService = {
                     .replace('{request_document_content}', generatedDocs.requestDoc || "...");
             
             const geminiHistory = convertMessagesToGeminiFormat(history);
-            const responseStream = await ai.models.generateContentStream({
-                model, contents: geminiHistory,
-                config: { systemInstruction, tools: [{ functionDeclarations: tools }] }
+            
+            const result = await ai.models.generateContentStream({
+                model,
+                contents: geminiHistory,
+                config: {
+                    systemInstruction,
+                    tools: [{ functionDeclarations: tools }],
+                },
             });
 
             let fullText = "";
             let functionCalls: any[] = [];
 
-            for await (const chunk of responseStream) {
-                if (chunk.usageMetadata?.totalTokenCount) totalTokens = chunk.usageMetadata.totalTokenCount;
-                if (chunk.text) {
-                    fullText += chunk.text;
-                    yield { type: 'chat_stream_chunk', chunk: chunk.text };
+            for await (const chunk of result) {
+                if (chunk.usageMetadata) {
+                    totalTokens = chunk.usageMetadata.totalTokenCount;
+                }
+                const text = chunk.text;
+                if (text) {
+                    fullText += text;
+                    yield { type: 'chat_stream_chunk', chunk: text };
                 }
                 if (chunk.functionCalls) {
                     functionCalls.push(...chunk.functionCalls);
@@ -323,6 +342,7 @@ export const geminiService = {
         let totalTokens = 0;
         
         const checklist: ExpertStep[] = [
+            { id: 'request', name: 'Talep Dokümanı Oluşturma', status: 'pending' },
             { id: 'analysis', name: 'İş Analizi Dokümanı Oluşturma', status: 'pending' },
             { id: 'viz', name: 'Süreç Akışını Görselleştirme', status: 'pending' },
             { id: 'test', name: 'Test Senaryoları Oluşturma', status: 'pending' },
@@ -340,12 +360,29 @@ export const geminiService = {
     
         try {
             yield { type: 'expert_run_update', checklist: [...checklist], isComplete: false };
+            
+            // Step 1: Generate Request Document
+            yield { type: 'expert_run_update', checklist: updateStatus('request', 'in_progress'), isComplete: false };
+            let requestDocContent = '';
+            try {
+                const { jsonString, tokens } = await this.parseTextToRequestDocument(userMessage.content);
+                totalTokens += tokens;
+                requestDocContent = jsonString;
+                yield { type: 'usage_update', tokens };
+                yield { type: 'doc_stream_chunk', docKey: 'requestDoc', chunk: requestDocContent };
+                yield { type: 'expert_run_update', checklist: updateStatus('request', 'completed'), isComplete: false };
+            } catch (e: any) {
+                // If structured parsing fails, fall back to using the raw user message as the request doc.
+                requestDocContent = userMessage.content;
+                yield { type: 'doc_stream_chunk', docKey: 'requestDoc', chunk: requestDocContent };
+                yield { type: 'expert_run_update', checklist: updateStatus('request', 'error', 'Yapısal doküman oluşturulamadı, ham metin kullanılıyor.'), isComplete: false };
+            }
     
-            // Step 1: Generate Analysis Document
+            // Step 2: Generate Analysis Document
             yield { type: 'expert_run_update', checklist: updateStatus('analysis', 'in_progress'), isComplete: false };
             let analysisDocContent = '';
             try {
-                const { json, tokens } = await this.generateAnalysisDocument(generatedDocs.requestDoc || userMessage.content, [userMessage], templates.analysis, 'gemini-2.5-pro');
+                const { json, tokens } = await this.generateAnalysisDocument(requestDocContent, [userMessage], templates.analysis, 'gemini-2.5-pro');
                 totalTokens += tokens;
                 analysisDocContent = json;
                 yield { type: 'usage_update', tokens };
@@ -356,7 +393,7 @@ export const geminiService = {
                 throw new Error(`Analiz dokümanı oluşturulurken hata: ${e.message}`);
             }
     
-            // Step 2: Generate Visualization
+            // Step 3: Generate Visualization
             yield { type: 'expert_run_update', checklist: updateStatus('viz', 'in_progress'), isComplete: false };
             try {
                 const vizTemplateName = diagramType === 'bpmn' ? 'generateBPMN' : 'generateVisualization';
@@ -370,7 +407,7 @@ export const geminiService = {
                 yield { type: 'expert_run_update', checklist: updateStatus('viz', 'error', e.message), isComplete: false };
             }
     
-            // Step 3: Generate Test Scenarios
+            // Step 4: Generate Test Scenarios
             yield { type: 'expert_run_update', checklist: updateStatus('test', 'in_progress'), isComplete: false };
             let testScenariosContent = '';
             try {
@@ -386,7 +423,7 @@ export const geminiService = {
                 yield { type: 'expert_run_update', checklist: updateStatus('test', 'error', e.message), isComplete: false };
             }
     
-            // Step 4: Generate Traceability Matrix
+            // Step 5: Generate Traceability Matrix
             if (testScenariosContent) {
                 yield { type: 'expert_run_update', checklist: updateStatus('traceability', 'in_progress'), isComplete: false };
                 let traceabilityContent = '';
@@ -469,9 +506,9 @@ export const geminiService = {
         const formatHistory = (h: Message[]): string => h.map(m => `${m.role === 'user' ? 'Kullanıcı' : 'Asistan'}: ${m.content}`).join('\n');
         const prompt = `${basePrompt}\n\n${documentsContext}\n\n**Değerlendirilecek Konuşma Geçmişi:**\n${formatHistory(history)}`;
         
-        const config = { responseMimeType: "application/json", responseSchema: schema, ...modelConfig };
+        const generationConfig = { responseMimeType: "application/json", responseSchema: schema };
 
-        const { text: jsonString, tokens } = await generateContent(prompt, model, config);
+        const { text: jsonString, tokens } = await generateContent(prompt, model, { ...generationConfig, ...modelConfig });
         try {
             return { report: JSON.parse(jsonString) as MaturityReport, tokens };
         } catch (e) {
@@ -479,7 +516,6 @@ export const geminiService = {
             throw new Error("Analiz olgunluk raporu ayrıştırılamadı.");
         }
     },
-    // FIX: Add all missing methods to the geminiService object.
     generateConversationTitle: async (firstMessage: string): Promise<{ title: string, tokens: number }> => {
         const prompt = promptService.getPrompt('generateConversationTitle') + `: "${firstMessage}"`;
         const { text, tokens } = await generateContent(prompt, 'gemini-2.5-flash');
@@ -499,7 +535,6 @@ export const geminiService = {
             .replace('{test_scenarios}', testScenarios)
             .replace('{traceability_matrix}', traceabilityMatrix);
 
-        // Re-usable properties for a backlog item to avoid repetition and make the schema maintainable.
         const backlogItemProperties = {
             id: { type: Type.STRING },
             type: { type: Type.STRING, enum: ['epic', 'story', 'test_case', 'task'] },
@@ -508,12 +543,8 @@ export const geminiService = {
             priority: { type: Type.STRING, enum: ['low', 'medium', 'high', 'critical'] },
         };
         
-        // FIX: Add required fields to ensure the model provides the necessary data for rendering.
         const requiredFields = ['type', 'title', 'description', 'priority'];
 
-        // Define a schema for a backlog item that can have children.
-        // We define nesting up to 3 levels deep in the schema, which is usually sufficient for epic -> story -> task/test_case.
-        // This directly solves the API error by ensuring every `items` object has a non-empty `properties` field.
         const recursiveBacklogItemSchema = {
             type: Type.OBJECT,
             properties: {
@@ -528,7 +559,7 @@ export const geminiService = {
                                 type: Type.ARRAY,
                                 items: {
                                     type: Type.OBJECT,
-                                    properties: backlogItemProperties, // No more 'children' defined at this level of the schema.
+                                    properties: backlogItemProperties,
                                     required: requiredFields
                                 },
                             },
@@ -553,12 +584,11 @@ export const geminiService = {
         };
 
 
-        const config = { responseMimeType: "application/json", responseSchema: schema };
+        const generationConfig = { responseMimeType: "application/json", responseSchema: schema };
 
-        const { text: jsonString, tokens } = await generateContent(prompt, model, config);
+        const { text: jsonString, tokens } = await generateContent(prompt, model, generationConfig);
         try {
             const result = JSON.parse(jsonString);
-            // Assign UUIDs on the client side
             const assignIds = (items: BacklogSuggestion[]): BacklogSuggestion[] => {
                 return items.map(item => ({
                     ...item,
@@ -575,8 +605,8 @@ export const geminiService = {
 
     convertHtmlToAnalysisJson: async (htmlContent: string): Promise<{ json: StructuredAnalysisDoc, tokens: number }> => {
         const prompt = promptService.getPrompt('convertHtmlToAnalysisJson') + `\n\n**HTML İçeriği:**\n${htmlContent}`;
-        const config = { responseMimeType: "application/json", responseSchema: analysisSchema };
-        const { text: jsonString, tokens } = await generateContent(prompt, 'gemini-2.5-flash', config);
+        const generationConfig = { responseMimeType: "application/json", responseSchema: analysisSchema };
+        const { text: jsonString, tokens } = await generateContent(prompt, 'gemini-2.5-flash', generationConfig);
         try {
             return { json: JSON.parse(jsonString) as StructuredAnalysisDoc, tokens };
         } catch (e) {
@@ -605,8 +635,8 @@ export const geminiService = {
                 required: ['type', 'section', 'details']
             }
         };
-        const config = { responseMimeType: "application/json", responseSchema: schema };
-        const { text: jsonString, tokens } = await generateContent(prompt, 'gemini-2.5-flash-lite', config);
+        const generationConfig = { responseMimeType: "application/json", responseSchema: schema };
+        const { text: jsonString, tokens } = await generateContent(prompt, 'gemini-2.5-flash-lite', generationConfig);
         try {
             return { issues: JSON.parse(jsonString) as LintingIssue[], tokens };
         } catch (e) {
@@ -655,8 +685,8 @@ export const geminiService = {
         
         Lütfen değişikliğin etkisini JSON formatında analiz et.`;
 
-        const config = { responseMimeType: "application/json", responseSchema: schema };
-        const { text: jsonString, tokens } = await generateContent(prompt, model, config);
+        const generationConfig = { responseMimeType: "application/json", responseSchema: schema };
+        const { text: jsonString, tokens } = await generateContent(prompt, model, generationConfig);
         try {
             return { impact: JSON.parse(jsonString) as DocumentImpactAnalysis, tokens };
         } catch (e) {
@@ -678,9 +708,9 @@ export const geminiService = {
             .replace('{request_document_content}', requestDoc)
             .replace('{conversation_history}', JSON.stringify(history.filter(m => m.role === 'user' || m.role === 'assistant'), null, 2));
 
-        const config = { responseMimeType: "application/json", responseSchema: analysisSchema };
+        const generationConfig = { responseMimeType: "application/json", responseSchema: analysisSchema };
         
-        const { text: jsonString, tokens } = await generateContent(prompt, model, config);
+        const { text: jsonString, tokens } = await generateContent(prompt, model, generationConfig);
         
         try {
             JSON.parse(jsonString);
@@ -696,12 +726,15 @@ export const geminiService = {
         const prompt = template.replace('{analysis_document_content}', analysisDoc);
         const stream = generateContentStream(prompt, model, { responseMimeType: "application/json" });
         let totalTokens = 0;
+        let fullText = '';
         for await (const chunk of stream) {
-            if (chunk.text) {
-                yield { type: 'doc_stream_chunk', docKey: 'testScenarios', chunk: chunk.text };
-            }
-            if (chunk.usageMetadata?.totalTokenCount) {
+            if (chunk.usageMetadata) {
                 totalTokens = chunk.usageMetadata.totalTokenCount;
+            }
+            const text = chunk.text;
+            if (text) {
+                fullText += text;
+                yield { type: 'doc_stream_chunk', docKey: 'testScenarios', chunk: text };
             }
         }
         if (totalTokens > 0) yield { type: 'usage_update', tokens: totalTokens };
@@ -713,12 +746,15 @@ export const geminiService = {
             .replace('{test_scenarios_content}', testScenarios);
         const stream = generateContentStream(prompt, model, { responseMimeType: "application/json" });
         let totalTokens = 0;
+        let fullText = '';
         for await (const chunk of stream) {
-            if (chunk.text) {
-                yield { type: 'doc_stream_chunk', docKey: 'traceabilityMatrix', chunk: chunk.text };
-            }
-            if (chunk.usageMetadata?.totalTokenCount) {
+            if (chunk.usageMetadata) {
                 totalTokens = chunk.usageMetadata.totalTokenCount;
+            }
+            const text = chunk.text;
+            if (text) {
+                fullText += text;
+                yield { type: 'doc_stream_chunk', docKey: 'traceabilityMatrix', chunk: text };
             }
         }
         if (totalTokens > 0) yield { type: 'usage_update', tokens: totalTokens };
@@ -738,8 +774,8 @@ export const geminiService = {
             },
             required: ['suggestions']
         };
-        const config = { responseMimeType: "application/json", responseSchema: schema };
-        const { text, tokens } = await generateContent(prompt, 'gemini-2.5-pro', config);
+        const generationConfig = { responseMimeType: "application/json", responseSchema: schema };
+        const { text, tokens } = await generateContent(prompt, 'gemini-2.5-pro', generationConfig);
         try {
             const result = JSON.parse(text);
             return { suggestions: result.suggestions || [], tokens };
@@ -751,8 +787,8 @@ export const geminiService = {
     
     parseTextToRequestDocument: async (rawText: string): Promise<{ jsonString: string, tokens: number }> => {
         const prompt = promptService.getPrompt('parseTextToRequestDocument').replace('{raw_text}', rawText);
-        const config = { responseMimeType: "application/json", responseSchema: isBirimiTalepSchema };
-        const { text: jsonString, tokens } = await generateContent(prompt, 'gemini-2.5-flash', config);
+        const generationConfig = { responseMimeType: "application/json", responseSchema: isBirimiTalepSchema };
+        const { text: jsonString, tokens } = await generateContent(prompt, 'gemini-2.5-flash', generationConfig);
         try {
             // Validate that the output is valid JSON before returning
             JSON.parse(jsonString);

@@ -211,45 +211,33 @@ Amacın, kullanıcının aklındakileri somut bir talebe dönüştürmesine yard
         },
         {
           "title": "Veri Kaynakları ve Entegrasyon",
-          "content": "Kesinti bilgileri (planlı/plansız, başlangıç/bitiş zamanı, etkilenen bölge vb.) ve müşteri iletişim bilgileri (telefon, e-posta, push token vb.) için entegrasyonlar gereklidir.",
+          "content": "Kesinti bilgileri (planlı/plansız, başlangıç/bitiş, lokasyon vb.) için ilgili sistemlerle entegrasyon sağlanmalıdır.",
           "requirements": [
-             { "id": "REQ-V01", "text": "Kesinti bilgileri (planlı/plansız, başlangıç/bitiş zamanı, etkilenen bölge) ilgili sistemlerden alınmalıdır. (Kaynak sistem [Belirlenecek])." },
-             { "id": "REQ-V02", "text": "Müşteri iletişim bilgileri (telefon, e-posta, push token) ilgili sistemlerden alınmalıdır. (Kaynak sistem [Belirlenecek])." },
-             { "id": "REQ-V03", "text": "Kesinti ve müşteri bilgileri arasında entegrasyon sağlanmalıdır." }
+            { "id": "REQ-T01", "text": "Planlı ve plansız kesinti verilerini alacak servis entegrasyonu yapılmalıdır." }
           ]
         },
         {
-          "title": "İletişim İçerikleri",
-          "content": "Bildirim mesajlarının içeriği planlı, plansız, başlangıç, bitiş, güncelleme senaryoları için tanımlanmalı ve dinamik alanlar içermelidir.",
+          "title": "Kullanıcı Akışları",
+          "content": "Sistemin temel kullanıcı etkileşimlerini ve arayüz gereksinimlerini tanımlar.",
           "requirements": [
-            { "id": "REQ-I01", "text": "Planlı kesinti başlangıç bildirim içeriği tanımlanmalıdır." },
-            { "id": "REQ-I02", "text": "Plansız kesinti başlangıç bildirim içeriği tanımlanmalıdır." },
-            { "id": "REQ-I03", "text": "Kesinti bitiş bildirim içeriği tanımlanmalıdır." },
-            { "id": "REQ-I04", "text": "Kesinti güncelleme bildirim içeriği tanımlanmalıdır." },
-            { "id": "REQ-I05", "text": "Bildirim içerikleri dinamik alanlar (kesinti süresi, etkilenen mahalle vb.) içerebilmelidir." }
-          ]
-        },
-        {
-          "title": "Kanal Önceliklendirme ve Yedeklilik",
-          "content": "Müşterinin birden fazla iletişim rızası olması durumunda kanal önceliği ve bildirim başarısızlığı durumunda yedek kanal kullanımı belirlenmelidir.",
-          "requirements": [
-            { "id": "REQ-K01", "text": "Müşterinin birden fazla iletişim kanalı rızası olması durumunda bir kanal önceliklendirme mekanizması tanımlanmalıdır. (Öncelik sırası [Belirlenecek])" },
-            { "id": "REQ-K02", "text": "Bir kanal üzerinden bildirim başarısız olursa yedek bir kanal üzerinden bildirim gönderme mekanizması tanımlanmalıdır." }
-          ]
-        },
-        {
-          "title": "Geri Bildirim ve Şikayet Yönetimi",
-          "content": "Müşterilerin bildirimlere ilişkin geri bildirim ve şikayetlerini alacak bir mekanizma oluşturulmalıdır. Bu geri bildirimler süreç iyileştirme için kullanılmalıdır.",
-          "requirements": [
-            { "id": "REQ-G01", "text": "Müşterilerin bildirimlere ilişkin geri bildirimlerini iletebileceği bir kanal sağlanmalıdır. (Kanal [Belirlenecek])" },
-            { "id": "REQ-G02", "text": "Geri bildirimler, süreç iyileştirme amaçlı analiz edilebilir ve raporlanabilir olmalıdır." }
+            { "id": "REQ-A01", "text": "Kullanıcılar, rıza ve bildirim ayarlarını yapabilecekleri bir arayüze sahip olmalıdır." }
           ]
         }
       ]
     },
     {
-      "title": "Zaman Çizelgesi ve Bütçe",
-      "content": "[Belirlenecek]"
+      "title": "Fonksiyonel Olmayan Gereksinimler",
+      "subSections": [
+        { "title": "Performans", "content": "- Bildirim gönderim süresi, kesinti başlangıcından itibaren en fazla 5 dakika olmalıdır." },
+        { "title": "Güvenlik", "content": "- Kullanıcı verileri KVKK standartlarına uygun olarak saklanmalı ve işlenmelidir." }
+      ]
+    },
+    {
+      "title": "Varsayımlar ve Kısıtlar",
+      "subSections": [
+        { "title": "Varsayımlar", "content": "[Proje ile ilgili varsayımları buraya yazın]" },
+        { "title": "Kısıtlar", "content": "[Proje ile ilgili kısıtları buraya yazın]" }
+      ]
     }
   ]
 }
@@ -262,7 +250,7 @@ Amacın, kullanıcının aklındakileri somut bir talebe dönüştürmesine yard
       {
         id: 'generateTestScenarios',
         name: 'Test Senaryoları',
-        description: 'İş analizi dokümanından test senaryoları tablosu oluşturur.',
+        description: 'Analiz dokümanından test senaryoları tablosu oluşturur.',
         is_system_template: true,
         document_type: 'test',
         versions: [
@@ -270,12 +258,168 @@ Amacın, kullanıcının aklındakileri somut bir talebe dönüştürmesine yard
             versionId: 'default',
             name: 'Varsayılan',
             createdAt: new Date().toISOString(),
-            prompt: `Aşağıdaki iş analizi dokümanını incele. Belirtilen fonksiyonel gereksinimler (FR) için pozitif, negatif ve sınır durumlarını kapsayan detaylı test senaryoları oluştur. Çıktıyı, aşağıdaki sütunları içeren bir JSON array formatında ver: "Test Senaryo ID", "İlgili Gereksinim", "Senaryo Açıklaması", "Test Adımları", "Beklenen Sonuç". Test Senaryo ID'lerini "TS-001", "TS-002" şeklinde sıralı olarak ata.
+            prompt: `Bir uzman kalite güvence mühendisi olarak, sana verilen iş analizi dokümanındaki gereksinimleri (hem fonksiyonel hem de fonksiyonel olmayan) dikkatlice incele. Görevin, bu gereksinimleri kapsayan pozitif, negatif ve sınır durumlarını içeren test senaryoları oluşturmaktır. Çıktıyı **SADECE** aşağıdaki sütunları içeren bir JSON array formatında döndür. Her bir test senaryosu bu array içinde bir JSON nesnesi olmalıdır. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
+
+**Sütunlar:**
+- "Test Senaryo ID" (Örn: TC-001)
+- "İlgili Gereksinim" (Örn: REQ-R01)
+- "Senaryo Açıklaması"
+- "Test Adımları" (Adımları numaralandırarak \`1. Adım...\n2. Adım...\` şeklinde yaz)
+- "Beklenen Sonuç"
 
 **İş Analizi Dokümanı:**
+---
 {analysis_document_content}
+---
+`,
+          },
+        ],
+        activeVersionId: 'default',
+      },
+      {
+        id: 'generateVisualization',
+        name: 'Süreç Görselleştirme',
+        description: 'Analiz dokümanından Mermaid.js diyagramı oluşturur.',
+        is_system_template: true,
+        document_type: 'visualization',
+        versions: [
+          {
+            versionId: 'default',
+            name: 'Varsayılan',
+            createdAt: new Date().toISOString(),
+            prompt: `Bir uzman iş analisti olarak, verilen iş analizi dokümanını analiz et ve süreci anlatan bir Mermaid.js diyagram kodu oluştur.
 
-Lütfen sadece ve sadece istenen JSON array formatında çıktı ver.`,
+**ÇOK ÖNEMLİ KURALLAR:**
+1.  Çıktın **SADECE VE SADECE** \`\`\`mermaid ... \`\`\` kod bloğu içinde olmalıdır. Başka HİÇBİR metin, başlık, açıklama veya not ekleme.
+2.  Diyagram tipi **MUTLAKA** \`graph TD\` (Yukarıdan Aşağıya Akış Şeması) olmalıdır. Diğer diyagram tiplerini (sequenceDiagram, classDiagram vb.) KESİNLİKLE KULLANMA.
+3.  Bağlantılar için **SADECE** \`-->\` operatörünü kullan. Örnek: \`A --> B\`.
+4.  Kutu metinlerinde satır atlamak için **SADECE** \`<br>\` etiketini kullan. Çift tırnak (") veya özel karakterler kullanmaktan kaçın.
+5.  Kutuları basit tut. Örnek: \`A[Kutu 1]\`, \`B(Kutu 2)\`, \`C{Karar Kutusu}\`. Karmaşık şekiller veya stiller KULLANMA.
+6.  Kodun ayrıştırılabilir (parsable) ve sözdizimsel olarak (syntactically) doğru olduğundan emin ol.
+
+**İş Analizi Dokümanı:**
+---
+{analysis_document_content}
+---
+`,
+          },
+        ],
+        activeVersionId: 'default',
+      },
+      {
+        id: 'generateBPMN',
+        name: 'BPMN Süreç Diyagramı',
+        description: 'Analiz dokümanından BPMN 2.0 XML diyagramı oluşturur.',
+        is_system_template: true,
+        document_type: 'visualization',
+        versions: [
+          {
+            versionId: 'default',
+            name: 'Varsayılan',
+            createdAt: new Date().toISOString(),
+            prompt: `Bir BPMN 2.0 uzmanı olarak, sana verilen iş analizi dokümanını analiz et. Görevin, bu analize dayanarak, hem proses mantığını hem de görsel diyagram bilgilerini içeren, tam ve geçerli bir BPMN 2.0 XML kodu oluşturmaktır. "no diagram to display" hatasını önlemek için XML'in hem \`<process>\` hem de \`<bpmndi:BPMNDiagram>\` bölümlerini içermesi KRİTİKTİR.
+
+**ÇOK ÖNEMLİ KURALLAR:**
+1.  Çıktın **SADECE** \`\`\`xml ... \`\`\` kod bloğu içinde olmalıdır. Başka HİÇBİR metin, başlık veya açıklama ekleme. Sadece ham XML kodunu döndür.
+2.  Oluşturduğun XML, aşağıdaki yapıya tam olarak uymalıdır. ID'leri (örn: \`Task_1\`, \`Flow_1\`) benzersiz (unique) olarak kendin oluşturmalısın.
+3.  Tüm görsel elemanlar için \`<bpmndi:BPMNShape>\` ve akışlar için \`<bpmndi:BPMNEdge>\` etiketlerini eklediğinden emin ol.
+4.  Koordinatları (\`x\`, \`y\`, \`width\`, \`height\`) ve yol noktalarını (\`waypoint\`) mantıklı bir şekilde yerleştirerek diyagramın okunabilir olmasını sağla.
+
+**ÖRNEK VE UYULMASI GEREKEN XML YAPISI:**
+\`\`\`xml
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_1" isExecutable="false">
+    <bpmn:startEvent id="StartEvent_1" name="Süreç Başladı">
+      <bpmn:outgoing>Flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="Task_1" name="İlk Görev">
+      <bpmn:incoming>Flow_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="Task_1" />
+    <bpmn:exclusiveGateway id="Gateway_1" name="Onay Gerekli mi?">
+      <bpmn:incoming>Flow_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_3</bpmn:outgoing>
+      <bpmn:outgoing>Flow_4</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_1" targetRef="Gateway_1" />
+    <bpmn:task id="Task_2" name="Onayla">
+      <bpmn:incoming>Flow_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_5</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_3" name="Evet" sourceRef="Gateway_1" targetRef="Task_2" />
+    <bpmn:endEvent id="EndEvent_1" name="Süreç Bitti">
+      <bpmn:incoming>Flow_4</bpmn:incoming>
+      <bpmn:incoming>Flow_5</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_4" name="Hayır" sourceRef="Gateway_1" targetRef="EndEvent_1" />
+    <bpmn:sequenceFlow id="Flow_5" sourceRef="Task_2" targetRef="EndEvent_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
+        <dc:Bounds x="179" y="159" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="168" y="202" width="59" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_1_di" bpmnElement="Task_1">
+        <dc:Bounds x="270" y="137" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="215" y="177" />
+        <di:waypoint x="270" y="177" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Gateway_1_di" bpmnElement="Gateway_1" isMarkerVisible="true">
+        <dc:Bounds x="425" y="152" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="408" y="122" width="84" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <di:waypoint x="370" y="177" />
+        <di:waypoint x="425" y="177" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Task_2_di" bpmnElement="Task_2">
+        <dc:Bounds x="530" y="137" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3">
+        <di:waypoint x="475" y="177" />
+        <di:waypoint x="530" y="177" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="495" y="159" width="22" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
+        <dc:Bounds x="682" y="159" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="672" y="202" width="56" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4">
+        <di:waypoint x="450" y="202" />
+        <di:waypoint x="450" y="250" />
+        <di:waypoint x="700" y="250" />
+        <di:waypoint x="700" y="195" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="460" y="223" width="20" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_5_di" bpmnElement="Flow_5">
+        <di:waypoint x="630" y="177" />
+        <di:waypoint x="682" y="177" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
+\`\`\`
+
+**İş Analizi Dokümanı:**
+---
+{analysis_document_content}
+---
+`,
           },
         ],
         activeVersionId: 'default',
@@ -283,7 +427,7 @@ Lütfen sadece ve sadece istenen JSON array formatında çıktı ver.`,
       {
         id: 'generateTraceabilityMatrix',
         name: 'İzlenebilirlik Matrisi',
-        description: 'Gereksinimler ve test senaryoları arasında bir izlenebilirlik matrisi oluşturur.',
+        description: 'Gereksinimler ve test senaryoları arasında bir matris oluşturur.',
         is_system_template: true,
         document_type: 'traceability',
         versions: [
@@ -291,161 +435,197 @@ Lütfen sadece ve sadece istenen JSON array formatında çıktı ver.`,
             versionId: 'default',
             name: 'Varsayılan',
             createdAt: new Date().toISOString(),
-            prompt: `Aşağıdaki iş analizi dokümanı ve test senaryoları dokümanını kullanarak bir izlenebilirlik matrisi oluştur. Matris, her bir fonksiyonel gereksinimin (FR) hangi test senaryoları (TS) tarafından karşılandığını göstermelidir. Çıktıyı, aşağıdaki sütunları içeren bir JSON array formatında ver: "Gereksinim ID", "Gereksinim Açıklaması", "İlgili Test Senaryo ID'leri".
+            prompt: `Bir uzman iş analisti olarak, sana verilen **İş Analizi Dokümanı** ve **Test Senaryoları**'nı incele. Görevin, her bir gereksinimin hangi test senaryoları tarafından kapsandığını gösteren bir izlenebilirlik matrisi oluşturmaktır. Çıktıyı **SADECE** aşağıdaki sütunları içeren bir JSON array formatında döndür. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
+
+**Sütunlar:**
+- "Gereksinim ID" (Örn: REQ-R01)
+- "Gereksinim Açıklaması"
+- "İlgili Test Senaryo ID'leri" (Virgülle ayrılmış, örn: "TC-001, TC-002")
 
 **İş Analizi Dokümanı:**
+---
 {analysis_document_content}
+---
 
-**Test Senaryoları Dokümanı:**
+**Test Senaryoları:**
+---
 {test_scenarios_content}
-
-Lütfen sadece ve sadece istenen JSON array formatında çıktı ver.`,
+---
+`,
           },
         ],
         activeVersionId: 'default',
       },
       {
-        id: 'generateVisualization',
-        name: 'Mermaid Diyagramı',
-        description: 'Analiz dokümanından bir Mermaid.js akış şeması oluşturur.',
+        id: 'parseTextToRequestDocument',
+        name: 'Metinden Talep Dokümanı Oluştur',
+        description: 'Kullanıcının yapıştırdığı ham metni yapısal bir "İş Birimi Talep" JSON nesnesine dönüştürür.',
         is_system_template: true,
-        document_type: 'visualization',
-        versions: [
-          {
-            versionId: 'default',
-            name: 'Varsayılan',
-            createdAt: new Date().toISOString(),
-            prompt: `Aşağıdaki iş analizi dokümanını temel alarak, süreci anlatan bir Mermaid.js 'graph TD' (top-down) veya 'graph LR' (left-right) akış şeması kodu oluştur. Diyagramdaki kutucukların (node) içinde satır atlamak için \`<br>\` ETİKETİ KULLANMA, bunun yerine gerçek bir satır atlama karakteri (newline) kullan. Kod, \`\`\`mermaid ... \`\`\` bloğu içinde olmalıdır.
-
-**İş Analizi Dokümanı:**
-{analysis_document_content}`,
-          },
-        ],
-        activeVersionId: 'default',
-      },
-      {
-        id: 'generateBPMN',
-        name: 'BPMN Diyagramı',
-        description: 'Analiz dokümanından bir BPMN 2.0 XML diyagramı oluşturur.',
-        is_system_template: true,
-        document_type: 'visualization',
         versions: [
             {
                 versionId: 'default',
                 name: 'Varsayılan',
                 createdAt: new Date().toISOString(),
-                prompt: `Aşağıdaki iş analizi dokümanını temel alarak, süreci anlatan bir BPMN 2.0 XML kodu oluştur. Kod, \`\`\`xml ... \`\`\` bloğu içinde olmalıdır. XML, standart BPMN 2.0 şemasına uygun ve render edilebilir olmalıdır. Basit bir başlangıç ve bitiş olayı, kullanıcı görevleri ve sıralı akışlar içermelidir.
+                prompt: `Bir uzman iş analisti olarak, aşağıda verilen ham metni analiz et ve "İş Birimi Talep Dokümanı" formatına uygun bir JSON nesnesine dönüştür. Metindeki ilgili bilgileri JSON şemasındaki doğru alanlara yerleştir. Eğer bir alan için bilgi metinde mevcut değilse, o alanı boş bırakma, bunun yerine "Belirlenecek" gibi bir ifade kullan. Doküman No ve Revizyon gibi alanlar için standart başlangıç değerleri kullan (örn: "TALEP-001", "1.0"). Tarih için bugünün tarihini kullan. Çıktın SADECE ve SADECE geçerli bir JSON nesnesi olmalıdır. Başka hiçbir metin veya açıklama ekleme.
 
-**İş Analizi Dokümanı:**
-{analysis_document_content}`
+**HAM METİN:**
+---
+{raw_text}
+---
+`
             }
         ],
         activeVersionId: 'default'
-      }
+      },
     ],
   },
   {
-    id: 'utils',
-    name: 'Yardımcı Araçlar',
+    id: 'analysis',
+    name: 'Analiz ve Değerlendirme',
+    prompts: [
+      {
+        id: 'checkAnalysisMaturity',
+        name: 'Analiz Olgunluğunu Değerlendir',
+        description: 'Mevcut sohbetin ve dokümanların olgunluğunu değerlendirir.',
+        is_system_template: true,
+        versions: [
+          {
+            versionId: 'default',
+            name: 'Varsayılan',
+            createdAt: new Date().toISOString(),
+            prompt: `Bir uzman iş analizi denetçisi olarak, sana verilen konuşma geçmişini ve mevcut proje dokümanlarını incele. Görevin, bu bilgilerin yeni bir özellik geliştirmeye başlamak için yeterli olup olmadığını değerlendirmektir. Değerlendirmeni aşağıdaki JSON şemasına göre yap.
+
+**Değerlendirme Kriterleri:**
+- **Kapsam (scope):** Projenin sınırları, dahil olan ve olmayanlar net mi? (0-100 puan)
+- **Teknik Detay (technical):** Gerekli entegrasyonlar, veri modelleri gibi teknik konular yeterince tartışıldı mı? (0-100 puan)
+- **Kullanıcı Akışı (userFlow):** Kullanıcının sistemle nasıl etkileşime gireceği, ana akışlar ve istisnai durumlar belli mi? (0-100 puan)
+- **Fonksiyonel Olmayan Gereksinimler (nonFunctional):** Performans, güvenlik, ölçeklenebilirlik gibi konular ele alındı mı? (0-100 puan)
+- **Genel Puan (overallScore):** Yukarıdaki puanların ağırlıklı ortalaması.
+- **Yeterlilik (isSufficient):** Genel puan 75'in üzerindeyse 'true', değilse 'false' olmalı.
+- **Özet (summary):** Analizin mevcut durumu hakkında 1-2 cümlelik genel bir özet.
+- **Eksik Konular (missingTopics):** Eğer puan 75'in altındaysa, eksik olan ana başlıkların bir listesi.
+- **Önerilen Sorular (suggestedQuestions):** Eksik konuları netleştirmek için kullanıcıya sorulabilecek 3 adet spesifik ve eyleme geçirilebilir soru.
+- **Gerekçe (justification):** Verdiğin puanı ve belirlediğin olgunluk seviyesini tek bir cümleyle gerekçelendir.
+- **Olgunluk Seviyesi (maturity_level):** Puan aralıklarına göre: 0-40: 'Zayıf', 41-65: 'Gelişime Açık', 66-85: 'İyi', 86-100: 'Mükemmel'.
+
+Çıktın **SADECE** doldurulmuş JSON nesnesi olmalıdır.`,
+          },
+        ],
+        activeVersionId: 'default',
+      },
+      {
+        id: 'generateConversationTitle',
+        name: 'Sohbet Başlığı Oluştur',
+        description: 'Sohbetin ilk mesajından kısa bir başlık üretir.',
+        is_system_template: true,
+        versions: [
+          {
+            versionId: 'default',
+            name: 'Varsayılan',
+            createdAt: new Date().toISOString(),
+            prompt: `Aşağıdaki metni en fazla 4-5 kelimeyle özetleyerek bir sohbet başlığı oluştur. Sadece başlığı döndür, tırnak işareti veya ek bir metin olmasın.`,
+          },
+        ],
+        activeVersionId: 'default',
+      },
+      {
+        id: 'suggestNextFeature',
+        name: 'Sonraki Özelliği Öner',
+        description: 'Mevcut analize dayanarak geliştirilebilecek bir sonraki adımı veya özelliği önerir.',
+        is_system_template: true,
+        versions: [
+          {
+            versionId: 'default',
+            name: 'Varsayılan',
+            createdAt: new Date().toISOString(),
+            prompt: `Bir ürün yöneticisi olarak, sana verilen iş analizi dokümanını ve konuşma geçmişini incele. Bu bilgilere dayanarak projeyi bir sonraki adıma taşıyacak, mevcut kapsamı genişletecek veya iyileştirecek 3 adet yeni ve yaratıcı özellik önerisi sun. Önerilerini JSON formatında bir 'suggestions' dizisi olarak döndür.
+
+**İş Analizi Dokümanı:**
+---
+{analysis_document}
+---
+
+**Konuşma Geçmişi:**
+---
+{conversation_history}
+---
+`,
+          },
+        ],
+        activeVersionId: 'default',
+      },
+       {
+        id: 'summarizeChange',
+        name: 'Değişikliği Özetle',
+        description: 'Bir dokümanın iki versiyonu arasındaki farkı özetler.',
+        is_system_template: true,
+        versions: [
+          {
+            versionId: 'default',
+            name: 'Varsayılan',
+            createdAt: new Date().toISOString(),
+            prompt: `Bir metnin eski ve yeni versiyonu aşağıdadır. Yapılan değişikliği "Manuel Düzenleme: ..." veya "AI Tarafından Düzeltme: ..." şeklinde başlayan tek bir cümleyle özetle. Örneğin: "Manuel Düzenleme: Fonksiyonel gereksinimlere yeni bir madde eklendi." veya "AI Tarafından Düzeltme: Kapsam bölümü daha net ifade edildi."`,
+          },
+        ],
+        activeVersionId: 'default',
+      },
+    ],
+  },
+  {
+    id: 'generation',
+    name: 'Üretken Araçlar',
     prompts: [
         {
-            id: 'generateConversationTitle',
-            name: 'Sohbet Başlığı Oluştur',
-            description: 'Sohbetin ilk mesajından kısa ve anlamlı bir başlık türetir.',
-            is_system_template: false,
-            versions: [
-                {
-                    versionId: 'default',
-                    name: 'Varsayılan',
-                    createdAt: new Date().toISOString(),
-                    prompt: `Aşağıdaki metni analiz ederek, bu sohbet için 2-4 kelimelik kısa ve açıklayıcı bir başlık oluştur. Sadece başlığı döndür, tırnak işareti veya ek metin kullanma.`
-                }
-            ],
-            activeVersionId: 'default'
-        },
-        {
-            id: 'checkAnalysisMaturity',
-            name: 'Analiz Olgunluğunu Kontrol Et',
-            description: 'Sohbetin ve dokümanların olgunluğunu değerlendirir ve eksikleri bildirir.',
-            is_system_template: false,
-            versions: [
-                {
-                    versionId: 'default',
-                    name: 'Varsayılan',
-                    createdAt: new Date().toISOString(),
-                    prompt: `Bir uzman iş analisti olarak, aşağıda verilen konuşma geçmişini ve proje dokümanlarını değerlendir. Amacın, projenin analiz olgunluğunu ölçmek ve bir sonraki adıma geçmek için yeterli olup olmadığını belirlemektir. Değerlendirmeni JSON formatında yap. Puanlamayı 100 üzerinden yap ve şu kategorileri dikkate al: kapsam netliği, teknik detayların yeterliliği, kullanıcı akışlarının anlaşılırlığı ve fonksiyonel olmayan gereksinimlerin varlığı.`
-                }
-            ],
-            activeVersionId: 'default'
-        },
-        {
-            id: 'analyzeFeedback',
-            name: 'Geri Bildirimleri Analiz Et',
-            description: 'Kullanıcı geri bildirimlerini özetler ve iyileştirme alanlarını belirler.',
-            is_system_template: false,
-            versions: [
-                {
-                    versionId: 'default',
-                    name: 'Varsayılan',
-                    createdAt: new Date().toISOString(),
-                    prompt: `Aşağıdaki JSON formatındaki kullanıcı geri bildirimlerini analiz et. Olumlu ve olumsuz yorumlardaki ana temaları belirle. Tekrarlayan sorunları veya övgüleri vurgula. Sonuçları, iyileştirme önerileriyle birlikte Markdown formatında bir özet olarak sun.`
-                }
-            ],
-            activeVersionId: 'default'
-        },
-        {
             id: 'generateBacklogFromArtifacts',
-            name: 'Dokümanlardan Backlog Oluştur',
-            description: 'Tüm analiz dokümanlarını kullanarak hiyerarşik bir backlog oluşturur.',
-            is_system_template: false,
+            name: 'Artefaktlardan Backlog Oluştur',
+            description: 'Tüm analiz dokümanlarını kullanarak hiyerarşik bir proje backlog\'u oluşturur.',
+            is_system_template: true,
             versions: [
                 {
                     versionId: 'default',
                     name: 'Varsayılan',
                     createdAt: new Date().toISOString(),
-                    prompt: `Aşağıdaki proje dokümanlarını (Ana Talep, İş Analizi, Test Senaryoları, İzlenebilirlik Matrisi) analiz et. Bu dokümanlardan yola çıkarak, hiyerarşik bir ürün biriktirme listesi (product backlog) oluştur. Bu liste Epik > Kullanıcı Hikayesi > Görev/Test Senaryosu yapısında olmalıdır. Her madde için bir tür, başlık, açıklama ve öncelik (low, medium, high, critical) belirle. Çıktıyı 'suggestions' ve 'reasoning' alanları içeren bir JSON formatında ver. 'reasoning' alanında bu yapıyı neden oluşturduğunu kısaca açıkla.
-                    
-                    **Ana Talep:**
-                    {main_request}
+                    prompt: `Bir uzman Agile Proje Yöneticisi olarak, sana verilen proje artefaktlarını (talep, analiz, test senaryoları, izlenebilirlik) dikkatlice incele. Görevin, bu belgelere dayanarak hiyerarşik bir proje backlog'u oluşturmaktır.
 
-                    **İş Analizi Dokümanı:**
-                    {analysis_document}
-                    
-                    **Test Senaryoları:**
-                    {test_scenarios}
-                    
-                    **İzlenebilirlik Matrisi:**
-                    {traceability_matrix}`
+**KURALLAR:**
+1.  En üst seviyede **Epikler** oluştur. Epikler, projenin büyük ve ana işlevsel alanlarını temsil etmelidir.
+2.  Her epikin altına, o epiki gerçekleştirmek için gereken **Kullanıcı Hikayeleri (Story)** ekle.
+3.  Her hikayenin altına, o hikayenin tamamlanması için gereken **Görevler (Task)** ve/veya hikayeyi doğrulayacak **Test Senaryoları (Test Case)** ekle.
+4.  Her bir madde için (epic, story, task, test_case) bir başlık, kısa bir açıklama ve bir öncelik (low, medium, high, critical) belirle.
+5.  Çıktıyı, iç içe geçmiş bir JSON yapısında, "suggestions" ve "reasoning" anahtarlarıyla birlikte döndür. "reasoning" alanına, bu backlog yapısını neden böyle oluşturduğuna dair kısa bir açıklama ekle.
+
+**PROJE ARTEFAKTLARI:**
+---
+**Ana Talep:** {main_request}
+---
+**İş Analizi Dokümanı:** {analysis_document}
+---
+**Test Senaryoları:** {test_scenarios}
+---
+**İzlenebilirlik Matrisi:** {traceability_matrix}
+---
+`
                 }
             ],
             activeVersionId: 'default'
-        },
+        }
+    ]
+  },
+  {
+    id: 'maintenance',
+    name: 'Bakım ve Düzeltme',
+    prompts: [
         {
             id: 'convertHtmlToAnalysisJson',
             name: 'HTML\'den Analiz JSON\'una Dönüştür',
-            description: 'Content-editable div\'den gelen HTML\'i yapısal JSON formatına dönüştürür.',
-            is_system_template: false,
+            description: 'Kullanıcının contentEditable div üzerinde yaptığı değişiklikleri tekrar yapısal JSON formatına dönüştürür.',
+            is_system_template: true,
             versions: [
                 {
                     versionId: 'default',
                     name: 'Varsayılan',
                     createdAt: new Date().toISOString(),
-                    prompt: `Aşağıdaki HTML içeriğini, daha önce tanımlanan 'analysisSchema' yapısına uygun bir JSON nesnesine dönüştür. HTML'deki h2'leri section başlıkları, h3'leri subSection başlıkları, p'leri içerik ve li'leri gereksinimler (eğer bir ID'leri varsa) olarak yorumla. Sadece ve sadece JSON çıktısı ver.`
-                }
-            ],
-            activeVersionId: 'default'
-        },
-        {
-            id: 'summarizeChange',
-            name: 'Değişikliği Özetle',
-            description: 'Bir dokümanın iki versiyonu arasındaki farkı özetler.',
-            is_system_template: false,
-            versions: [
-                {
-                    versionId: 'default',
-                    name: 'Varsayılan',
-                    createdAt: new Date().toISOString(),
-                    prompt: `Bir dokümanın eski ve yeni versiyonları aşağıdadır. Değişikliği anlatan, "Versiyon geçmişi" için uygun, kısa ve tek cümlelik bir özet yaz.`
+                    prompt: `Bir veri dönüştürme uzmanı olarak, aşağıda verilen HTML içeriğini, daha önce oluşturulmuş olan yapısal iş analizi dokümanı JSON formatına geri dönüştür. HTML'deki \`<h2>\`, \`<h3>\`, \`<ul>\`, \`<li>\` ve \`<p>\` etiketlerini analiz ederek orijinal JSON yapısını (sections, subSections, requirements) yeniden oluştur. Gereksinim ID'lerini (örn: "REQ-001") koru. Çıktın sadece ve sadece geçerli bir JSON nesnesi olmalıdır.`
                 }
             ],
             activeVersionId: 'default'
@@ -453,14 +633,25 @@ Lütfen sadece ve sadece istenen JSON array formatında çıktı ver.`,
         {
             id: 'lintDocument',
             name: 'Dokümanı Lint Et',
-            description: 'Dokümandaki yapısal tutarsızlıkları (örn: bozuk sıralama) bulur.',
-            is_system_template: false,
+            description: 'Bir dokümandaki yapısal tutarsızlıkları (örn: bozuk sıralama) bulur.',
+            is_system_template: true,
             versions: [
                 {
                     versionId: 'default',
                     name: 'Varsayılan',
                     createdAt: new Date().toISOString(),
-                    prompt: `Aşağıdaki dokümanı analiz et. Özellikle fonksiyonel gereksinimler (FR-XXX) gibi sıralı ID'lerde bir atlama veya tutarsızlık olup olmadığını kontrol et. Eğer bir sorun bulursan, sorunu JSON array formatında raporla. Her sorun için 'type: "BROKEN_SEQUENCE"', 'section' ve 'details' alanlarını doldur.`
+                    prompt: `Bir metin editörü olarak, aşağıdaki dokümanı incele. Özellikle sıralı listelerde veya numaralandırılmış başlıklarda (örn: FR-001, FR-002, FR-004) herhangi bir atlama veya tutarsızlık olup olmadığını kontrol et. Eğer bir tutarsızlık bulursan, bunu aşağıdaki JSON formatında bir dizi olarak raporla. Hata yoksa, boş bir dizi \`[]\` döndür. Çıktın sadece JSON olmalıdır.
+
+**JSON Formatı:**
+\`\`\`json
+[
+  {
+    "type": "BROKEN_SEQUENCE",
+    "section": "[Hatanın bulunduğu bölümün başlığı, örn: Fonksiyonel Gereksinimler]",
+    "details": "[Hatanın kısa açıklaması, örn: FR-002'den sonra FR-004 geliyor, FR-003 atlanmış.]"
+  }
+]
+\`\`\``
                 }
             ],
             activeVersionId: 'default'
@@ -469,142 +660,65 @@ Lütfen sadece ve sadece istenen JSON array formatında çıktı ver.`,
             id: 'fixLinterIssues',
             name: 'Lint Hatalarını Düzelt',
             description: 'Belirtilen bir lint hatasını otomatik olarak düzeltir.',
-            is_system_template: false,
+            is_system_template: true,
             versions: [
                 {
                     versionId: 'default',
                     name: 'Varsayılan',
                     createdAt: new Date().toISOString(),
-                    prompt: `Aşağıdaki dokümanda belirtilen hatayı düzelt ve dokümanın tamamını, düzeltilmiş haliyle geri döndür. Sadece ve sadece dokümanın tamamını döndür.
-                    **Talimat:** {instruction}`
-                }
-            ],
-            activeVersionId: 'default'
-        },
-        {
-            id: 'suggestNextFeature',
-            name: 'Sonraki Özelliği Öner',
-            description: 'Mevcut analize dayanarak geliştirilebilecek yeni özellikleri önerir.',
-            is_system_template: false,
-            versions: [
-                {
-                    versionId: 'default',
-                    name: 'Varsayılan',
-                    createdAt: new Date().toISOString(),
-                    prompt: `Aşağıdaki iş analizi dokümanını ve konuşma geçmişini incele. Projeyi bir sonraki adıma taşıyacak, mevcut kapsamı genişletecek veya iyileştirecek 3 adet yeni ve yaratıcı özellik önerisi sun. Önerilerini 'suggestions' adında bir JSON array olarak döndür.`
-                }
-            ],
-            activeVersionId: 'default'
-        },
-        {
-            id: 'parseTextToRequestDocument',
-            name: 'Metinden Talep Dokümanı Oluştur',
-            description: 'Serbest metinden yapısal bir IsBirimiTalep JSON dokümanı oluşturur.',
-            is_system_template: false,
-            versions: [
-                {
-                    versionId: 'default',
-                    name: 'Varsayılan',
-                    createdAt: new Date().toISOString(),
-                    prompt: `Aşağıdaki serbest metni analiz et ve 'IsBirimiTalep' JSON formatına dönüştür. Eksik alanlar için '[Belirlenecek]' veya mantıklı varsayımlar kullan. 'dokumanNo', 'tarih' ve 'revizyon' gibi alanları uygun şekilde doldur (örn: DOK-YYMMDD, bugünün tarihi, 1.0). 'dokumanTipi' alanı her zaman "IsBirimiTalep" olmalıdır. Sadece ve sadece JSON çıktısı ver.
+                    prompt: `Bir metin editörü olarak, sana verilen talimata göre aşağıdaki dokümanın tamamını yeniden yazarak hatayı düzelt. Sadece düzeltilmiş dokümanın tam metnini döndür. Başka hiçbir açıklama ekleme.
 
-**Metin:**
-{raw_text}`
+**Düzeltme Talimatı:** {instruction}`
+                }
+            ],
+            activeVersionId: 'default'
+        },
+        {
+            id: 'analyzeFeedback',
+            name: 'Geri Bildirimleri Analiz Et',
+            description: 'Kullanıcıların verdiği tüm geri bildirimleri özetler ve iyileştirme alanlarını belirler.',
+            is_system_template: true,
+            versions: [
+                {
+                    versionId: 'default',
+                    name: 'Varsayılan',
+                    createdAt: new Date().toISOString(),
+                    prompt: `Bir veri analisti olarak, aşağıda JSON formatında verilen kullanıcı geri bildirimlerini analiz et. Bu verilerden yola çıkarak aşağıdaki başlıkları içeren bir Markdown raporu oluştur:
+
+### Genel Bakış
+- Toplam olumlu ve olumsuz geri bildirim sayılarını belirt.
+- Genel memnuniyet oranını (olumlu / toplam) yüzde olarak hesapla.
+
+### Ana Temalar ve Eğilimler
+- Hem olumlu hem de olumsuz geri bildirimlerde en sık tekrar eden temaları (örn: "analiz doğruluğu", "formatlama", "hız") belirle ve listele.
+
+### İyileştirme Alanları
+- Olumsuz geri bildirimlerden yola çıkarak sistemin hangi konularda zayıf kaldığını analiz et.
+- Bu zayıflıkları gidermek için 2-3 adet somut ve eyleme geçirilebilir öneri sun.
+
+### Güçlü Yönler
+- Olumlu geri bildirimlere dayanarak sistemin en çok beğenilen yönlerini özetle.`
                 }
             ],
             activeVersionId: 'default'
         }
     ]
-  }
+  },
 ];
 
-let promptData: PromptData = [];
-
-const loadPrompts = (): PromptData => {
-  // Always start with a fresh copy of defaults to get code updates.
-  const mergedData = JSON.parse(JSON.stringify(DEFAULT_PROMPTS)) as PromptData;
-  
-  try {
-    const storedData = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (storedData) {
-      const parsedStoredData: PromptData = JSON.parse(storedData);
-      
-      // Merge stored data over the defaults to preserve user customizations.
-      parsedStoredData.forEach(storedCategory => {
-        const defaultCategory = mergedData.find(c => c.id === storedCategory.id);
-        if (defaultCategory) {
-          storedCategory.prompts.forEach(storedPrompt => {
-            const promptIndex = defaultCategory.prompts.findIndex(p => p.id === storedPrompt.id);
-            if (promptIndex !== -1) {
-              // Replace the default prompt with the user's saved version.
-              defaultCategory.prompts[promptIndex] = storedPrompt;
-            } else {
-              // This case is unlikely but handles if a user has a prompt that's no longer in defaults.
-              // We could choose to add it, but for now, we'll ignore it to keep the default structure clean.
-            }
-          });
-        }
-      });
-    }
-  } catch (error) {
-    console.error("Failed to load or merge prompts from localStorage", error);
-    // If merging fails, we will just return the fresh defaults.
-  }
-  
-  return mergedData;
-};
-
-const savePrompts = (data: PromptData): void => {
-  try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
-    promptData = data;
-  } catch (error) {
-    console.error("Failed to save prompts to localStorage", error);
-  }
-};
-
-const getPromptData = (): PromptData => {
-  if (promptData.length === 0) {
-    promptData = loadPrompts();
-  }
-  return promptData;
-};
-
-const getPrompt = (promptId: string): string => {
-  const data = getPromptData();
-  for (const category of data) {
-    const prompt = category.prompts.find(p => p.id === promptId);
-    if (prompt) {
-      const activeVersion = prompt.versions.find(v => v.versionId === prompt.activeVersionId);
-      return activeVersion ? activeVersion.prompt : prompt.versions[0]?.prompt || '';
-    }
-  }
-  console.warn(`Prompt with id "${promptId}" not found.`);
-  return '';
-};
-
-const resetToDefaults = (): PromptData => {
-  localStorage.removeItem(LOCAL_STORAGE_KEY);
-  promptData = JSON.parse(JSON.stringify(DEFAULT_PROMPTS)); // Deep copy
-  savePrompts(promptData);
-  return promptData;
-};
-
 const getSystemDocumentTemplates = (): Template[] => {
-    const data = getPromptData();
     const templates: Template[] = [];
-    data.forEach(category => {
+    DEFAULT_PROMPTS.forEach(category => {
         category.prompts.forEach(prompt => {
             if (prompt.is_system_template && prompt.document_type) {
+                const activeVersion = prompt.versions.find(v => v.versionId === prompt.activeVersionId) || prompt.versions[0];
                 templates.push({
                     id: prompt.id,
-                    name: prompt.name,
-                    prompt: getPrompt(prompt.id),
-                    // FIX: Cast document_type to match the more restrictive Template type.
-                    // The logic ensures only valid types are used here.
-                    document_type: prompt.document_type as 'analysis' | 'test' | 'traceability' | 'visualization',
-                    is_system_template: true,
                     user_id: null,
+                    name: prompt.name,
+                    document_type: prompt.document_type as any, // Cast because we checked it exists
+                    prompt: activeVersion.prompt,
+                    is_system_template: true,
                 });
             }
         });
@@ -613,10 +727,51 @@ const getSystemDocumentTemplates = (): Template[] => {
 }
 
 
-export const promptService = {
-  getPromptData,
-  savePrompts,
-  getPrompt,
-  resetToDefaults,
+const promptService = {
+  getPromptData: (): PromptData => {
+    try {
+      const storedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (storedData) {
+        // Basic validation
+        const parsed = JSON.parse(storedData);
+        if (Array.isArray(parsed) && parsed[0]?.prompts) {
+            return parsed;
+        }
+      }
+    } catch (error) {
+      console.error("Error parsing prompts from localStorage, falling back to defaults.", error);
+    }
+    // If nothing in storage or parsing fails, return defaults
+    return JSON.parse(JSON.stringify(DEFAULT_PROMPTS)); // Return a deep copy
+  },
+
+  savePrompts: (data: PromptData): void => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+    } catch (error) {
+      console.error("Error saving prompts to localStorage.", error);
+    }
+  },
+  
+  resetToDefaults: (): PromptData => {
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
+    return JSON.parse(JSON.stringify(DEFAULT_PROMPTS));
+  },
+
+  getPrompt: (promptId: string): string => {
+    const data = promptService.getPromptData();
+    for (const category of data) {
+      const prompt = category.prompts.find(p => p.id === promptId);
+      if (prompt) {
+        const activeVersion = prompt.versions.find(v => v.versionId === prompt.activeVersionId);
+        return activeVersion ? activeVersion.prompt : prompt.versions[0]?.prompt || '';
+      }
+    }
+    console.warn(`Prompt with id "${promptId}" not found.`);
+    return '';
+  },
+  
   getSystemDocumentTemplates,
 };
+
+export { promptService };

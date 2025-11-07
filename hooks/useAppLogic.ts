@@ -330,7 +330,23 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
 
             const finalAssistantMessageData: Message = { ...assistantPlaceholder, content: finalMessage, isStreaming: false };
             setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? { ...m, ...finalAssistantMessageData } : m) } : c));
-            await supabase.from('conversation_details').upsert(finalAssistantMessageData);
+            
+            if (finalAssistantMessageData.content || (finalAssistantMessageData.expertRunChecklist && finalAssistantMessageData.expertRunChecklist.length > 0)) {
+                const { error: upsertError } = await supabase.from('conversation_details').upsert({
+                    id: finalAssistantMessageData.id,
+                    conversation_id: finalAssistantMessageData.conversation_id,
+                    role: finalAssistantMessageData.role,
+                    content: finalAssistantMessageData.content,
+                    created_at: finalAssistantMessageData.created_at,
+                    timestamp: finalAssistantMessageData.timestamp,
+                    expertRunChecklist: finalAssistantMessageData.expertRunChecklist,
+                });
+                if (upsertError) {
+                    console.error("Failed to save expert mode assistant message:", upsertError);
+                    setError("Asistanın cevabı kaydedilemedi: " + upsertError.message);
+                }
+            }
+
 
         } catch (err: any) {
             if (err.name !== 'AbortError') {
@@ -460,15 +476,19 @@ export const useAppLogic = ({ user, onLogout, initialData }: UseAppLogicProps) =
             setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: c.messages.map(m => m.id === assistantMessageId ? { ...m, content: finalAssistantMessageData.content, isStreaming: false } : m) } : c));
             
             if (finalAssistantMessageData.content || (finalAssistantMessageData.expertRunChecklist && finalAssistantMessageData.expertRunChecklist.length > 0)) {
-                await supabase.from('conversation_details').upsert({
+                const { error: upsertError } = await supabase.from('conversation_details').upsert({
                     id: finalAssistantMessageData.id,
                     conversation_id: finalAssistantMessageData.conversation_id,
                     role: finalAssistantMessageData.role,
                     content: finalAssistantMessageData.content,
                     created_at: finalAssistantMessageData.created_at,
-                    // Ensure expertRunChecklist is saved if it exists
+                    timestamp: finalAssistantMessageData.timestamp,
                     expertRunChecklist: finalAssistantMessageData.expertRunChecklist,
                 });
+                if (upsertError) {
+                    console.error("Failed to save assistant message:", upsertError);
+                    setError("Asistanın cevabı kaydedilemedi: " + upsertError.message);
+                }
             } else {
                  setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: c.messages.filter(m => m.id !== assistantMessageId) } : c));
             }
