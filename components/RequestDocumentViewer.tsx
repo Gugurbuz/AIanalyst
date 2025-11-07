@@ -12,7 +12,8 @@ interface RequestDocumentViewerProps {
 const Section: React.FC<{ icon: React.ReactElement; title: string; children: React.ReactNode }> = ({ icon, title, children }) => (
     <div className="mb-8">
         <div className="flex items-center mb-3">
-            <div className="text-indigo-500 mr-3">{React.cloneElement(icon, { size: 20 })}</div>
+            {/* FIX: Cast icon to a type that accepts 'size' to resolve cloneElement error. */}
+            <div className="text-indigo-500 mr-3">{React.cloneElement(icon as React.ReactElement<{ size: number }>, { size: 20 })}</div>
             <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">{title}</h2>
         </div>
         <div className="pl-8 text-slate-600 dark:text-slate-400 prose prose-slate dark:prose-invert max-w-none">

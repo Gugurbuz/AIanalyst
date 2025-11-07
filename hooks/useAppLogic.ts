@@ -11,12 +11,14 @@ import type {
     Message,
     GeneratedDocs,
     GenerativeSuggestion,
+    // FIX: Import the 'ExpertStep' type.
     ExpertStep,
     GeminiModel,
     Template,
     DocumentVersion,
     SourcedDocument,
     DocumentType,
+    ThoughtProcess,
 } from '../types';
 import type { AppData } from '../index';
 import { supabase } from '../services/supabaseClient';
@@ -39,7 +41,7 @@ const simpleHash = (str: string): string => {
 };
 
 // FIX: Add documentTypeToKeyMap to resolve 'Cannot find name' error.
-const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs | 'visualization'> = {
+const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs> = {
     request: 'requestDoc',
     analysis: 'analysisDoc',
     test: 'testScenarios',
@@ -47,7 +49,6 @@ const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs | 'visualiz
     mermaid: 'mermaidViz',
     bpmn: 'bpmnViz',
     maturity_report: 'maturityReport',
-    visualization: 'visualization',
 };
 
 
@@ -132,7 +133,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         setMessageToEdit(null);
         generationController.current = new AbortController();
 
-        const userMessage: Message = { id: uuidv4(), conversation_id: activeId, role: 'user', content: text, created_at: new Date().toISOString(), timestamp: new Date().toISOString() };
+        const userMessage: Message = { id: uuidv4(), conversation_id: activeId, role: 'user', content: text, created_at: new Date().toISOString() };
         let historyForApi: Message[] = [...(conversationState.activeConversation?.messages || [])];
         
         if (!isRetry) {
@@ -143,13 +144,14 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         }
 
         const assistantMessageId = uuidv4();
-        const assistantMessage: Message = { id: assistantMessageId, conversation_id: activeId, role: 'assistant', content: '', created_at: new Date().toISOString(), timestamp: new Date().toISOString(), isStreaming: true };
+        const assistantMessage: Message = { id: assistantMessageId, conversation_id: activeId, role: 'assistant', content: '', created_at: new Date().toISOString(), isStreaming: true };
         conversationState.updateConversation(activeId, { messages: [...historyForApi, assistantMessage] });
         
-        const finalAssistantMessage = { ...assistantMessage };
+        const finalAssistantMessage: Message = { ...assistantMessage };
         
         try {
-            const stream = uiState.isExpertMode 
+            // FIX: Remove the incorrect `parseStreamingResponse` wrapper. `handleUserMessageStream` already returns the correct `StreamChunk` generator.
+            const rawStream = uiState.isExpertMode 
                 ? geminiService.runExpertAnalysisStream(userMessage, conversationState.activeConversation!.generatedDocs, {
                     analysis: promptService.getPrompt('generateAnalysisDocument'),
                     test: promptService.getPrompt('generateTestScenarios'),
@@ -162,68 +164,86 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
                     traceability: conversationState.allTemplates.find(t => t.id === conversationState.selectedTemplates.traceability)?.prompt || promptService.getPrompt('generateTraceabilityMatrix'),
                     visualization: promptService.getPrompt(uiState.diagramType === 'bpmn' ? 'generateBPMN' : 'generateVisualization'),
                 }, activeModel());
-
-            for await (const chunk of stream) {
+            
+            let accumulatedContent = '';
+            let accumulatedThought: ThoughtProcess | null = null;
+            
+            for await (const chunk of rawStream) {
                 if (generationController.current?.signal.aborted) break;
-                
-                // Update UI for streaming effect
-                conversationState.updateStreamingMessage(assistantMessageId, chunk);
 
-                // Also update a local variable to have the definitive final state, avoiding async state issues.
-                if (chunk.type === 'chat_stream_chunk') {
-                    finalAssistantMessage.content = (finalAssistantMessage.content || '') + chunk.chunk;
-                } else if (chunk.type === 'expert_run_update') {
-                    finalAssistantMessage.expertRunChecklist = chunk.checklist;
-                    if (chunk.isComplete && chunk.finalMessage) {
-                        finalAssistantMessage.content = chunk.finalMessage;
-                    }
-                } else if (chunk.type === 'generative_suggestion') {
-                    finalAssistantMessage.generativeSuggestion = chunk.suggestion;
-                } else if (chunk.type === 'usage_update') {
-                    conversationState.commitTokenUsage(chunk.tokens);
-                } else if (chunk.type === 'doc_stream_chunk') {
-                    conversationState.streamDocument(chunk.docKey, chunk.chunk);
+                switch (chunk.type) {
+                    case 'thought_chunk':
+                        accumulatedThought = chunk.payload;
+                        finalAssistantMessage.thought = accumulatedThought;
+                        conversationState.updateStreamingMessage(assistantMessageId, chunk);
+                        break;
+                    
+                    case 'text_chunk':
+                        accumulatedContent += chunk.text;
+                        finalAssistantMessage.content = accumulatedContent;
+                        conversationState.updateStreamingMessage(assistantMessageId, { type: 'chat_stream_chunk', chunk: chunk.text });
+                        break;
+                    
+                    // Handle other chunks from expert mode or other tools
+                    case 'doc_stream_chunk':
+                        conversationState.streamDocument(chunk.docKey, chunk.chunk);
+                        break;
+                    case 'usage_update':
+                        conversationState.commitTokenUsage(chunk.tokens);
+                        break;
+                    // FIX: This case was causing a type error because the yielding function was refactored.
+                    // The logic is now handled server-side by the model or within other chunks.
+                    /* case 'function_call':
+                         // In the new architecture, most function calls are handled within the expert mode stream itself.
+                         // This can be a place for additional client-side function handling if needed.
+                        break; */
                 }
             }
 
+
         } catch (e: any) {
             console.error("Streaming error:", e);
-            finalAssistantMessage.error = { message: e.message };
+            finalAssistantMessage.error = { name: "StreamError", message: e.message };
         } finally {
             setIsProcessing(false);
             setGeneratingDocType(null);
             finalAssistantMessage.isStreaming = false;
+            
+            // When streaming is complete, ensure all thought steps are marked as 'completed'
+            // to remove any lingering loading spinners from the UI.
+            if (finalAssistantMessage.thought && Array.isArray(finalAssistantMessage.thought.steps)) {
+                const completedSteps = finalAssistantMessage.thought.steps.map(step => ({
+                    ...step,
+                    // FIX: Explicitly cast the status to satisfy the strict 'ThinkingStep' type.
+                    // The type inference was failing and widening the status to 'string'.
+                    status: (step.status === 'error' ? 'error' : 'completed') as ExpertStep['status'],
+                }));
+                finalAssistantMessage.thought = {
+                    ...finalAssistantMessage.thought,
+                    steps: completedSteps
+                };
+            }
 
-            conversationState.setConversations(prev => prev.map(c => {
-                if (c.id === activeId) {
-                    const finalMessages = c.messages.map(m => m.id === assistantMessageId ? finalAssistantMessage : m);
-                    return { ...c, messages: finalMessages };
-                }
-                return c;
-            }));
+            conversationState.updateMessage(assistantMessageId, { ...finalAssistantMessage });
             
             if (!finalAssistantMessage.error) {
-                // Prepare payload for DB
-                const { isStreaming, expertRunChecklist, ...messageToSave } = finalAssistantMessage;
-                const dbPayload = { ...messageToSave } as Partial<Message>;
+                const { error: assistantMessageError } = await supabase
+                    .from('conversation_details')
+                    .insert({
+                        id: finalAssistantMessage.id,
+                        conversation_id: finalAssistantMessage.conversation_id,
+                        role: finalAssistantMessage.role,
+                        content: finalAssistantMessage.content,
+                        created_at: finalAssistantMessage.created_at,
+                        thought: finalAssistantMessage.thought || null,
+                        feedback: finalAssistantMessage.feedback || null,
+                    });
 
-                if (expertRunChecklist && expertRunChecklist.length > 0) {
-                    dbPayload.thoughts = JSON.stringify(expertRunChecklist);
-                } else {
-                    dbPayload.thoughts = null;
-                }
-
-                if(dbPayload.content?.trim() || dbPayload.thoughts) {
-                     const { error: assistantMessageError } = await supabase.from('conversation_details').insert(dbPayload);
-                     if (assistantMessageError) uiState.setError(`Asistan yanıtı kaydedilemedi: ${assistantMessageError.message}`);
+                if (assistantMessageError) {
+                    uiState.setError(`Asistan yanıtı kaydedilemedi: ${assistantMessageError.message}`);
                 }
                 
                 await conversationState.finalizeStreamedDocuments();
-            } else {
-                // Remove placeholder on error if it's empty
-                if (!finalAssistantMessage.content?.trim() && !finalAssistantMessage.expertRunChecklist) {
-                     conversationState.setConversations(prev => prev.map(c => c.id === activeId ? { ...c, messages: c.messages.filter(m => m.id !== assistantMessageId) } : c));
-                }
             }
         }
     }, [conversationState, checkTokenLimit, uiState, activeModel, handleNewConversation]);
@@ -348,9 +368,9 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         const { docType, newTemplateId } = uiState.regenerateModalData.current!;
         if (saveCurrent) {
             const docKey = { analysis: 'analysisDoc', test: 'testScenarios', traceability: 'traceabilityMatrix' }[docType];
-            const content = conversationState.activeConversation?.generatedDocs[docKey];
+            const content = conversationState.activeConversation?.generatedDocs[docKey as keyof GeneratedDocs];
             if (content) {
-                conversationState.saveDocumentVersion(docKey, content, "Yeni şablon seçimi öncesi arşivlendi");
+                conversationState.saveDocumentVersion(docKey as keyof GeneratedDocs, content, "Yeni şablon seçimi öncesi arşivlendi");
             }
         }
         uiState.setIsRegenerateModalOpen(false);

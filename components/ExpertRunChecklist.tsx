@@ -1,5 +1,6 @@
 // components/ExpertRunChecklist.tsx
 import React from 'react';
+// FIX: Import the 'ExpertStep' type, which is now an alias for 'ThinkingStep'.
 import type { ExpertStep } from '../types';
 import { CheckCircle2, LoaderCircle, Circle, AlertTriangle } from 'lucide-react';
 

@@ -7,9 +7,10 @@ interface ExportDropdownProps {
     filename: string;
     diagramType?: 'mermaid' | 'bpmn' | null;
     getSvgContent?: (() => Promise<string | null>) | null;
+    isTable?: boolean;
 }
 
-export const ExportDropdown: React.FC<ExportDropdownProps> = ({ content, filename, diagramType = null, getSvgContent }) => {
+export const ExportDropdown: React.FC<ExportDropdownProps> = ({ content, filename, diagramType = null, getSvgContent, isTable }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -49,7 +50,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({ content, filenam
              exportService.exportAsDocx(content, filename);
         } else if (format === 'pdf') {
             // For diagrams, we can try to export the SVG as part of the PDF, but for now, we'll just print text content
-            exportService.exportAsPdf(content, filename, false);
+            exportService.exportAsPdf(content, filename, !!isTable);
         }
         setIsOpen(false);
     };

@@ -146,12 +146,14 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                     const { impact, tokens } = await geminiService.analyzeDocumentChange(prevAnalysisDoc || '', generatedDocs.analysisDoc, 'gemini-2.5-flash-lite');
                     onAddTokens(tokens);
                     if (impact.isVisualizationImpacted) await updateDocumentStaleness('mermaid', true);
+                    if (impact.isVisualizationImpacted) await updateDocumentStaleness('bpmn', true);
                     if (impact.isTestScenariosImpacted) await updateDocumentStaleness('test', true);
                     if (impact.isTraceabilityImpacted) await updateDocumentStaleness('traceability', true);
                 } catch (error) {
                     console.error("Impact analysis failed:", error);
                     await Promise.all([
                         updateDocumentStaleness('mermaid', true),
+                        updateDocumentStaleness('bpmn', true),
                         updateDocumentStaleness('test', true),
                         updateDocumentStaleness('traceability', true)
                     ]);
@@ -178,9 +180,15 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     const isAnalysisDocReady = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
 
     const handleRegenerate = (docType: 'viz' | 'test' | 'traceability' | 'backlog-generation') => {
-        const typeMap: Record<string, DocumentType> = { viz: 'mermaid', test: 'test', traceability: 'traceability' };
-        const dbDocType = typeMap[docType];
-        if (dbDocType) updateDocumentStaleness(dbDocType, false);
+        if (docType === 'viz') {
+            // Use the currently active diagram type for staleness update
+            const dbDocType = diagramType; // This will be 'mermaid' or 'bpmn'
+            updateDocumentStaleness(dbDocType, false);
+        } else {
+            const typeMap: Record<string, DocumentType> = { test: 'test', traceability: 'traceability' };
+            const dbDocType = typeMap[docType];
+            if (dbDocType) updateDocumentStaleness(dbDocType, false);
+        }
         onGenerateDoc(docType as any);
     }
 

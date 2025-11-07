@@ -37,7 +37,8 @@ export const BPMNViewer: React.FC<BPMNViewerProps> = ({ xml, setSvgContentGetter
         modelerRef.current = modeler;
         
         if (setSvgContentGetter) {
-            setSvgContentGetter(() => async () => {
+            // FIX: Pass the async getter function directly, instead of a function that returns it.
+            setSvgContentGetter(async () => {
                 if (!modelerRef.current) return null;
                 
                 // Strengthened safeguard: Check if the diagram has any elements before exporting.

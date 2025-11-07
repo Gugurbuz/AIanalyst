@@ -4,19 +4,21 @@ import { CheckCircle, RefreshCw, AlertCircle, Circle, ChevronUp } from 'lucide-r
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface ThinkingProcessProps {
+  title: string;
   steps: ThinkingStep[];
   isThinking: boolean;
   error: string | null;
 }
 
-const ThinkingProcess: React.FC<ThinkingProcessProps> = ({ steps, isThinking, error }) => {
-    const [isExpanded, setIsExpanded] = useState(true);
+const ThinkingProcess: React.FC<ThinkingProcessProps> = ({ title, steps, isThinking, error }) => {
+    const [isExpanded, setIsExpanded] = useState(false);
 
     if (!isThinking && steps.length === 0 && !error) {
         return null;
     }
 
-    const isFreeFormThought = steps.length > 0 && steps.every(step => step.name === 'Düşünce Akışı');
+    const isFreeFormThought = steps.length > 0 && steps.every(step => step.description);
+    // FIX: Access the 'description' property which is now correctly typed on 'ThinkingStep'.
     const freeFormContent = steps.map(s => s.description).join('\n\n');
 
     const getStepIcon = (status: ThinkingStep['status']) => {
@@ -45,7 +47,7 @@ const ThinkingProcess: React.FC<ThinkingProcessProps> = ({ steps, isThinking, er
             >
                 <div className="flex items-center gap-2">
                     {showSpinner && <RefreshCw className="animate-spin h-4 w-4 text-slate-500 dark:text-slate-400" />}
-                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Thinking...</h3>
+                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">{title || 'Thinking...'}</h3>
                 </div>
                 <ChevronUp className={`h-5 w-5 text-slate-500 dark:text-slate-400 transition-transform duration-200 ${!isExpanded && 'rotate-180'}`} />
             </button>

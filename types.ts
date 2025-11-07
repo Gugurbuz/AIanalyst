@@ -26,12 +26,23 @@ export interface Feedback {
     comment?: string;
 }
 
-export interface ExpertStep {
-    id: string;
-    name: string;
-    status: 'pending' | 'in_progress' | 'completed' | 'error';
-    details?: string;
+export interface ThinkingStep {
+  id: string;
+  name: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'error';
+  details?: string;
+  description?: string;
 }
+
+// YENİ Birleşik Düşünce Tipi (ExpertStep'ten uyarlandı)
+export interface ThoughtProcess {
+  title: string;
+  steps: ThinkingStep[];
+}
+
+// FIX: Define ExpertStep as an alias for ThinkingStep to resolve missing type errors.
+export type ExpertStep = ThinkingStep;
+
 
 export interface GenerativeSuggestion {
     title: string;
@@ -46,15 +57,37 @@ export interface Message {
     conversation_id: string;
     role: 'user' | 'assistant' | 'system';
     content: string;
-    timestamp: string; // ISO 8601 date string
-    feedback?: Feedback;
-    expertRunChecklist?: ExpertStep[];
-    generativeSuggestion?: GenerativeSuggestion;
-    thoughts?: string | null;
     created_at: string;
     isStreaming?: boolean;
-    error?: { message: string };
+    error?: { name: string; message: string; } | null;
+    thought?: ThoughtProcess | null; // <-- YENİ ALAN (Veritabanıyla eşleşecek)
+    feedback?: Feedback | null;
+    documentType?: DocumentType | null;
+    // DEPRECATED:
+    timestamp?: string;
+    expertRunChecklist?: ExpertStep[]; 
+    generativeSuggestion?: GenerativeSuggestion;
+    thoughts?: string | null; // Legacy DB field
 }
+
+
+// StreamChunk'ı bu yeni tipi kullanacak şekilde güncelleyin
+export type StreamChunk =
+  | { type: 'text_chunk'; text: string }
+  | { type: 'thought_chunk'; payload: ThoughtProcess } // YENİ TİP (expert_run_update yerine)
+  | { type: 'doc_stream_chunk'; docKey: keyof GeneratedDocs; chunk: any }
+  | { type: 'stream_complete'; finalMessage?: string }
+  | { type: 'stream_error'; error: { name: string; message: string; } }
+  | { type: 'function_call'; name: string; args: any }
+  | { type: 'doc_lint_result'; results: LintingIssue[] }
+  // expert_run_update kaldırıldı
+  | { type: 'chat_stream_chunk'; chunk: string } // for backward compatibility in geminiService
+  | { type: 'expert_run_update'; checklist: ExpertStep[]; isComplete: boolean; finalMessage?: string; } // for expert mode
+  | { type: 'usage_update'; tokens: number }
+  | { type: 'visualization_update', content: string }
+  | { type: 'error', message: string };
+
+
 
 export type MaturityLevel = 'Zayıf' | 'Gelişime Açık' | 'İyi' | 'Mükemmel';
 
@@ -75,8 +108,7 @@ export interface MaturityReport {
     maturity_level: MaturityLevel; // Kalitatif değerlendirme
 }
 
-// FIX: Add 'visualization' to DocumentType to align with its usage in system prompts.
-export type DocumentType = 'analysis' | 'test' | 'traceability' | 'mermaid' | 'bpmn' | 'maturity_report' | 'request' | 'visualization';
+export type DocumentType = 'analysis' | 'test' | 'traceability' | 'mermaid' | 'bpmn' | 'maturity_report' | 'request';
 
 export interface DocumentVersion {
     id: string;
@@ -184,7 +216,7 @@ export interface Template {
     id: string;
     user_id: string | null;
     name: string;
-    document_type: 'analysis' | 'test' | 'traceability' | 'visualization';
+    document_type: 'analysis' | 'test' | 'traceability' | 'mermaid' | 'bpmn';
     prompt: string;
     is_system_template: boolean;
 }
@@ -225,15 +257,6 @@ export interface LintingIssue {
     type: 'BROKEN_SEQUENCE';
     section: string; // e.g., "Fonksiyonel Gereksinimler"
     details: string; // e.g., "FR-001'den sonra FR-003 geliyor."
-}
-// ... diğer tipler
-export interface ThinkingStep {
-  id: string;
-  name: string; // Bu, "Başlık" olacak
-  description: string; // YENİ: Bu, "Açıklama" metni olacak
-  status: 'pending' | 'in_progress' | 'completed' | 'error';
-  result?: any;
-  error?: string;
 }
 
 // NEW: Types for structured analysis document

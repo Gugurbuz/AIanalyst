@@ -4,7 +4,7 @@ import { App } from './App';
 import { AuthPage } from './components/AuthPage';
 import { authService } from './services/authService';
 import { supabase } from './services/supabaseClient'; 
-import type { User, Conversation, Document, DocumentVersion, Message, UserProfile, Template } from './types';
+import type { User, Conversation, Document, DocumentVersion, Message, UserProfile, Template, ThoughtProcess, ThinkingStep } from './types';
 import type { Session } from '@supabase/supabase-js';
 import { PublicView } from './components/PublicView';
 import { LandingPage } from './components/LandingPage';
@@ -51,8 +51,15 @@ const Main = () => {
         // We run this only once, on mount.
         // Initially, we are loading until we have checked for a session.
         setIsLoading(true);
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
+        supabase.auth.getSession().then(({ data: { session }, error }) => {
+            if (error) {
+                console.warn('Error fetching session on initial load:', error.message);
+                // If there's an error (like an invalid refresh token), treat it as logged out.
+                // The Supabase client should also fire a SIGNED_OUT event, but this is a safeguard.
+                setSession(null);
+            } else {
+                setSession(session);
+            }
             // Now we know the auth status, we can stop the initial loading.
             // Data loading will be handled by the next effect based on the session.
             setIsLoading(false); 
@@ -121,20 +128,34 @@ const Main = () => {
                     const conversationsWithDetails = (conversationsResult.data || []).map((conv: any) => {
                         const messagesWithThoughts = (conv.conversation_details || [])
                             .map((msg: any) => {
-                                let expertRunChecklist;
-                                if (msg.thoughts && typeof msg.thoughts === 'string') {
+                                let thought: ThoughtProcess | null = null;
+                                // Handle both old 'thoughts' (string) and new 'thought' (jsonb)
+                                const thoughtSource = msg.thought || msg.thoughts;
+                                
+                                if (thoughtSource && typeof thoughtSource === 'string') {
                                     try {
-                                        expertRunChecklist = JSON.parse(msg.thoughts);
+                                        const parsed = JSON.parse(thoughtSource);
+                                        // Check if it's the old ExpertStep[] format
+                                        if (Array.isArray(parsed)) {
+                                            thought = {
+                                                title: "Düşünce Akışı",
+                                                steps: parsed as ThinkingStep[]
+                                            };
+                                        } else { // Assume it's the new ThoughtProcess format
+                                            thought = parsed as ThoughtProcess;
+                                        }
                                     } catch (e) {
                                         console.warn("Could not parse 'thoughts' field from DB:", e);
-                                        expertRunChecklist = [{ id: 'db_parse_error', name: 'Düşünce Akışı (Hata)', status: 'error', details: `Veritabanından gelen düşünce verisi ayrıştırılamadı.` }];
+                                        thought = { title: 'Düşünce Akışı (Hata)', steps: [{ id: 'db_parse_error', name: 'Veritabanından gelen düşünce verisi ayrıştırılamadı.', status: 'error' }] };
                                     }
-                                } else if (msg.thoughts && typeof msg.thoughts === 'object') {
-                                    expertRunChecklist = msg.thoughts;
+                                } else if (thoughtSource && typeof thoughtSource === 'object') {
+                                    // It's already a JSONB object, use it directly
+                                    thought = thoughtSource as ThoughtProcess;
                                 }
+                                
                                 return {
                                     ...msg,
-                                    expertRunChecklist,
+                                    thought,
                                 };
                             })
                             .sort(
