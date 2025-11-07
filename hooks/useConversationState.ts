@@ -54,24 +54,29 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
     for (const doc of documents) {
         const key = documentTypeToKeyMap[doc.document_type];
         if (key) {
-             if (key === 'mermaidViz' || key === 'bpmnViz' || key === 'maturityReport' || key === 'testScenarios' || key === 'traceabilityMatrix') {
+            // Düz metin olarak kalması gerekenler (örn: diyagram kodları)
+            if (key === 'mermaidViz' || key === 'bpmnViz') {
+                 (docs as any)[key] = doc.content; // String olarak bırak
+            } 
+            // Geriye kalan HER ŞEY (requestDoc, analysisDoc, testScenarios, traceabilityMatrix, maturityReport)
+            // JSON olarak parse edilmelidir.
+            else {
                 try {
-                    (docs as any)[key] = JSON.parse(doc.content);
-                } catch (e) {
-                     const fallbackToStringKeys: (keyof GeneratedDocs)[] = ['testScenarios', 'traceabilityMatrix'];
-                    if (fallbackToStringKeys.includes(key as any)) {
-                        (docs as any)[key] = doc.content;
+                    // Veritabanından gelen metni JSON'a çevir
+                     if (doc.content && doc.content.trim()) {
+                        (docs as any)[key] = JSON.parse(doc.content);
                     } else {
-                         console.error(`Error parsing JSON for ${key}:`, e);
-                        if (key.endsWith('Viz')) {
-                            (docs as any)[key] = { code: '', sourceHash: '' };
-                        } else if (key === 'maturityReport') {
-                            (docs as any)[key] = null;
-                        }
+                        (docs as any)[key] = null;
+                    }
+                } catch (e) {
+                    console.error(`Error parsing JSON for ${key}:`, e, doc.content);
+                    // Hata durumunda çökmemesi için null ata veya eski string verisi ise onu kullan
+                    if (key === 'testScenarios' || key === 'traceabilityMatrix') {
+                        (docs as any)[key] = doc.content; 
+                    } else {
+                        (docs as any)[key] = null; 
                     }
                 }
-            } else {
-                 (docs as any)[key] = doc.content;
             }
         }
     }
@@ -284,6 +289,8 @@ export const useConversationState = ({ user, initialData }: UseConversationState
                 const newMessage = { ...m };
                 if (chunk.type === 'chat_stream_chunk') {
                     newMessage.content = (newMessage.content || '') + chunk.chunk;
+                } else if (chunk.type === 'thought_chunk') {
+                    newMessage.thought = chunk.payload;
                 } else if (chunk.type === 'expert_run_update') {
                     newMessage.expertRunChecklist = chunk.checklist;
                     if (chunk.isComplete && chunk.finalMessage) {

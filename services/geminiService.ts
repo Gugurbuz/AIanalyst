@@ -25,6 +25,7 @@ export type StreamChunk =
   | { type: 'generative_suggestion'; suggestion: GenerativeSuggestion }
   | { type: 'usage_update'; tokens: number }
   | { type: 'request_confirmation'; summary: string }
+  | { type: 'function_call', name: string, args: any }
   | { type: 'error'; message: string };
 
 export interface DocumentImpactAnalysis {
@@ -99,6 +100,29 @@ const convertMessagesToGeminiFormat = (history: Message[]): Content[] => {
 
 const tools: FunctionDeclaration[] = [
     {
+        name: 'logThought',
+        description: 'Cevap vermeden önce düşünce sürecini ve planlama adımlarını kaydetmek için kullanılır. Bu, kullanıcıya bir metin yanıtı vermeden ÖNCE çağrılmalıdır.',
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                title: { type: Type.STRING, description: 'Düşünce sürecinin başlığı.' },
+                steps: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            id: { type: Type.STRING },
+                            name: { type: Type.STRING },
+                            status: { type: Type.STRING, enum: ['pending', 'in_progress', 'completed', 'error'] },
+                        },
+                        required: ['id', 'name', 'status'],
+                    },
+                },
+            },
+            required: ['title', 'steps'],
+        },
+    },
+    {
         name: 'generateAnalysisDocument',
         description: 'Kullanıcı bir dokümanı "güncelle", "oluştur", "yeniden yaz" veya "yeniden oluştur" gibi bir komut verdiğinde BU ARACI KULLAN. Araç, mevcut konuşma geçmişini ve talebi kullanarak tam bir iş analizi dokümanı JSON nesnesi üretir.',
         parameters: {
@@ -145,56 +169,6 @@ const tools: FunctionDeclaration[] = [
         },
     }
 ];
-
-
-export async function* parseStreamingResponse(stream: AsyncGenerator<GenerateContentResponse>): AsyncGenerator<StreamChunk> {
-    let buffer = '';
-    let thoughtYielded = false;
-
-    for await (const chunk of stream) {
-        if (chunk.usageMetadata) {
-            yield { type: 'usage_update', tokens: chunk.usageMetadata.totalTokenCount };
-        }
-        if (!chunk.text) continue;
-
-        buffer += chunk.text;
-        
-        // If we haven't found the thought yet, keep looking.
-        if (!thoughtYielded) {
-            const startTag = '<dusunce>';
-            const endTag = '</dusunce>';
-            const startIdx = buffer.indexOf(startTag);
-            const endIdx = buffer.indexOf(endTag);
-
-            if (startIdx !== -1 && endIdx !== -1) {
-                const jsonStr = buffer.substring(startIdx + startTag.length, endIdx);
-                try {
-                    const thoughtPayload: ThoughtProcess = JSON.parse(jsonStr);
-                    yield { type: 'thought_chunk', payload: thoughtPayload };
-                    thoughtYielded = true;
-
-                    // Yield the text that came after the thought block
-                    const remainingText = buffer.substring(endIdx + endTag.length);
-                    if (remainingText) {
-                        yield { type: 'text_chunk', text: remainingText };
-                    }
-                    buffer = ''; // Clear buffer after processing
-                } catch (e) {
-                    // JSON might be incomplete, wait for more chunks
-                }
-            }
-        } else {
-            // If thought was already yielded, everything else is a text chunk.
-            yield { type: 'text_chunk', text: buffer };
-            buffer = ''; // Clear buffer
-        }
-    }
-
-    // If stream ends and there's still content in buffer (e.g., no thought block was found)
-    if (buffer) {
-        yield { type: 'text_chunk', text: buffer };
-    }
-}
 
 
 const isBirimiTalepSchema = {
@@ -250,47 +224,26 @@ export const geminiService = {
                 },
             });
             
-            const functionCalls: any[] = [];
-            let fullText = '';
-            
             for await (const chunk of responseStream) {
                 if (chunk.usageMetadata) {
                      yield { type: 'usage_update', tokens: chunk.usageMetadata.totalTokenCount };
                 }
+                
                 if (chunk.functionCalls) {
-                    functionCalls.push(...chunk.functionCalls);
+                    for (const fc of chunk.functionCalls) {
+                        if (fc.name === 'logThought') {
+                            yield { type: 'thought_chunk', payload: fc.args as ThoughtProcess };
+                        } else {
+                            // Yield other function calls to be handled by the app logic
+                            yield { type: 'function_call', name: fc.name, args: fc.args };
+                        }
+                    }
                 }
+                
                 if (chunk.text) {
-                    fullText += chunk.text;
+                    yield { type: 'text_chunk', text: chunk.text };
                 }
             }
-            
-            // Now that we have the full response, parse it
-            const thoughtMatch = fullText.match(/<dusunce>(.*?)<\/dusunce>/);
-            if (thoughtMatch && thoughtMatch[1]) {
-                 try {
-                    const thoughtPayload: ThoughtProcess = JSON.parse(thoughtMatch[1]);
-                    yield { type: 'thought_chunk', payload: thoughtPayload };
-                } catch (e) {
-                    console.warn("Could not parse thought JSON:", e);
-                }
-            }
-
-            const textResponse = fullText.replace(/<dusunce>[\s\S]*?<\/dusunce>/, '').trim();
-            if (textResponse) {
-                yield { type: 'text_chunk', text: textResponse };
-            }
-            
-            if (functionCalls.length > 0) {
-                for (const fc of functionCalls) {
-                    // Handle other function calls as before
-                    // (This example focuses on separating thought/text, so function logic is omitted for brevity)
-                    // FIX: This type is not defined in StreamChunk, this will be handled in useAppLogic
-                    // yield { type: 'function_call', name: fc.name, args: fc.args };
-                }
-            }
-
-
         } catch (error) {
             yield { type: 'error', message: error instanceof Error ? error.message : "Bilinmeyen bir hata oluştu" };
         }

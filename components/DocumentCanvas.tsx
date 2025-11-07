@@ -11,6 +11,7 @@ import { VersionHistoryModal } from './VersionHistoryModal';
 import { AnalysisDocumentViewer } from './AnalysisDocumentViewer';
 import { RequestDocumentViewer } from './RequestDocumentViewer';
 import type { Block } from '@blocknote/core';
+import { sanitizeBlockNoteContent } from '../utils/converters';
 
 interface DocumentCanvasProps {
     content: string;
@@ -309,11 +310,13 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                 const parsed = JSON.parse(cleanedContent);
 
                 if (docKey === 'analysisDoc' && isBlockNoteContent(parsed)) {
-                    setDocBlocks(parsed);
+                    const sanitized = sanitizeBlockNoteContent(parsed);
+                    setDocBlocks(sanitized);
                 } else if (docKey === 'requestDoc' && isIsBirimiTalep(parsed)) {
                     setParsedRequestDoc(parsed);
                 }
             } catch(e) {
+                console.warn("Failed to parse document content as JSON in DocumentCanvas", e);
                 setDocBlocks(null);
                 setParsedRequestDoc(null);
             }
