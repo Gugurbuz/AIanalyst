@@ -658,12 +658,18 @@ export const geminiService = {
                 .replace('{conversation_history}', JSON.stringify(history, null, 2))
                 .replace('{section_to_generate}', planSteps[i].name);
 
-            // Schema for a Block[] array - simplified for the model
+            // Schema for a Block[] array - This is the corrected schema
             const blockSchema = {
                 type: Type.OBJECT,
                 properties: {
+                    id: { type: Type.STRING },
                     type: { type: Type.STRING },
-                    level: { type: Type.INTEGER },
+                    props: {
+                        type: Type.OBJECT,
+                        properties: {
+                            level: { type: Type.INTEGER }
+                        },
+                    },
                     content: {
                         type: Type.ARRAY,
                         items: {
@@ -673,10 +679,12 @@ export const geminiService = {
                                 text: { type: Type.STRING },
                                 styles: { type: Type.OBJECT }
                             },
-                            required: ['type', 'text', 'styles']
+                            required: ['type', 'text']
                         }
-                    }
-                }
+                    },
+                    children: { type: Type.ARRAY }
+                },
+                required: ['type']
             };
 
             const { text: sectionJson, tokens: sectionTokens } = await generateContent(sectionPrompt, model, {
