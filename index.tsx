@@ -103,29 +103,54 @@ const Main = () => {
                 setIsLoading(false);
             } else if (session) {
                 setIsLoading(true);
-                const [profileResult, conversationsResult, templatesResult] = await Promise.all([
-                    authService.getProfile(session.user.id),
-                    supabase
-                        .from('conversations')
-                        .select('*, conversation_details(*), document_versions(*), documents(*)')
-                        .eq('user_id', session.user.id)
-                        .order('created_at', { ascending: false }),
-                    authService.fetchTemplates(session.user.id)
-                ]);
-                
-                if (conversationsResult.error) {
-                    setLoadResult({ error: 'Sohbetler yüklenirken bir hata oluştu.' });
-                } else {
-                    const conversationsWithDetails = (conversationsResult.data || []).map((conv: any) => ({
-                        ...conv,
-                        messages: (conv.conversation_details || []).sort(
-                            (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                        ),
-                        documentVersions: (conv.document_versions || []).sort(
-                            (a: DocumentVersion, b: DocumentVersion) => a.version_number - b.version_number
-                        ),
-                        documents: conv.documents || [],
-                    }));
+                try {
+                    const [profileResult, conversationsResult, templatesResult] = await Promise.all([
+                        authService.getProfile(session.user.id),
+                        supabase
+                            .from('conversations')
+                            .select('*, conversation_details(*), document_versions(*), documents(*)')
+                            .eq('user_id', session.user.id)
+                            .order('created_at', { ascending: false }),
+                        authService.fetchTemplates(session.user.id)
+                    ]);
+                    
+                    if (conversationsResult.error) {
+                        throw new Error(`Sohbetler yüklenirken bir hata oluştu: ${conversationsResult.error.message}`);
+                    }
+                    
+                    const conversationsWithDetails = (conversationsResult.data || []).map((conv: any) => {
+                        const messagesWithThoughts = (conv.conversation_details || [])
+                            .map((msg: any) => {
+                                let expertRunChecklist;
+                                if (msg.thoughts && typeof msg.thoughts === 'string') {
+                                    try {
+                                        expertRunChecklist = JSON.parse(msg.thoughts);
+                                    } catch (e) {
+                                        console.warn("Could not parse 'thoughts' field from DB:", e);
+                                        expertRunChecklist = [{ id: 'db_parse_error', name: 'Düşünce Akışı (Hata)', status: 'error', details: `Veritabanından gelen düşünce verisi ayrıştırılamadı.` }];
+                                    }
+                                } else if (msg.thoughts && typeof msg.thoughts === 'object') {
+                                    expertRunChecklist = msg.thoughts;
+                                }
+                                return {
+                                    ...msg,
+                                    expertRunChecklist,
+                                };
+                            })
+                            .sort(
+                                (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                            );
+
+                        return {
+                            ...conv,
+                            messages: messagesWithThoughts,
+                            documentVersions: (conv.document_versions || []).sort(
+                                (a: DocumentVersion, b: DocumentVersion) => a.version_number - b.version_number
+                            ),
+                            documents: conv.documents || [],
+                        };
+                    });
+
 
                     setLoadResult({
                         appData: {
@@ -134,8 +159,11 @@ const Main = () => {
                             templates: templatesResult,
                         }
                     });
+                } catch (err: any) {
+                    setLoadResult({ error: err.message || 'Veri yüklenirken bilinmeyen bir hata oluştu.' });
+                } finally {
+                    setIsLoading(false);
                 }
-                setIsLoading(false);
             }
         };
 

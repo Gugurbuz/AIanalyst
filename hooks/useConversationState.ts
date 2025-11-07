@@ -1,7 +1,7 @@
 // hooks/useConversationState.ts
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
-import { geminiService } from '../services/geminiService';
+import { geminiService, StreamChunk } from '../services/geminiService';
 import { promptService } from '../services/promptService';
 import { v4 as uuidv4 } from 'uuid';
 import type { AppData } from '../index';
@@ -187,8 +187,8 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         
         const document_type = keyToDocumentTypeMap[docKey];
         if (!document_type) {
-            console.warn(`Unknown docKey "${docKey}" passed to saveDocumentVersion. Skipping.`);
-            return Promise.reject(`Unknown docKey "${docKey}"`);
+            console.warn(`Unknown docKey "${String(docKey)}" passed to saveDocumentVersion. Skipping.`);
+            return Promise.reject(`Unknown docKey "${String(docKey)}"`);
         }
         
         const newContentString = typeof newContent === 'string' ? newContent : JSON.stringify(newContent);
@@ -237,6 +237,70 @@ export const useConversationState = ({ user, initialData }: UseConversationState
             return c;
         }));
     }, [activeConversationId, user.id, conversations]);
+
+    // FIX: Add missing implementations
+    const streamedDocsRef = useRef<Partial<Record<keyof GeneratedDocs, string>>>({});
+
+    const streamDocument = useCallback((docKey: keyof GeneratedDocs, chunk: string) => {
+        streamedDocsRef.current[docKey] = (streamedDocsRef.current[docKey] || '') + chunk;
+    }, []);
+
+    const finalizeStreamedDocuments = useCallback(async (templateId?: string | null) => {
+        if (!activeConversationId) return;
+        const docsToSave = { ...streamedDocsRef.current };
+        streamedDocsRef.current = {};
+
+        for (const key in docsToSave) {
+            const docKey = key as keyof GeneratedDocs;
+            const content = docsToSave[docKey];
+            if (content) {
+                await saveDocumentVersion(docKey, content, 'AI tarafından oluşturuldu', templateId);
+            }
+        }
+    }, [activeConversationId, saveDocumentVersion]);
+
+    const updateMessage = useCallback((messageId: string, updates: Partial<Message>) => {
+        setConversations(prev => prev.map(c => {
+            if (c.id === activeConversationId) {
+                return {
+                    ...c,
+                    messages: c.messages.map(m => m.id === messageId ? { ...m, ...updates } : m)
+                };
+            }
+            return c;
+        }));
+    }, [activeConversationId]);
+
+    const getMessageById = useCallback((messageId: string): Message | undefined => {
+        const conv = conversations.find(c => c.id === activeConversationId);
+        return conv?.messages.find(m => m.id === messageId);
+    }, [conversations, activeConversationId]);
+    
+    const updateStreamingMessage = useCallback((messageId: string, chunk: StreamChunk) => {
+        setConversations(prev => prev.map(c => {
+            if (c.id !== activeConversationId) return c;
+            
+            const newMessages = c.messages.map(m => {
+                if (m.id !== messageId) return m;
+    
+                const newMessage = { ...m };
+                if (chunk.type === 'chat_stream_chunk') {
+                    newMessage.content = (newMessage.content || '') + chunk.chunk;
+                } else if (chunk.type === 'expert_run_update') {
+                    newMessage.expertRunChecklist = chunk.checklist;
+                    if (chunk.isComplete && chunk.finalMessage) {
+                        newMessage.content = chunk.finalMessage;
+                    }
+                } else if (chunk.type === 'generative_suggestion') {
+                    newMessage.generativeSuggestion = chunk.suggestion;
+                } else if (chunk.type === 'usage_update') {
+                    commitTokenUsage(chunk.tokens);
+                }
+                return newMessage;
+            });
+            return { ...c, messages: newMessages };
+        }));
+    }, [activeConversationId, commitTokenUsage]);
     
     const fetchAllFeedback = useCallback(async () => {
         setIsFetchingFeedback(true);
@@ -255,7 +319,6 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         return error;
     }, [user.id]);
 
-    // FIX: Implement updateConversationTitle
     const updateConversationTitle = useCallback(async (id: string, title: string) => {
         updateConversation(id, { title });
         const { error } = await supabase.from('conversations').update({ title }).eq('id', id);
@@ -265,7 +328,6 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         }
     }, [updateConversation]);
 
-    // FIX: Implement deleteConversation
     const deleteConversation = useCallback(async (id: string) => {
         // Optimistic UI update
         const originalConversations = conversations;
@@ -307,6 +369,12 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         testTemplates,
         traceabilityTemplates,
         updateConversationTitle,
-        deleteConversation
+        deleteConversation,
+        // FIX: Export missing methods
+        streamDocument,
+        updateStreamingMessage,
+        getMessageById,
+        finalizeStreamedDocuments,
+        updateMessage,
     };
 };

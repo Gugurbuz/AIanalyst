@@ -165,6 +165,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
                                 onFeedbackUpdate={noOpWithArgs}
                                 onEditLastUserMessage={noOpWithArgs}
                                 onApplySuggestion={noOpWithArgs}
+                                onRetry={noOpWithArgs}
                             />
                         </div>
                     )}

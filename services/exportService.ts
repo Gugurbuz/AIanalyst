@@ -294,12 +294,15 @@ const exportAsDocx = (content: string, filename: string): void => {
             return;
         }
 
-        if (trimmedLine.startsWith('## ')) {
+        if (trimmedLine.startsWith('# ')) {
+            children.push(new Paragraph({ text: trimmedLine.substring(2), heading: HeadingLevel.TITLE, spacing: { after: 200 } }));
+        } else if (trimmedLine.startsWith('## ')) {
             children.push(new Paragraph({ text: trimmedLine.substring(3), heading: HeadingLevel.HEADING_1, spacing: { before: 200, after: 100 } }));
         } else if (trimmedLine.startsWith('### ')) {
             children.push(new Paragraph({ text: trimmedLine.substring(4), heading: HeadingLevel.HEADING_2, spacing: { before: 150, after: 80 } }));
-        } else if (trimmedLine.startsWith('• ')) {
-            children.push(new Paragraph({ text: trimmedLine.substring(2), bullet: { level: 0 } }));
+        } else if (trimmedLine.startsWith('• ') || trimmedLine.startsWith('- ')) {
+            const text = trimmedLine.startsWith('• ') ? trimmedLine.substring(2) : trimmedLine.substring(2);
+            children.push(new Paragraph({ text: text, bullet: { level: 0 } }));
         } else if (trimmedLine === '---') {
              children.push(new Paragraph({ text: '', border: { bottom: { color: "auto", space: 1, style: "single", size: 6 } }, spacing: { after: 200, before: 200 } }));
         }

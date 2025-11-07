@@ -52,9 +52,12 @@ export const authService = {
 
         if (error) {
             console.error("Error fetching user profile:", error);
-            // This can happen if the trigger hasn't run yet for a new user.
-            // We will handle the null case gracefully in the UI.
-            return null;
+            // Handle specific case where profile doesn't exist for a new user yet
+            if (error.code === 'PGRST116') {
+                 throw new Error("Kullanıcı profiliniz bulunamadı. Bu durum genellikle yeni kayıtlarda yaşanır. Lütfen birkaç saniye sonra sayfayı yenileyin veya tekrar giriş yapın.");
+            }
+            // For other errors, show a generic message
+            throw new Error(`Kullanıcı profili yüklenemedi: ${error.message}`);
         }
         return data as UserProfile;
     },
@@ -67,7 +70,7 @@ export const authService = {
 
         if (error) {
             console.error("Error fetching templates:", error);
-            return [];
+            throw new Error(`Şablonlar yüklenemedi: ${error.message}`);
         }
         return data as Template[];
     },

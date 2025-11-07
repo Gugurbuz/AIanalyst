@@ -4,11 +4,12 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { StreamingIndicator } from './StreamingIndicator';
 import { TemplateSelector } from './TemplateSelector';
 import { ExportDropdown } from './ExportDropdown';
-import { Template, DocumentVersion, LintingIssue, StructuredAnalysisDoc, isStructuredAnalysisDoc } from '../types';
+import { Template, DocumentVersion, LintingIssue, StructuredAnalysisDoc, isStructuredAnalysisDoc, IsBirimiTalep, isIsBirimiTalep } from '../types';
 import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, Edit, Eye, Wrench, X, History } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 import { VersionHistoryModal } from './VersionHistoryModal';
 import { AnalysisDocumentViewer } from './AnalysisDocumentViewer';
+import { RequestDocumentViewer } from './RequestDocumentViewer';
 
 interface DocumentCanvasProps {
     content: string;
@@ -92,6 +93,36 @@ function structuredDocToMarkdown(doc: StructuredAnalysisDoc): string {
     });
     return markdown;
 }
+
+function requestDocToMarkdown(doc: IsBirimiTalep): string {
+    if (!doc) return '';
+
+    let md = `# ${doc.talepAdi}\n\n`;
+    md += `**Doküman No:** ${doc.dokumanNo}  \n`;
+    md += `**Revizyon:** ${doc.revizyon}  \n`;
+    md += `**Tarih:** ${doc.tarih}  \n`;
+    md += `**Talep Sahibi:** ${doc.talepSahibi}\n\n`;
+    md += `--- \n\n`;
+
+    md += `## Mevcut Durum & Problem\n\n`;
+    md += `${doc.mevcutDurumProblem}\n\n`;
+
+    md += `## Talebin Amacı ve Gerekçesi\n\n`;
+    md += `${doc.talepAmaciGerekcesi}\n\n`;
+
+    md += `## Kapsam\n\n`;
+    md += `### Kapsam Dahili\n`;
+    md += doc.kapsam.inScope.map(item => `- ${item}`).join('\n') + '\n\n';
+    
+    md += `### Kapsam Dışı\n`;
+    md += doc.kapsam.outOfScope.map(item => `- ${item}`).join('\n') + '\n\n';
+
+    md += `## Beklenen İş Faydaları\n\n`;
+    md += doc.beklenenIsFaydalari.map(item => `- ${item}`).join('\n') + '\n\n';
+
+    return md;
+}
+
 
 function simpleMarkdownToHtml(md: string): string {
     if (!md) return '';
@@ -245,9 +276,10 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const [isFixing, setIsFixing] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     
-    // State for structured documents (like analysisDoc)
-    const [isStructured, setIsStructured] = useState(false);
+    // State for structured documents
     const [docObject, setDocObject] = useState<StructuredAnalysisDoc | null>(null);
+    const [parsedRequestDoc, setParsedRequestDoc] = useState<IsBirimiTalep | null>(null);
+    const isStructured = !!docObject;
     
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const editorRef = useRef<HTMLDivElement>(null);
@@ -274,32 +306,33 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         setLocalContent(content || '');
     }, [content]);
     
-    // Parse final JSON only when streaming stops.
+    // Parse final JSON only when streaming stops for different doc types.
     useEffect(() => {
-        if (!isStreaming && localContent && docKey === 'analysisDoc' && !isTable) {
+        if (!isStreaming && localContent && !isTable) {
+            // Reset all structured states first
+            setDocObject(null);
+            setParsedRequestDoc(null);
+            
             try {
-                // Attempt to remove markdown code blocks if they exist
                 const cleanedContent = localContent.replace(/^```json\s*|```\s*$/g, '').trim();
                 const parsed = JSON.parse(cleanedContent);
-                if (isStructuredAnalysisDoc(parsed)) {
-                    setIsStructured(true);
+
+                if (docKey === 'analysisDoc' && isStructuredAnalysisDoc(parsed)) {
                     setDocObject(parsed);
-                } else {
-                    setIsStructured(false);
-                    setDocObject(null);
+                } else if (docKey === 'requestDoc' && isIsBirimiTalep(parsed)) {
+                    setParsedRequestDoc(parsed);
                 }
             } catch(e) {
-                // Not a valid JSON, treat as plain markdown.
-                setIsStructured(false);
+                // Not a valid JSON, will be treated as plain markdown.
                 setDocObject(null);
+                setParsedRequestDoc(null);
             }
-        } else {
-            // Reset for other doc types or if streaming/table
-             setIsStructured(false);
-             setDocObject(null);
+        } else if (isStreaming || isTable) {
+            // Clear structured states during streaming or if it's a table
+            setDocObject(null);
+            setParsedRequestDoc(null);
         }
     }, [isStreaming, localContent, isTable, docKey]);
-
     
     // Clear lint issues when content changes from parent
     useEffect(() => {
@@ -308,69 +341,79 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
 
     const handleToggleEditing = async () => {
         if (docKey !== 'analysisDoc' && docKey !== 'requestDoc') return;
-
-        if (isEditing) { // Finishing edit
-            setIsEditing(false); // Switch to view mode immediately
-
-            // Handle structured doc saving (from contentEditable div)
+    
+        if (isEditing) { // === FINISHING EDIT ===
+            const originalContent = originalContentRef.current;
+            const finalContentToSave = localContent;
+    
+            // Special handling for structured analysisDoc (from contentEditable)
             if (isStructured && editorRef.current && docObject) {
                 const htmlContent = editorRef.current.innerHTML;
                 const originalHtml = structuredDocToHtml(docObject);
-                
-                // Only save if content has actually changed
                 if (htmlContent === originalHtml) {
-                    return; 
-                }
+                    setIsEditing(false);
+                    return;
+                };
                 
-                setIsSummarizing(true); // Reuse this state for the conversion loading indicator
-                try {
-                    // FIX: Correctly call the 'convertHtmlToAnalysisJson' method which now exists on geminiService.
-                    const { json: newDocObject, tokens } = await geminiService.convertHtmlToAnalysisJson(htmlContent);
-                    onAddTokens(tokens);
-                    const finalContentString = JSON.stringify(newDocObject, null, 2);
-
-                    // Generate a summary of the change by comparing markdown versions
-                    const oldMarkdown = structuredDocToMarkdown(docObject);
-                    const newMarkdown = structuredDocToMarkdown(newDocObject);
-                    // FIX: Correctly call the 'summarizeDocumentChange' method which now exists on geminiService.
-                    const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(oldMarkdown, newMarkdown);
-                    onAddTokens(summaryTokens);
-                    
-                    onContentChange(finalContentString, summary);
-                } catch (error) {
-                    console.error("Failed to convert HTML to JSON on save:", error);
-                    // Optionally, show an error to the user
-                } finally {
-                    setIsSummarizing(false);
-                }
-                return; // Exit after handling structured doc
-            }
-
-            // Handle non-structured (plain markdown) doc saving
-            if (localContent !== originalContentRef.current) {
                 setIsSummarizing(true);
                 try {
-                    // FIX: Correctly call the 'summarizeDocumentChange' method which now exists on geminiService.
-                    const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(originalContentRef.current, localContent);
+                    const { json: newDocObject, tokens } = await geminiService.convertHtmlToAnalysisJson(htmlContent);
+                    onAddTokens(tokens);
+                    const newContentString = JSON.stringify(newDocObject, null, 2);
+                    const oldMarkdown = structuredDocToMarkdown(docObject);
+                    const newMarkdown = structuredDocToMarkdown(newDocObject);
+                    const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(oldMarkdown, newMarkdown);
                     onAddTokens(summaryTokens);
-                    onContentChange(localContent, summary);
-                    
-                    // After content is updated, check for structural issues
-                    // FIX: Correctly call the 'lintDocument' method which now exists on geminiService.
-                    const { issues, tokens: lintTokens } = await geminiService.lintDocument(localContent);
-                    onAddTokens(lintTokens);
-                    setLintIssues(issues);
-
+                    onContentChange(newContentString, summary);
                 } catch (error) {
-                    console.error("Failed to summarize or lint changes:", error);
-                    onContentChange(localContent, "Manuel Düzenleme");
+                    console.error("Failed to convert HTML to JSON on save:", error);
                 } finally {
                     setIsSummarizing(false);
+                    setIsEditing(false);
                 }
+                return;
             }
-        } else { // Starting edit
+    
+            // For both requestDoc (from WYSIWYG editor) and plain markdown (from textarea)
+            setIsEditing(false); 
+            
+            // For requestDoc, check for semantic changes before summarizing.
+            if (docKey === 'requestDoc') {
+                try {
+                    const originalObj = JSON.parse(originalContent);
+                    const finalObj = JSON.parse(finalContentToSave);
+                    if (JSON.stringify(originalObj) === JSON.stringify(finalObj)) {
+                        return; // No actual change, just formatting.
+                    }
+                } catch (e) {
+                    // Fallback to string comparison if parsing fails
+                    if (finalContentToSave === originalContent) return;
+                }
+            } else if (finalContentToSave === originalContent) {
+                return; // No change for plain markdown
+            }
+
+            setIsSummarizing(true);
+            try {
+                const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(originalContent, finalContentToSave);
+                onAddTokens(summaryTokens);
+                onContentChange(finalContentToSave, summary);
+                
+                if (docKey === 'analysisDoc' && !isStructured) {
+                    const { issues, tokens: lintTokens } = await geminiService.lintDocument(finalContentToSave);
+                    onAddTokens(lintTokens);
+                    setLintIssues(issues);
+                }
+            } catch (error) {
+                console.error("Failed to summarize or lint changes:", error);
+                onContentChange(finalContentToSave, "Manuel Düzenleme");
+            } finally {
+                setIsSummarizing(false);
+            }
+    
+        } else { // === STARTING EDIT ===
             originalContentRef.current = localContent;
-            setLintIssues([]); // Clear issues when starting to edit
+            setLintIssues([]);
             setIsEditing(true);
         }
     };
@@ -456,6 +499,9 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
             if (isStructured && docObject) {
                 return structuredDocToMarkdown(docObject);
             }
+            if (docKey === 'requestDoc' && parsedRequestDoc) {
+                return requestDocToMarkdown(parsedRequestDoc);
+            }
             return localContent;
         }
 
@@ -479,7 +525,17 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         
         return localContent;
 
-    }, [isStreaming, isTable, localContent, isStructured, docObject]);
+    }, [isStreaming, isTable, localContent, isStructured, docObject, docKey, parsedRequestDoc]);
+    
+    const handleRequestDocChange = useCallback((updatedDoc: IsBirimiTalep) => {
+        setParsedRequestDoc(updatedDoc);
+        try {
+            const newContentString = JSON.stringify(updatedDoc, null, 2);
+            setLocalContent(newContentString);
+        } catch (e) {
+            console.error("Error stringifying updated request doc:", e);
+        }
+    }, []);
 
     
     // View for documents that can be generated from within the canvas (e.g., Traceability Matrix)
@@ -522,7 +578,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
             />
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-2 md:p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2 flex-wrap">
-                    {(!isTable && isEditing && !isStructured) && (
+                    {(!isTable && isEditing && !isStructured && !parsedRequestDoc) && (
                         <>
                             <select onChange={(e) => applyMarkdown(e.target.value, '', true)} className="px-2 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-700">
                                 <option value="">Başlık...</option>
@@ -584,7 +640,13 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                 </div>
             </div>
             <div className="flex-1 relative" onMouseUp={handleSelection}>
-                 {(isEditing && isStructured && docObject) ? (
+                 {parsedRequestDoc && docKey === 'requestDoc' ? (
+                    <RequestDocumentViewer
+                        document={parsedRequestDoc}
+                        isEditing={isEditing}
+                        onChange={handleRequestDocChange}
+                    />
+                ) : (isEditing && isStructured && docObject) ? (
                     <div
                         ref={editorRef}
                         contentEditable
@@ -597,7 +659,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                         ref={textareaRef}
                         value={localContent}
                         onChange={(e) => setLocalContent(e.target.value)}
-                        className="w-full h-full p-6 bg-transparent border-none focus:outline-none resize-none font-sans text-base leading-relaxed"
+                        className="w-full h-full p-6 bg-white dark:bg-slate-900 border-none focus:outline-none resize-none font-mono text-sm leading-relaxed"
                         placeholder={placeholder}
                     />
                 ) : ((isStructured && docObject && !isTable) ? (

@@ -63,20 +63,44 @@ Kullanıcıyla yaptığımız konuşma ve oluşturduğumuz dokümanlar aşağıd
             prompt: `Sen, Asisty.AI adlı bir uygulamanın içinde çalışan uzman bir yapay zeka iş analistisin. Görevin, kullanıcıyla sohbet ederek onların iş gereksinimlerini olgunlaştırmak, netleştirmek ve sonunda bunları yapısal dokümanlara (iş analizi, test senaryoları, izlenebilirlik matrisi vb.) dönüştürmektir.
 
 **KİŞİLİĞİN VE DAVRANIŞIN:**
-- **Proaktif ve Sorgulayıcı:** Sadece söylenenleri kabul etme. Belirsizlikleri, eksiklikleri ve çelişkileri tespit et. Bunları gidermek için netleştirici sorular sor. "Bu özelliğin başarı metrikleri ne olacak?", "Alternatif senaryoları düşündün mü?", "Bu durumun istisnaları neler olabilir?" gibi sorular sor.
+- **Proaktif ve Sorgulayıcı:** Sadece söylenenleri kabul etme. Belirsizlikleri, eksiklikleri ve çelişikleri tespit et. Bunları gidermek için netleştirici sorular sor. "Bu özelliğin başarı metrikleri ne olacak?", "Alternatif senaryoları düşündün mü?", "Bu durumun istisnaları neler olabilir?" gibi sorular sor.
 - **Yapısal Düşün:** Konuşmayı her zaman daha yapısal bir formata (gereksinim maddeleri, kullanıcı hikayeleri, kabul kriterleri) dönüştürmeye çalış.
 - **Yönlendirici:** Kullanıcı tıkandığında veya ne yapacağını bilemediğinde ona yol göster. Örneğin, "Şimdi fonksiyonel olmayan gereksinimleri konuşabiliriz" veya "Bu akışın bir diyagramını çizmemi ister misin?" gibi önerilerde bulun.
 - **Bağlamı Koruma:** Sohbetin başından sonuna kadar tüm bağlamı hatırla. Önceki mesajlara ve oluşturulmuş dokümanlara referans ver.
 - **Araç Kullanımı:** Sana verilen araçları ('functions') proaktif olarak kullan. Örneğin, kullanıcı yeterli bilgiyi verdiğinde, sormasını beklemeden analizi dokumana dökmeyi veya görselleştirmeyi teklif et.
 
-**ÖNEMLİ KURALLAR:**
-1.  Kullanıcıya ASLA doğrudan JSON veya tam bir Markdown dokümanı GÖSTERME. Bunun yerine, bu eylemleri gerçekleştirmek için SANA VERİLEN ARAÇLARI KULLAN.
-2.  Araçları kullandıktan sonra, kullanıcıya 'Dokümanı güncelledim' veya 'Test senaryolarını oluşturdum' gibi kısa, insan benzeri bir onay mesajı ver.
+**YANIT FORMATI (KESİNLİKLE UYULMALIDIR):**
+Her yanıtın iki ayrı bölümü OLMALIDIR:
 
-**ARAÇ KULLANIMI ÖRNEĞİ:**
-- KULLANICI DER Kİ: "Tamam, dokümanı şimdi güncelle."
-- SENİN YAPMAN GEREKEN: \`generateAnalysisDocument\` aracını çağırmak.
-- SENİN YAPMAMAN GEREKEN: Sohbete JSON veya Markdown içeriği yazmak.
+1.  **<dusunce> Bloğu:**
+    *   Cevabını oluştururken attığın tüm adımları, yaptığın analizleri ve kararlarını \`<dusunce>...\`</dusunce>\` etiketleri içinde detaylıca anlat.
+    *   Bu senin iç monoloğundur ve şeffaflık için zorunludur.
+
+2.  **Kullanıcıya Yanıt:**
+    *   \`</dusunce>\` etiketini kapattıktan SONRA, kullanıcıya yönelik nihai cevabını yaz.
+    *   Bu bölüm ASLA boş bırakılamaz.
+
+**DOĞRU YANIT ÖRNEĞİ:**
+<dusunce>
+1.  Kullanıcının talebini analiz ettim. Eksik bilgiler var.
+2.  Netleştirici sorular hazırladım.
+3.  **Final Kontrol:** Düşünce bloğum bitti. Şimdi kullanıcıya yanıtımı yazacağım. Yanıtım kesinlikle \`<dusunce>\` etiketinin DIŞINDA olacak.
+</dusunce>
+Merhaba, talebinizi daha iyi anlamak için birkaç sorum olacak: ...
+
+**YANLIŞ YANIT ÖRNEĞİ:**
+<dusunce>
+1. Düşüncelerim...
+2. Kullanıcıya "Merhaba" diyeceğim.
+</dusunce>
+<dusunce>Merhaba!</dusunce>  <!-- YANLIŞ! KULLANICI CEVABI DÜŞÜNCE ETİKETİ İÇİNDE OLAMAZ! -->
+
+**KRİTİK KURALLAR:**
+- **KURAL 1:** Yanıtında ÖNCE \`<dusunce>\` bloğu, SONRA kullanıcıya yönelik metin olmalıdır.
+- **KURAL 2:** KULLANICIYA YÖNELİK CEVABINI ASLA VE ASLA \`<dusunce>\` etiketleri içine yazma.
+- **KURAL 3:** \`</dusunce>\` etiketinden sonra **her zaman** kullanıcıya yönelik bir metin gelmelidir. Sadece düşünce bloğu içeren bir yanıt VERME.
+- **KURAL 4:** Kullanıcıya ASLA doğrudan JSON veya tam bir Markdown dokümanı GÖSTERME. Bunun yerine, bu eylemleri gerçekleştirmek için SANA VERİLEN ARAÇLARI KULLAN.
+- **KURAL 5:** Araçları kullandıktan sonra, kullanıcıya 'Dokümanı güncelledim' veya 'Test senaryolarını oluşturdum' gibi kısa, insan benzeri bir onay mesajı ver.
 
 **MEVCUT DURUM:**
 Kullanıcıyla yaptığımız konuşma ve oluşturduğumuz dokümanlar aşağıdadır. Bu bağlamı kullanarak sohbete devam et.
@@ -105,10 +129,33 @@ Kullanıcıyla yaptığımız konuşma ve oluşturduğumuz dokümanlar aşağıd
             versionId: 'default',
             name: 'Varsayılan',
             createdAt: new Date().toISOString(),
-            prompt: `Sen Asisty.AI, uzman bir iş analisti asistanısın. Bu, kullanıcıyla olan ilk etkileşimimiz.
-- **Eğer kullanıcı doğrudan bir talep, problem veya proje detayı girdiyse:** Bu bilgiyi anladığını belirt ve konuyu daha da netleştirmek için hemen açıklayıcı sorular sormaya başla. Örneğin, "Anladım, bu entegrasyon talebinizle ilgili birkaç sorum olacak..." gibi bir giriş yap.
-- **Eğer kullanıcı sadece "merhaba" gibi bir selamlama veya çok kısa bir ifade kullandıysa:** Onu nazikçe karşıla ve üzerinde çalışmak istediği proje veya fikir hakkında sorular sorarak yönlendir.
-Amacın, kullanıcının aklındakileri somut bir talebe dönüştürmesine yardımcı olmaktır.`
+            prompt: `Sen Asisty.AI, uzman bir iş analisti asistanısın. Bu, kullanıcıyla olan ilk etkileşimimiz. Görevin, konuşmayı başlatmak ve kullanıcının ne üzerinde çalışmak istediğini anlamaktır.
+
+**DAVRANIŞIN:**
+- **Eğer kullanıcı doğrudan bir talep girdiyse:** Talebi anladığını belirt ve hemen açıklayıcı sorular sor.
+- **Eğer kullanıcı sadece "merhaba" gibi bir selamlama yaptıysa:** Nazikçe karşıla ve üzerinde çalışmak istediği proje veya fikir hakkında sorular sorarak yönlendir.
+
+**YANIT FORMATI (KESİNLİKLE UYULMALIDIR):**
+Her yanıtın iki ayrı bölümü OLMALIDIR:
+
+1.  **<dusunce> Bloğu:**
+    *   Cevabını oluştururken attığın adımları \`<dusunce>...\`</dusunce>\` etiketleri içinde anlat.
+
+2.  **Kullanıcıya Yanıt:**
+    *   \`</dusunce>\` etiketini kapattıktan SONRA, kullanıcıya yönelik nihai cevabını yaz.
+
+**DOĞRU YANIT ÖRNEĞİ:**
+<dusunce>
+1.  Kullanıcı "merhaba" dedi.
+2.  Onu karşılayıp ne istediğini sormalıyım.
+3.  **Final Kontrol:** Düşünce bloğum bitti. Yanıtım etiket dışında olacak.
+</dusunce>
+Merhaba! Ben Asisty, yapay zeka iş analisti asistanınız. Bugün hangi proje veya fikir üzerinde çalışmak istersiniz?
+
+**KRİTİK KURALLAR:**
+- **KURAL 1:** ÖNCE \`<dusunce>\` bloğu, SONRA kullanıcıya yönelik metin olmalıdır.
+- **KURAL 2:** Kullanıcıya yönelik cevabını ASLA \`<dusunce>\` etiketleri içine yazma.
+- **KURAL 3:** \`</dusunce>\` etiketinden sonra her zaman kullanıcıya yönelik bir metin gelmelidir.`
           }
         ],
         activeVersionId: 'default'
@@ -390,13 +437,13 @@ Amacın, kullanıcının aklındakileri somut bir talebe dönüştürmesine yard
         <bpmndi:BPMNLabel>
           <dc:Bounds x="495" y="159" width="22" height="14" />
         </bpmndi:BPMNLabel>
-      </bpmndi:BPMNEdge>
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
         <dc:Bounds x="682" y="159" width="36" height="36" />
         <bpmndi:BPMNLabel>
           <dc:Bounds x="672" y="202" width="56" height="14" />
         </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4">
         <di:waypoint x="450" y="202" />
         <di:waypoint x="450" y="250" />
@@ -636,90 +683,106 @@ Amacın, kullanıcının aklındakileri somut bir talebe dönüştürmesine yard
             description: 'Bir dokümandaki yapısal tutarsızlıkları (örn: bozuk sıralama) bulur.',
             is_system_template: true,
             versions: [
-                {
-                    versionId: 'default',
-                    name: 'Varsayılan',
-                    createdAt: new Date().toISOString(),
-                    prompt: `Bir metin editörü olarak, aşağıdaki dokümanı incele. Özellikle sıralı listelerde veya numaralandırılmış başlıklarda (örn: FR-001, FR-002, FR-004) herhangi bir atlama veya tutarsızlık olup olmadığını kontrol et. Eğer bir tutarsızlık bulursan, bunu aşağıdaki JSON formatında bir dizi olarak raporla. Hata yoksa, boş bir dizi \`[]\` döndür. Çıktın sadece JSON olmalıdır.
+              {
+                versionId: 'default',
+                name: 'Varsayılan',
+                createdAt: new Date().toISOString(),
+                prompt: `Bir kalite güvence uzmanı olarak, aşağıdaki dokümanı analiz et. Özellikle gereksinim ID'leri gibi sıralı listelerde (örn: REQ-001, REQ-002, REQ-004) atlama veya tutarsızlık olup olmadığını kontrol et. Bulduğun hataları JSON formatında bir dizi olarak döndür. Eğer hata yoksa, boş bir dizi \`[]\` döndür.
 
-**JSON Formatı:**
+**Hata Formatı:**
 \`\`\`json
 [
   {
     "type": "BROKEN_SEQUENCE",
-    "section": "[Hatanın bulunduğu bölümün başlığı, örn: Fonksiyonel Gereksinimler]",
-    "details": "[Hatanın kısa açıklaması, örn: FR-002'den sonra FR-004 geliyor, FR-003 atlanmış.]"
+    "section": "[Hatanın bulunduğu bölümün başlığı]",
+    "details": "[Hatanın detayı, örn: 'REQ-002'den sonra 'REQ-004' geliyor, 'REQ-003' atlanmış.']"
   }
 ]
 \`\`\``
-                }
+              }
             ],
             activeVersionId: 'default'
         },
         {
             id: 'fixLinterIssues',
             name: 'Lint Hatalarını Düzelt',
-            description: 'Belirtilen bir lint hatasını otomatik olarak düzeltir.',
+            description: 'Verilen talimata göre bir dokümandaki hatayı düzeltir.',
             is_system_template: true,
             versions: [
                 {
                     versionId: 'default',
                     name: 'Varsayılan',
                     createdAt: new Date().toISOString(),
-                    prompt: `Bir metin editörü olarak, sana verilen talimata göre aşağıdaki dokümanın tamamını yeniden yazarak hatayı düzelt. Sadece düzeltilmiş dokümanın tam metnini döndür. Başka hiçbir açıklama ekleme.
+                    prompt: `Bir metin editörü olarak, aşağıdaki doküman üzerinde belirtilen talimatı uygula ve dokümanın tamamını, düzeltilmiş haliyle geri döndür. Çıktın sadece dokümanın güncellenmiş metnini içermelidir.
 
-**Düzeltme Talimatı:** {instruction}`
+**Düzeltme Talimatı:**
+{instruction}`
                 }
             ],
             activeVersionId: 'default'
         },
-        {
-            id: 'analyzeFeedback',
-            name: 'Geri Bildirimleri Analiz Et',
-            description: 'Kullanıcıların verdiği tüm geri bildirimleri özetler ve iyileştirme alanlarını belirler.',
-            is_system_template: true,
-            versions: [
-                {
-                    versionId: 'default',
-                    name: 'Varsayılan',
-                    createdAt: new Date().toISOString(),
-                    prompt: `Bir veri analisti olarak, aşağıda JSON formatında verilen kullanıcı geri bildirimlerini analiz et. Bu verilerden yola çıkarak aşağıdaki başlıkları içeren bir Markdown raporu oluştur:
-
-### Genel Bakış
-- Toplam olumlu ve olumsuz geri bildirim sayılarını belirt.
-- Genel memnuniyet oranını (olumlu / toplam) yüzde olarak hesapla.
-
-### Ana Temalar ve Eğilimler
-- Hem olumlu hem de olumsuz geri bildirimlerde en sık tekrar eden temaları (örn: "analiz doğruluğu", "formatlama", "hız") belirle ve listele.
-
-### İyileştirme Alanları
-- Olumsuz geri bildirimlerden yola çıkarak sistemin hangi konularda zayıf kaldığını analiz et.
-- Bu zayıflıkları gidermek için 2-3 adet somut ve eyleme geçirilebilir öneri sun.
-
-### Güçlü Yönler
-- Olumlu geri bildirimlere dayanarak sistemin en çok beğenilen yönlerini özetle.`
-                }
-            ],
-            activeVersionId: 'default'
-        }
     ]
-  },
+  }
 ];
+
+
+let promptData: PromptData = [...DEFAULT_PROMPTS];
+
+const loadPrompts = (): void => {
+  try {
+    const savedPrompts = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (savedPrompts) {
+      const parsed = JSON.parse(savedPrompts) as PromptData;
+      // Basic validation
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].prompts) {
+        promptData = parsed;
+        return;
+      }
+    }
+  } catch (error) {
+    console.error('Error loading prompts from localStorage:', error);
+  }
+  // If nothing in localStorage or parsing fails, save the defaults
+  savePrompts(DEFAULT_PROMPTS);
+};
+
+
+const savePrompts = (data: PromptData): void => {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error('Error saving prompts to localStorage:', error);
+  }
+};
+
+const getPrompt = (promptId: string): string => {
+  for (const category of promptData) {
+    const prompt = category.prompts.find(p => p.id === promptId);
+    if (prompt) {
+      const activeVersion = prompt.versions.find(v => v.versionId === prompt.activeVersionId);
+      return activeVersion ? activeVersion.prompt : prompt.versions[0]?.prompt || '';
+    }
+  }
+  console.warn(`Prompt with id "${promptId}" not found.`);
+  return '';
+};
 
 const getSystemDocumentTemplates = (): Template[] => {
     const templates: Template[] = [];
-    DEFAULT_PROMPTS.forEach(category => {
+    promptData.forEach(category => {
         category.prompts.forEach(prompt => {
             if (prompt.is_system_template && prompt.document_type) {
                 const activeVersion = prompt.versions.find(v => v.versionId === prompt.activeVersionId) || prompt.versions[0];
-                templates.push({
-                    id: prompt.id,
-                    user_id: null,
-                    name: prompt.name,
-                    document_type: prompt.document_type as any, // Cast because we checked it exists
-                    prompt: activeVersion.prompt,
-                    is_system_template: true,
-                });
+                if(activeVersion) {
+                    templates.push({
+                        id: prompt.id,
+                        user_id: null,
+                        name: prompt.name,
+                        document_type: prompt.document_type as 'analysis' | 'test' | 'traceability' | 'visualization',
+                        prompt: activeVersion.prompt,
+                        is_system_template: true
+                    });
+                }
             }
         });
     });
@@ -727,51 +790,21 @@ const getSystemDocumentTemplates = (): Template[] => {
 }
 
 
-const promptService = {
-  getPromptData: (): PromptData => {
-    try {
-      const storedData = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (storedData) {
-        // Basic validation
-        const parsed = JSON.parse(storedData);
-        if (Array.isArray(parsed) && parsed[0]?.prompts) {
-            return parsed;
-        }
-      }
-    } catch (error) {
-      console.error("Error parsing prompts from localStorage, falling back to defaults.", error);
-    }
-    // If nothing in storage or parsing fails, return defaults
-    return JSON.parse(JSON.stringify(DEFAULT_PROMPTS)); // Return a deep copy
-  },
+// Initialize prompts on load
+loadPrompts();
 
-  savePrompts: (data: PromptData): void => {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
-    } catch (error) {
-      console.error("Error saving prompts to localStorage.", error);
-    }
+export const promptService = {
+  getPrompt,
+  getPromptData: () => promptData,
+  savePrompts: (newData: PromptData) => {
+    promptData = newData;
+    savePrompts(newData);
   },
-  
   resetToDefaults: (): PromptData => {
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
-    return JSON.parse(JSON.stringify(DEFAULT_PROMPTS));
+    const defaults = JSON.parse(JSON.stringify(DEFAULT_PROMPTS));
+    promptData = defaults;
+    savePrompts(defaults);
+    return defaults;
   },
-
-  getPrompt: (promptId: string): string => {
-    const data = promptService.getPromptData();
-    for (const category of data) {
-      const prompt = category.prompts.find(p => p.id === promptId);
-      if (prompt) {
-        const activeVersion = prompt.versions.find(v => v.versionId === prompt.activeVersionId);
-        return activeVersion ? activeVersion.prompt : prompt.versions[0]?.prompt || '';
-      }
-    }
-    console.warn(`Prompt with id "${promptId}" not found.`);
-    return '';
-  },
-  
   getSystemDocumentTemplates,
 };
-
-export { promptService };

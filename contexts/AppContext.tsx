@@ -1,5 +1,6 @@
 // contexts/AppContext.tsx
 import React, { createContext, useContext, ReactNode } from 'react';
+// FIX: The import path was incorrect. `contexts` and `hooks` are sibling directories.
 import { useAppLogic } from '../hooks/useAppLogic';
 import type { User } from '../types';
 import type { AppData } from '../index';

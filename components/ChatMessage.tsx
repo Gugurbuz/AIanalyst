@@ -73,14 +73,13 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   
   const styles = isUser ? bubbleStyles.user : bubbleStyles.assistant;
   
-  const expertSteps: ThinkingStep[] = (message.expertRunChecklist || []).map(s => ({
+  const thinkingSteps: ThinkingStep[] = (message.expertRunChecklist || []).map(s => ({
       id: s.id,
       name: s.name,
       description: s.details || '',
       status: s.status,
   }));
   
-  const allSteps = [...expertSteps];
 
   return (
     <div
@@ -110,19 +109,19 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         {/* Bubble Content */}
         <div className={`group relative max-w-lg lg:max-w-2xl w-fit flex items-start ${!isUser ? 'border-l-4 border-indigo-500 pl-3' : ''}`}>
              <div className={`relative px-4 py-3 ${styles.bubble} ${styles.corners} shadow-sm`}>
-                {message.expertRunChecklist && (
+                {thinkingSteps.length > 0 && (
                     <ThinkingProcess
-                      steps={allSteps}
+                      steps={thinkingSteps}
                       isThinking={message.isStreaming || false}
                       error={message.error?.message || null}
                     />
                 )}
                 
-                {message.role === 'assistant' && message.isStreaming && !message.content && !message.expertRunChecklist && (
+                {message.role === 'assistant' && message.isStreaming && !message.content && thinkingSteps.length === 0 && (
                     <LoadingSpinner />
                 )}
 
-                {message.error && !message.expertRunChecklist && (
+                {message.error && thinkingSteps.length === 0 && (
                     <div className="text-red-700 dark:text-red-300">
                         <p className="font-semibold">Bir Hata Oluştu</p>
                         <p className="text-sm mt-1">{message.error.message}</p>

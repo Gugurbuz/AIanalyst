@@ -172,7 +172,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
         : generatedDocs.testScenarios;
         
     const traceabilityMatrixContent = typeof generatedDocs.traceabilityMatrix === 'object'
-        ? generatedDocs.traceabilityMatrix.content
+        ? generatedDocs.traceabilityMatrix.content 
         : generatedDocs.traceabilityMatrix;
 
     const isAnalysisDocReady = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
@@ -250,11 +250,20 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             <div className="flex-1 overflow-y-auto relative min-h-0">
                 {activeDocTab === 'request' && (
                     generatedDocs.requestDoc ? (
-                        parsedRequestDoc ? (
-                            <RequestDocumentViewer document={parsedRequestDoc} />
-                        ) : (
-                            <DocumentCanvas key="request" content={generatedDocs.requestDoc} onContentChange={(newContent, reason) => onUpdateDocument('requestDoc', newContent, reason)} docKey="analysisDoc" onModifySelection={onModifySelection} inlineModificationState={inlineModificationState} isGenerating={isProcessing} isStreaming={false} filename={`${conversation.title}-talep`} documentVersions={conversation.documentVersions} onAddTokens={onAddTokens} onRestoreVersion={onRestoreVersion} />
-                        )
+                        <DocumentCanvas
+                            key="request"
+                            content={generatedDocs.requestDoc}
+                            onContentChange={(newContent, reason) => onUpdateDocument('requestDoc', newContent, reason)}
+                            docKey="requestDoc"
+                            onModifySelection={onModifySelection}
+                            inlineModificationState={inlineModificationState}
+                            isGenerating={isProcessing}
+                            isStreaming={false}
+                            filename={`${conversation.title}-talep`}
+                            documentVersions={conversation.documentVersions}
+                            onAddTokens={onAddTokens}
+                            onRestoreVersion={onRestoreVersion}
+                        />
                     ) : (
                         <DocumentEmptyState icon={<FileInput />} title="Talep Dokümanı" description="Yeni bir sohbete başladığınızda veya uzun bir metin yapıştırdığınızda burası otomatik olarak dolacaktır." buttonText="" onAction={()=>{}} isDisabled={true} />
                     )

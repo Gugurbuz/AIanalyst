@@ -146,7 +146,7 @@ const parseMarkdown = (text: string, highlightedLines: number[], rephrasingText:
 
 
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, highlightedLines = [], rephrasingText = null, highlightedUserSelectionText = null }) => {
-    const htmlContent = useMemo(() => parseMarkdown(content, highlightedLines, rephrasingText, highlightedUserSelectionText), [content, highlightedLines, rephrasingText, highlightedUserSelectionText]);
+    const htmlContent = parseMarkdown(content, highlightedLines, rephrasingText, highlightedUserSelectionText);
 
     return (
         <div

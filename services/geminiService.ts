@@ -243,25 +243,76 @@ export const geminiService = {
                 },
             });
 
-            let fullText = "";
             let functionCalls: any[] = [];
+            let accumulatedText = "";
+            let yieldedThought = "";
+            let yieldedResponse = "";
+            let thoughtBlockClosed = false;
+            let thoughtStepYielded = false;
+
+            const thoughtStep: ExpertStep = {
+                id: 'streaming_thought',
+                name: 'Düşünce Akışı',
+                status: 'in_progress',
+                details: '',
+            };
+
 
             for await (const chunk of result) {
-                if (chunk.usageMetadata) {
-                    totalTokens = chunk.usageMetadata.totalTokenCount;
+                if (chunk.usageMetadata) totalTokens = chunk.usageMetadata.totalTokenCount;
+                if (chunk.functionCalls) functionCalls.push(...chunk.functionCalls);
+                if (!chunk.text) continue;
+
+                accumulatedText += chunk.text;
+
+                // Try to find the thought block
+                const thoughtMatch = accumulatedText.match(/<dusunce>([\s\S]*)/);
+                
+                if (thoughtMatch) {
+                    if (!thoughtStepYielded) {
+                        yield { type: 'expert_run_update', checklist: [thoughtStep], isComplete: false };
+                        thoughtStepYielded = true;
+                    }
+                    
+                    let currentThoughtContent = thoughtMatch[1];
+                    const endTagIndex = currentThoughtContent.indexOf('</dusunce>');
+
+                    if (endTagIndex !== -1) {
+                        currentThoughtContent = currentThoughtContent.substring(0, endTagIndex);
+                        thoughtBlockClosed = true;
+                    }
+
+                    // Yield any new thought text
+                    if (currentThoughtContent.length > yieldedThought.length) {
+                        thoughtStep.details = currentThoughtContent;
+                        yield { type: 'expert_run_update', checklist: [thoughtStep], isComplete: false };
+                        yieldedThought = currentThoughtContent;
+                    }
                 }
-                const text = chunk.text;
-                if (text) {
-                    fullText += text;
-                    yield { type: 'chat_stream_chunk', chunk: text };
+
+                // Process the response part (outside or after the thought block)
+                let responsePart = accumulatedText;
+                if (thoughtMatch) {
+                    if (thoughtBlockClosed) {
+                        const endOfBlock = accumulatedText.indexOf('</dusunce>') + '</dusunce>'.length;
+                        responsePart = accumulatedText.substring(endOfBlock);
+                    } else {
+                        // If thought block is not closed, there's no response yet
+                        responsePart = "";
+                    }
                 }
-                if (chunk.functionCalls) {
-                    functionCalls.push(...chunk.functionCalls);
+                
+                // Yield any new response text
+                if (responsePart.length > yieldedResponse.length) {
+                    const newResponseText = responsePart.substring(yieldedResponse.length);
+                    yield { type: 'chat_stream_chunk', chunk: newResponseText };
+                    yieldedResponse = responsePart;
                 }
             }
 
+
             if (functionCalls.length > 0) {
-                 if (fullText.trim()) { // Clear the streamed text if a tool is being called
+                 if (yieldedResponse.trim()) { // Clear the streamed text if a tool is being called
                     yield { type: 'chat_response', content: '' };
                  }
 
@@ -273,16 +324,16 @@ export const geminiService = {
                         // Announce the action
                         switch (functionName) {
                             case 'generateAnalysisDocument':
-                                step = { id: 'analysis', name: 'İş Analizi Dokümanı Oluşturma', status: 'in_progress' };
+                                step = { id: 'analysis', name: 'İş Analizi Dokümanı Oluşturuluyor', status: 'in_progress' };
                                 break;
                             case 'generateTestScenarios':
-                                step = { id: 'test', name: 'Test Senaryoları Oluşturma', status: 'in_progress' };
+                                step = { id: 'test', name: 'Test Senaryoları Oluşturuluyor', status: 'in_progress' };
                                 break;
                             case 'generateTraceabilityMatrix':
-                                step = { id: 'traceability', name: 'İzlenebilirlik Matrisi Oluşturma', status: 'in_progress' };
+                                step = { id: 'traceability', name: 'İzlenebilirlik Matrisi Oluşturuluyor', status: 'in_progress' };
                                 break;
                             case 'generateVisualization':
-                                step = { id: 'viz', name: 'Süreç Akışını Görselleştirme', status: 'in_progress' };
+                                step = { id: 'viz', name: 'Süreç Akışı Görselleştiriliyor', status: 'in_progress' };
                                 break;
                         }
                         if (step) {
@@ -291,9 +342,10 @@ export const geminiService = {
 
                         // Execute the action
                         if (functionName === 'generateAnalysisDocument') {
-                            const { json, tokens } = await this.generateAnalysisDocument(generatedDocs.requestDoc, history, templates.analysis, model);
-                            yield { type: 'usage_update', tokens };
-                            yield { type: 'doc_stream_chunk', docKey: 'analysisDoc', chunk: json };
+                            const docStream = this.generateAnalysisDocument(generatedDocs.requestDoc, history, templates.analysis, model);
+                            for await (const docChunk of docStream) {
+                                yield docChunk; // Re-yield chunks from the sub-generator
+                            }
                         } else if (functionName === 'saveRequestDocument') {
                             const args = fc.args as { request_summary: string };
                             if (args.request_summary) {
@@ -330,6 +382,11 @@ export const geminiService = {
                         yield { type: 'error', message: e.message };
                         yield { type: 'chat_stream_chunk', chunk: `\`${functionName}\` aracını çalıştırırken bir hata oluştu: ${e.message}` };
                     }
+                }
+            } else {
+                 if (thoughtStepYielded) {
+                    thoughtStep.status = 'completed';
+                    yield { type: 'expert_run_update', checklist: [thoughtStep], isComplete: true };
                 }
             }
             if (totalTokens > 0) yield { type: 'usage_update', tokens: totalTokens };
@@ -382,11 +439,13 @@ export const geminiService = {
             yield { type: 'expert_run_update', checklist: updateStatus('analysis', 'in_progress'), isComplete: false };
             let analysisDocContent = '';
             try {
-                const { json, tokens } = await this.generateAnalysisDocument(requestDocContent, [userMessage], templates.analysis, 'gemini-2.5-pro');
-                totalTokens += tokens;
-                analysisDocContent = json;
-                yield { type: 'usage_update', tokens };
-                yield { type: 'doc_stream_chunk', docKey: 'analysisDoc', chunk: analysisDocContent };
+                const docStream = this.generateAnalysisDocument(requestDocContent, [userMessage], templates.analysis, 'gemini-2.5-pro');
+                for await (const docChunk of docStream) {
+                    if (docChunk.type === 'doc_stream_chunk') {
+                        analysisDocContent = docChunk.chunk;
+                    }
+                    yield docChunk;
+                }
                 yield { type: 'expert_run_update', checklist: updateStatus('analysis', 'completed'), isComplete: false };
             } catch (e: any) {
                 yield { type: 'expert_run_update', checklist: updateStatus('analysis', 'error', e.message), isComplete: false };
@@ -703,23 +762,63 @@ export const geminiService = {
         return { code: match ? match[1].trim() : text, tokens };
     },
 
-    generateAnalysisDocument: async (requestDoc: string, history: Message[], template: string, model: GeminiModel): Promise<{ json: string, tokens: number }> => {
-        const prompt = template
-            .replace('{request_document_content}', requestDoc)
-            .replace('{conversation_history}', JSON.stringify(history.filter(m => m.role === 'user' || m.role === 'assistant'), null, 2));
-
-        const generationConfig = { responseMimeType: "application/json", responseSchema: analysisSchema };
-        
-        const { text: jsonString, tokens } = await generateContent(prompt, model, generationConfig);
-        
+    generateAnalysisDocument: async function* (requestDoc: string, history: Message[], template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
+        let totalTokens = 0;
+    
+        // 1. Generate a plan
+        const planPrompt = `Bir iş analizi dokümanı oluşturmak için gereken adımları JSON formatında listele. Sadece bir JSON dizisi döndür, her öğe { "id": "benzersiz_id", "name": "Adım Adı" } formatında olsun. Adımlar şunları içermeli: Proje Özeti, Kapsam, Gereksinimler vb.`;
+        const { text: planJson, tokens: planTokens } = await generateContent(planPrompt, 'gemini-2.5-flash-lite');
+        totalTokens += planTokens;
+        yield { type: 'usage_update', tokens: planTokens };
+    
+        let planSteps: ExpertStep[];
         try {
-            JSON.parse(jsonString);
-        } catch(e) {
-            console.error("Generated analysis document is not valid JSON", jsonString);
-            throw new Error("AI, geçersiz bir doküman yapısı döndürdü. Lütfen tekrar deneyin.");
+            planSteps = JSON.parse(planJson).map((step: any) => ({ ...step, status: 'pending' }));
+        } catch {
+            throw new Error("Doküman oluşturma planı yapılandırılamadı.");
         }
-
-        return { json: jsonString, tokens };
+        
+        yield { type: 'expert_run_update', checklist: [...planSteps], isComplete: false };
+    
+        // 2. Execute the plan
+        const fullDoc: StructuredAnalysisDoc = { sections: [] };
+    
+        for (let i = 0; i < planSteps.length; i++) {
+            planSteps[i].status = 'in_progress';
+            yield { type: 'expert_run_update', checklist: [...planSteps], isComplete: false };
+    
+            const sectionPrompt = `Bir uzman iş analisti olarak, sana verilen Talep Dokümanı ve Konuşma Geçmişi'ni kullanarak, iş analizi dokümanının SADECE "${planSteps[i].name}" bölümünü JSON formatında oluştur. Çıktın, analysisSchema'daki bir 'section' nesnesi ile uyumlu olmalıdır. Sadece tek bir bölüm nesnesi döndür.
+    
+            **Talep Dokümanı:**
+            ---
+            ${requestDoc}
+            ---
+            **Konuşma Geçmişi:**
+            ---
+            ${JSON.stringify(history, null, 2)}
+            ---`;
+    
+            const { text: sectionJson, tokens: sectionTokens } = await generateContent(sectionPrompt, model, {
+                responseMimeType: "application/json"
+            });
+            totalTokens += sectionTokens;
+            yield { type: 'usage_update', tokens: sectionTokens };
+    
+            try {
+                const section = JSON.parse(sectionJson);
+                fullDoc.sections.push(section);
+            } catch (e) {
+                console.error(`Error parsing section "${planSteps[i].name}":`, e);
+                // Continue with a placeholder
+                fullDoc.sections.push({ title: planSteps[i].name, content: "[Bu bölüm oluşturulurken bir hata oluştu.]" });
+            }
+    
+            planSteps[i].status = 'completed';
+            yield { type: 'expert_run_update', checklist: [...planSteps], isComplete: false };
+        }
+    
+        // 3. Yield the final document
+        yield { type: 'doc_stream_chunk', docKey: 'analysisDoc', chunk: JSON.stringify(fullDoc, null, 2) };
     },
 
     generateTestScenarios: async function* (analysisDoc: string, template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
