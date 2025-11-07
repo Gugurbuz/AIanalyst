@@ -162,7 +162,7 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
             versionId: 'default',
             name: 'Varsayılan',
             createdAt: new Date().toISOString(),
-            prompt: `Bir uzman iş analisti olarak, sana verilen **Talep Dokümanı** ve **Konuşma Geçmişi**'ni kullanarak, aşağıdaki JSON ŞABLONUNU doldurarak bir iş analizi dokümanı oluştur. Şablonun yapısını veya başlıklarını DEĞİŞTİRME. Sadece içeriği doldur. Eğer bir bölüm için bilgi yoksa, o bölümün 'content' alanına "[Belirlenecek]" yaz. Tüm gereksinim ID'lerini "REQ-" ön ekiyle başlat (örn: "REQ-R01"). Sadece ve sadece bu doldurulmuş JSON nesnesini bir string olarak döndür. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
+            prompt: `Bir uzman iş analisti olarak, sana verilen **Talep Dokümanı** ve **Konuşma Geçmişi**'ni kullanarak, iş analizi dokümanının SADECE "{section_to_generate}" bölümünü oluştur. Çıktın, Notion benzeri bir editör olan BlockNote'un JSON formatına uygun bir "Block" nesneleri dizisi (\`Block[]\`) olmalıdır. Sadece ve sadece bu JSON dizisini bir string olarak döndür. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
 
 **Talep Dokümanı:**
 ---
@@ -174,105 +174,37 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
 {conversation_history}
 ---
 
-**DOLDURULACAK JSON ŞABLONU:**
+**ÖRNEK BlockNote JSON YAPISI:**
 \`\`\`json
-{
-  "sections": [
-    {
-      "title": "Proje Özeti",
-      "content": "[Proje özetini buraya yazın]"
-    },
-    {
-      "title": "Talep Sahibi",
-      "content": "[Talep sahibini buraya yazın]"
-    },
-    {
-      "title": "İş Problemi ve Hedefler",
-      "subSections": [
-        {
-          "title": "İş Problemi",
-          "content": "[İş problemini detaylıca buraya yazın]"
-        },
-        {
-          "title": "Proje Hedefi",
-          "content": "[Proje hedefini detaylıca buraya yazın]"
-        }
-      ]
-    },
-    {
-      "title": "Kapsam",
-      "subSections": [
-        {
-          "title": "Kapsam İçi",
-          "content": "[Kapsam içi maddeleri Markdown listesi olarak buraya yazın]"
-        },
-        {
-          "title": "Kapsam Dışı",
-          "content": "[Kapsam dışı maddeleri Markdown listesi olarak buraya yazın]"
-        }
-      ]
-    },
-    {
-      "title": "Başarı Ölçütleri (Hipotez)",
-       "subSections": [
-        {
-          "title": "Ölçütler",
-          "content": "[BC-001, BC-002 gibi başarı ölçütlerini Markdown listesi olarak buraya yazın]"
-        }
-      ]
-    },
-    {
-      "title": "Mevcut Durum Analizi",
-      "subSections": [
-        { "title": "Mevcut Bildirim Kanalları ve Süreçleri", "content": "[Belirlenecek]" },
-        { "title": "Mevcut Rıza Yönetimi", "content": "[Belirlenecek]" },
-        { "title": "Mevcut Veri Kaynakları", "content": "[Belirlenecek]" }
-      ]
-    },
-    {
-      "title": "Yeni Sistem Gereksinimleri",
-      "content": "Bu bölümde, projenin hedeflerine ulaşmak için geliştirilmesi gereken sistem özelliklerine dair gereksinimler bulunmaktadır.",
-      "subSections": [
-        {
-          "title": "Rıza Yönetimi",
-          "content": "Müşterilerin iletişim rızalarının toplanması ve yönetilmesi, hangi kanaldan hangi tür bildirim almak istediğini seçebilme özelliği sağlanmalıdır.",
-          "requirements": [
-            { "id": "REQ-R01", "text": "Müşterilerin iletişim rızalarını (SMS, e-posta, push) yönetebilmeleri sağlanmalıdır." },
-            { "id": "REQ-R02", "text": "Müşteriler, almak istedikleri bildirim türlerini (planlı, plansız, başlangıç, bitiş, güncelleme vb.) seçebilmelidir." }
-          ]
-        },
-        {
-          "title": "Veri Kaynakları ve Entegrasyon",
-          "content": "Kesinti bilgileri (planlı/plansız, başlangıç/bitiş, lokasyon vb.) için ilgili sistemlerle entegrasyon sağlanmalıdır.",
-          "requirements": [
-            { "id": "REQ-T01", "text": "Planlı ve plansız kesinti verilerini alacak servis entegrasyonu yapılmalıdır." }
-          ]
-        },
-        {
-          "title": "Kullanıcı Akışları",
-          "content": "Sistemin temel kullanıcı etkileşimlerini ve arayüz gereksinimlerini tanımlar.",
-          "requirements": [
-            { "id": "REQ-A01", "text": "Kullanıcılar, rıza ve bildirim ayarlarını yapabilecekleri bir arayüze sahip olmalıdır." }
-          ]
-        }
-      ]
-    },
-    {
-      "title": "Fonksiyonel Olmayan Gereksinimler",
-      "subSections": [
-        { "title": "Performans", "content": "- Bildirim gönderim süresi, kesinti başlangıcından itibaren en fazla 5 dakika olmalıdır." },
-        { "title": "Güvenlik", "content": "- Kullanıcı verileri KVKK standartlarına uygun olarak saklanmalı ve işlenmelidir." }
-      ]
-    },
-    {
-      "title": "Varsayımlar ve Kısıtlar",
-      "subSections": [
-        { "title": "Varsayımlar", "content": "[Proje ile ilgili varsayımları buraya yazın]" },
-        { "title": "Kısıtlar", "content": "[Proje ile ilgili kısıtları buraya yazın]" }
-      ]
-    }
-  ]
-}
+[
+  {
+    "id": "...",
+    "type": "heading",
+    "props": { "level": 2 },
+    "content": [{ "type": "text", "text": "Başlık Metni", "styles": {} }]
+  },
+  {
+    "id": "...",
+    "type": "paragraph",
+    "props": {},
+    "content": [{ "type": "text", "text": "Paragraf metni.", "styles": {} }]
+  },
+  {
+    "id": "...",
+    "type": "bulletListItem",
+    "props": {},
+    "content": [{ "type": "text", "text": "Madde işareti.", "styles": {} }]
+  },
+  {
+    "id": "...",
+    "type": "paragraph",
+    "props": {},
+    "content": [
+      { "type": "text", "text": "REQ-001: ", "styles": { "bold": true } },
+      { "type": "text", "text": "Bu bir gereksinim metnidir.", "styles": {} }
+    ]
+  }
+]
 \`\`\`
 `,
           },
@@ -290,7 +222,7 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
             versionId: 'default',
             name: 'Varsayılan',
             createdAt: new Date().toISOString(),
-            prompt: `Bir uzman kalite güvence mühendisi olarak, sana verilen iş analizi dokümanındaki gereksinimleri (hem fonksiyonel hem de fonksiyonel olmayan) dikkatlice incele. Görevin, bu gereksinimleri kapsayan pozitif, negatif ve sınır durumlarını içeren test senaryoları oluşturmaktır. Çıktıyı **SADECE** aşağıdaki sütunları içeren bir JSON array formatında döndür. Her bir test senaryosu bu array içinde bir JSON nesnesi olmalıdır. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
+            prompt: `Bir uzman kalite güvence mühendisi olarak, sana **BlockNote JSON formatında** verilen iş analizi dokümanındaki gereksinimleri (hem fonksiyonel hem de fonksiyonel olmayan) dikkatlice incele. Bu JSON yapısındaki 'content' alanlarından "REQ-" ile başlayan gereksinimleri bul. Görevin, bu gereksinimleri kapsayan pozitif, negatif ve sınır durumlarını içeren test senaryoları oluşturmaktır. Çıktıyı **SADECE** aşağıdaki sütunları içeren bir JSON array formatında döndür. Her bir test senaryosu bu array içinde bir JSON nesnesi olmalıdır. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
 
 **Sütunlar:**
 - "Test Senaryo ID" (Örn: TC-001)
@@ -299,7 +231,7 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
 - "Test Adımları" (Adımları numaralandırarak \`1. Adım...\n2. Adım...\` şeklinde yaz)
 - "Beklenen Sonuç"
 
-**İş Analizi Dokümanı:**
+**İş Analizi Dokümanı (BlockNote JSON):**
 ---
 {analysis_document_content}
 ---
@@ -319,7 +251,7 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
             versionId: 'default',
             name: 'Varsayılan',
             createdAt: new Date().toISOString(),
-            prompt: `Bir uzman iş analisti olarak, verilen iş analizi dokümanını analiz et ve süreci anlatan bir Mermaid.js diyagram kodu oluştur.
+            prompt: `Bir uzman iş analisti olarak, **BlockNote JSON formatında** verilen iş analizi dokümanını analiz et ve süreci anlatan bir Mermaid.js diyagram kodu oluştur. JSON içindeki başlıklardan ve paragraflardan ana süreç adımlarını çıkar.
 
 **ÇOK ÖNEMLİ KURALLAR:**
 1.  Çıktın **SADECE VE SADECE** \`\`\`mermaid ... \`\`\` kod bloğu içinde olmalıdır. Başka HİÇBİR metin, başlık, açıklama veya not ekleme.
@@ -329,7 +261,7 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
 5.  Kutuları basit tut. Örnek: \`A[Kutu 1]\`, \`B(Kutu 2)\`, \`C{Karar Kutusu}\`. Karmaşık şekiller veya stiller KULLANMA.
 6.  Kodun ayrıştırılabilir (parsable) ve sözdizimsel olarak (syntactically) doğru olduğundan emin ol.
 
-**İş Analizi Dokümanı:**
+**İş Analizi Dokümanı (BlockNote JSON):**
 ---
 {analysis_document_content}
 ---
@@ -349,7 +281,7 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
             versionId: 'default',
             name: 'Varsayılan',
             createdAt: new Date().toISOString(),
-            prompt: `Bir BPMN 2.0 uzmanı olarak, sana verilen iş analizi dokümanını analiz et. Görevin, bu analize dayanarak, hem proses mantığını hem de görsel diyagram bilgilerini içeren, tam ve geçerli bir BPMN 2.0 XML kodu oluşturmaktır. "no diagram to display" hatasını önlemek için XML'in hem \`<process>\` hem de \`<bpmndi:BPMNDiagram>\` bölümlerini içermesi KRİTİKTİR.
+            prompt: `Bir BPMN 2.0 uzmanı olarak, sana **BlockNote JSON formatında** verilen iş analizi dokümanını analiz et. JSON içindeki başlıklardan ve paragraflardan ana süreç adımlarını çıkar. Görevin, bu analize dayanarak, hem proses mantığını hem de görsel diyagram bilgilerini içeren, tam ve geçerli bir BPMN 2.0 XML kodu oluşturmaktır. "no diagram to display" hatasını önlemek için XML'in hem \`<process>\` hem de \`<bpmndi:BPMNDiagram>\` bölümlerini içermesi KRİTİKTİR.
 
 **ÇOK ÖNEMLİ KURALLAR:**
 1.  Çıktın **SADECE** \`\`\`xml ... \`\`\` kod bloğu içinde olmalıdır. Başka HİÇBİR metin, başlık veya açıklama ekleme. Sadece ham XML kodunu döndür.
@@ -362,92 +294,25 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
 <?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
   <bpmn:process id="Process_1" isExecutable="false">
-    <bpmn:startEvent id="StartEvent_1" name="Süreç Başladı">
-      <bpmn:outgoing>Flow_1</bpmn:outgoing>
-    </bpmn:startEvent>
-    <bpmn:task id="Task_1" name="İlk Görev">
-      <bpmn:incoming>Flow_1</bpmn:incoming>
-      <bpmn:outgoing>Flow_2</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="Task_1" />
-    <bpmn:exclusiveGateway id="Gateway_1" name="Onay Gerekli mi?">
-      <bpmn:incoming>Flow_2</bpmn:incoming>
-      <bpmn:outgoing>Flow_3</bpmn:outgoing>
-      <bpmn:outgoing>Flow_4</bpmn:outgoing>
-    </bpmn:exclusiveGateway>
-    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_1" targetRef="Gateway_1" />
-    <bpmn:task id="Task_2" name="Onayla">
-      <bpmn:incoming>Flow_3</bpmn:incoming>
-      <bpmn:outgoing>Flow_5</bpmn:outgoing>
-    </bpmn:task>
-    <bpmn:sequenceFlow id="Flow_3" name="Evet" sourceRef="Gateway_1" targetRef="Task_2" />
-    <bpmn:endEvent id="EndEvent_1" name="Süreç Bitti">
-      <bpmn:incoming>Flow_4</bpmn:incoming>
-      <bpmn:incoming>Flow_5</bpmn:incoming>
-    </bpmn:endEvent>
-    <bpmn:sequenceFlow id="Flow_4" name="Hayır" sourceRef="Gateway_1" targetRef="EndEvent_1" />
-    <bpmn:sequenceFlow id="Flow_5" sourceRef="Task_2" targetRef="EndEvent_1" />
+    <bpmn:startEvent id="StartEvent_1" name="Süreç Başladı" />
+    <!-- ... diğer process elemanları ... -->
+    <bpmn:endEvent id="EndEvent_1" name="Süreç Bitti" />
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
       <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1">
         <dc:Bounds x="179" y="159" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="168" y="202" width="59" height="14" />
-        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_1_di" bpmnElement="Task_1">
-        <dc:Bounds x="270" y="137" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
-        <di:waypoint x="215" y="177" />
-        <di:waypoint x="270" y="177" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="Gateway_1_di" bpmnElement="Gateway_1" isMarkerVisible="true">
-        <dc:Bounds x="425" y="152" width="50" height="50" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="408" y="122" width="84" height="14" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
-        <di:waypoint x="370" y="177" />
-        <di:waypoint x="425" y="177" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="Task_2_di" bpmnElement="Task_2">
-        <dc:Bounds x="530" y="137" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3">
-        <di:waypoint x="475" y="177" />
-        <di:waypoint x="530" y="177" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="495" y="159" width="22" height="14" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNEdge>
+      <!-- ... diğer shape ve edge elemanları ... -->
       <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
         <dc:Bounds x="682" y="159" width="36" height="36" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="672" y="202" width="56" height="14" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4">
-        <di:waypoint x="450" y="202" />
-        <di:waypoint x="450" y="250" />
-        <di:waypoint x="700" y="250" />
-        <di:waypoint x="700" y="195" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="460" y="223" width="20" height="14" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_5_di" bpmnElement="Flow_5">
-        <di:waypoint x="630" y="177" />
-        <di:waypoint x="682" y="177" />
-      </bpmndi:BPMNEdge>
+      </bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>
 \`\`\`
 
-**İş Analizi Dokümanı:**
+**İş Analizi Dokümanı (BlockNote JSON):**
 ---
 {analysis_document_content}
 ---
@@ -467,14 +332,14 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
             versionId: 'default',
             name: 'Varsayılan',
             createdAt: new Date().toISOString(),
-            prompt: `Bir uzman iş analisti olarak, sana verilen **İş Analizi Dokümanı** ve **Test Senaryoları**'nı incele. Görevin, her bir gereksinimin hangi test senaryoları tarafından kapsandığını gösteren bir izlenebilirlik matrisi oluşturmaktır. Çıktıyı **SADECE** aşağıdaki sütunları içeren bir JSON array formatında döndür. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
+            prompt: `Bir uzman iş analisti olarak, sana verilen **İş Analizi Dokümanı (BlockNote JSON formatında)** ve **Test Senaryoları**'nı incele. Analiz dokümanındaki "REQ-" ile başlayan gereksinimleri ve Test Senaryoları'nı eşleştir. Görevin, her bir gereksinimin hangi test senaryoları tarafından kapsandığını gösteren bir izlenebilirlik matrisi oluşturmaktır. Çıktıyı **SADECE** aşağıdaki sütunları içeren bir JSON array formatında döndür. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
 
 **Sütunlar:**
 - "Gereksinim ID" (Örn: REQ-R01)
 - "Gereksinim Açıklaması"
 - "İlgili Test Senaryo ID'leri" (Virgülle ayrılmış, örn: "TC-001, TC-002")
 
-**İş Analizi Dokümanı:**
+**İş Analizi Dokümanı (BlockNote JSON):**
 ---
 {analysis_document_content}
 ---
@@ -657,7 +522,7 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
                     versionId: 'default',
                     name: 'Varsayılan',
                     createdAt: new Date().toISOString(),
-                    prompt: `Bir veri dönüştürme uzmanı olarak, aşağıda verilen HTML içeriğini, daha önce oluşturulmuş olan yapısal iş analizi dokümanı JSON formatına geri dönüştür. HTML'deki \`<h2>\`, \`<h3>\`, \`<ul>\`, \`<li>\` ve \`<p>\` etiketlerini analiz ederek orijinal JSON yapısını (sections, subSections, requirements) yeniden oluştur. Gereksinim ID'lerini (örn: "REQ-001") koru. Çıktın sadece ve sadece geçerli bir JSON nesnesi olmalıdır.`
+                    prompt: `Bir veri dönüştürme uzmanı olarak, aşağıda verilen HTML içeriğini, BlockNote editörünün kullandığı \`Block[]\` JSON formatına geri dönüştür. HTML'deki \`<h1>\`, \`<h2>\`, \`<ul>\`, \`<li>\` ve \`<p>\` etiketlerini analiz ederek, her birini uygun bir blok nesnesine çevir. Çıktın sadece ve sadece geçerli bir JSON dizisi (\`Block[]\`) olmalıdır.`
                 }
             ],
             activeVersionId: 'default'

@@ -1,5 +1,6 @@
 // types.ts
 import type { User as SupabaseUser } from '@supabase/supabase-js';
+import type { Block } from '@blocknote/core';
 
 // Re-exporting Supabase user type for convenience
 export type User = SupabaseUser;
@@ -259,28 +260,6 @@ export interface LintingIssue {
     details: string; // e.g., "FR-001'den sonra FR-003 geliyor."
 }
 
-// NEW: Types for structured analysis document
-export interface AnalysisRequirement {
-    id: string; // e.g., "FR-001"
-    text: string;
-}
-
-export interface AnalysisSubSection {
-    title: string;
-    content: string; // Markdown content
-    requirements?: AnalysisRequirement[];
-}
-
-export interface AnalysisSection {
-    title: string; // e.g., "1. ANALİZ KAPSAMI"
-    content?: string; // Markdown content for simple sections
-    subSections?: AnalysisSubSection[];
-}
-
-export interface StructuredAnalysisDoc {
-    sections: AnalysisSection[];
-}
-
 export interface IsBirimiTalep {
   dokumanTipi: "IsBirimiTalep";
   dokumanNo: string;
@@ -324,7 +303,7 @@ export interface StructuredTraceabilityRow {
 }
 
 
-export function isStructuredAnalysisDoc(obj: any): obj is StructuredAnalysisDoc {
-    return obj && typeof obj === 'object' && Array.isArray(obj.sections);
+export function isBlockNoteContent(obj: any): obj is Block[] {
+    return Array.isArray(obj) && (obj.length === 0 || (typeof obj[0] === 'object' && obj[0] !== null && 'type' in obj[0]));
 }
 // ... diğer tipler

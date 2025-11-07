@@ -1,39 +1,32 @@
 // components/AnalysisDocumentViewer.tsx
 import React from 'react';
-import type { StructuredAnalysisDoc } from '../types';
-import { MarkdownRenderer } from './MarkdownRenderer';
+import '@blocknote/core/style.css';
+import { BlockNoteView, useBlockNote } from "@blocknote/react";
+import type { Block } from '@blocknote/core';
 
 interface AnalysisDocumentViewerProps {
-    doc: StructuredAnalysisDoc;
+    initialContent: Block[];
+    isEditable: boolean;
+    onChange?: (blocks: Block[]) => void;
 }
 
-export const AnalysisDocumentViewer: React.FC<AnalysisDocumentViewerProps> = ({ doc }) => {
+export const AnalysisDocumentViewer: React.FC<AnalysisDocumentViewerProps> = ({ initialContent, isEditable, onChange }) => {
+    
+    const editor = useBlockNote({
+        initialContent: initialContent,
+        editable: isEditable,
+        onEditorContentChange: (editor) => {
+            if (onChange) {
+                onChange(editor.topLevelBlocks);
+            }
+        },
+    });
+
+    const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+
     return (
-        <div className="prose prose-slate dark:prose-invert max-w-none w-full h-full overflow-y-auto p-4 md:p-6">
-            {doc.sections.map((section, secIndex) => (
-                <section key={secIndex} className="mb-8">
-                    <h2>{section.title}</h2>
-                    {section.content && <MarkdownRenderer content={section.content} />}
-                    {section.subSections?.map((subSection, subIndex) => (
-                        <section key={subIndex} className="mt-6">
-                            <h3>{subSection.title}</h3>
-                            {subSection.content && <MarkdownRenderer content={subSection.content} />}
-                            {subSection.requirements && (
-                                <ul className="list-none !p-0">
-                                    {subSection.requirements.map((req, reqIndex) => (
-                                        <li key={reqIndex} className="!p-0 mb-6">
-                                            <p className="!mb-2"><strong>{req.id}:</strong></p>
-                                            <div className="pl-4 border-l-2 border-slate-200 dark:border-slate-700">
-                                                <MarkdownRenderer content={req.text} />
-                                            </div>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </section>
-                    ))}
-                </section>
-            ))}
+        <div className="h-full overflow-y-auto">
+            <BlockNoteView editor={editor} theme={theme} />
         </div>
     );
 };
