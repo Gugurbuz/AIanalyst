@@ -8,8 +8,8 @@ import type { AppData } from '../index';
 import type { User, Conversation, Message, GeneratedDocs, FeedbackItem, Template, DocumentVersion, Document, DocumentType, UserProfile, SourcedDocument } from '../types';
 
 const defaultGeneratedDocs: GeneratedDocs = {
-    requestDoc: null,
-    analysisDoc: null,
+    requestDoc: '',
+    analysisDoc: '',
     testScenarios: '',
     visualization: '',
     traceabilityMatrix: '',
@@ -54,29 +54,24 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
     for (const doc of documents) {
         const key = documentTypeToKeyMap[doc.document_type];
         if (key) {
-            // Düz metin olarak kalması gerekenler (örn: diyagram kodları)
-            if (key === 'mermaidViz' || key === 'bpmnViz') {
-                 (docs as any)[key] = doc.content; // String olarak bırak
-            } 
-            // Geriye kalan HER ŞEY (requestDoc, analysisDoc, testScenarios, traceabilityMatrix, maturityReport)
-            // JSON olarak parse edilmelidir.
-            else {
+             if (key === 'mermaidViz' || key === 'bpmnViz' || key === 'maturityReport' || key === 'testScenarios' || key === 'traceabilityMatrix') {
                 try {
-                    // Veritabanından gelen metni JSON'a çevir
-                     if (doc.content && doc.content.trim()) {
-                        (docs as any)[key] = JSON.parse(doc.content);
-                    } else {
-                        (docs as any)[key] = null;
-                    }
+                    (docs as any)[key] = JSON.parse(doc.content);
                 } catch (e) {
-                    console.error(`Error parsing JSON for ${key}:`, e, doc.content);
-                    // Hata durumunda çökmemesi için null ata veya eski string verisi ise onu kullan
-                    if (key === 'testScenarios' || key === 'traceabilityMatrix') {
-                        (docs as any)[key] = doc.content; 
+                     const fallbackToStringKeys: (keyof GeneratedDocs)[] = ['testScenarios', 'traceabilityMatrix'];
+                    if (fallbackToStringKeys.includes(key as any)) {
+                        (docs as any)[key] = doc.content;
                     } else {
-                        (docs as any)[key] = null; 
+                         console.error(`Error parsing JSON for ${key}:`, e);
+                        if (key.endsWith('Viz')) {
+                            (docs as any)[key] = { code: '', sourceHash: '' };
+                        } else if (key === 'maturityReport') {
+                            (docs as any)[key] = null;
+                        }
                     }
                 }
+            } else {
+                 (docs as any)[key] = doc.content;
             }
         }
     }
@@ -241,12 +236,52 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         }));
     }, [activeConversationId, user.id, conversations]);
 
-    // FIX: Add missing implementations
     const streamedDocsRef = useRef<Partial<Record<keyof GeneratedDocs, string>>>({});
 
-    const streamDocument = useCallback((docKey: keyof GeneratedDocs, chunk: string) => {
-        streamedDocsRef.current[docKey] = (streamedDocsRef.current[docKey] || '') + chunk;
-    }, []);
+    const streamDocument = useCallback((docKey: keyof GeneratedDocs, newContent: string) => {
+        const document_type = keyToDocumentTypeMap[docKey];
+        if (!document_type) {
+            console.warn(`Unknown docKey "${String(docKey)}" passed to streamDocument. Skipping.`);
+            return;
+        }
+    
+        setConversations(prev => prev.map(c => {
+            if (c.id !== activeConversationId) return c;
+    
+            const updatedConv = { ...c };
+            let docFound = false;
+            
+            const updatedDocuments = (updatedConv.documents || []).map(doc => {
+                if (doc.document_type === document_type) {
+                    docFound = true;
+                    // Always replace content for live streaming view
+                    return { ...doc, content: newContent, updated_at: new Date().toISOString() };
+                }
+                return doc;
+            });
+    
+            if (!docFound) {
+                const newDoc: Document = {
+                    id: `temp-doc-${document_type}-${uuidv4()}`,
+                    conversation_id: c.id,
+                    user_id: user.id,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    document_type,
+                    content: newContent,
+                    current_version_id: null,
+                    is_stale: false,
+                };
+                updatedDocuments.push(newDoc);
+            }
+            
+            updatedConv.documents = updatedDocuments;
+            return updatedConv;
+        }));
+    
+        // Update the ref for the final save operation at the end of the stream.
+        streamedDocsRef.current[docKey] = newContent;
+    }, [activeConversationId, user.id]);
 
     const finalizeStreamedDocuments = useCallback(async (templateId?: string | null) => {
         if (!activeConversationId) return;

@@ -18,12 +18,9 @@
     "react-zoom-pan-pinch": "^3.6.0",
     "@supabase/supabase-js": "^2.44.4",
     "react-simple-code-editor": "^0.13.1",
-    "uuid": "^9.0.1",
+    "uuid": "^13.0.0",
     "lucide-react": "^0.418.0",
-    "docx": "^8.5.0",
-    "@blocknote/core": "^0.14.5",
-    "@blocknote/react": "^0.14.5",
-    "use-debounce": "^10.0.1"
+    "docx": "^8.5.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

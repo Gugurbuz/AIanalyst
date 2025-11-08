@@ -1,12 +1,10 @@
 // layouts/MainAppLayout.tsx
 import React, { useMemo, useEffect } from 'react';
 import { useAppContext } from '../contexts/AppContext';
-import { Header } from '../components/Header';
 import { ChatInterface } from '../components/ChatInterface';
 import { ChatMessageHistory } from '../components/ChatMessageHistory';
 import { PromptSuggestions } from '../components/PromptSuggestions';
 import { ShareModal } from '../components/ShareModal';
-import { ProjectBoard } from '../components/ProjectBoard';
 import { DocumentWorkspace } from '../components/DocumentWorkspace';
 import { FeatureSuggestionsModal } from '../components/FeatureSuggestionsModal';
 import { RegenerateConfirmationModal } from '../components/RegenerateConfirmationModal';
@@ -170,7 +168,7 @@ export const MainAppLayout: React.FC = () => {
     return (
         <div className="font-sans bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 h-screen flex flex-col overflow-hidden">
              {context.error && (
-                <div className="absolute top-16 left-1/2 -translate-x-1/2 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-lg z-50 flex items-center gap-2 error-banner-enter dark:bg-red-900/80 dark:text-red-200 dark:border-red-600">
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-lg z-50 flex items-center gap-2 error-banner-enter dark:bg-red-900/80 dark:text-red-200 dark:border-red-600">
                     <AlertTriangle className="h-5 w-5"/>
                     <span>{context.error}</span>
                     <button onClick={() => context.setError(null)} className="ml-4 p-1 rounded-full hover:bg-red-200 dark:hover:bg-red-800">
@@ -178,47 +176,35 @@ export const MainAppLayout: React.FC = () => {
                     </button>
                 </div>
             )}
-            <Header
-                user={context.user}
-                onLogout={context.onLogout}
-                theme={context.theme}
-                onThemeChange={context.setTheme}
-                onOpenShareModal={() => context.setIsShareModalOpen(true)}
-                userProfile={context.userProfile}
-            />
             <div className="flex-1 flex min-h-0 relative">
-                <MainSidebar />
+                <MainSidebar
+                    user={context.user}
+                    profile={context.userProfile}
+                    theme={context.theme}
+                    onThemeChange={context.setTheme}
+                    onLogout={context.onLogout}
+                    onOpenShareModal={() => context.setIsShareModalOpen(true)}
+                />
                 <div className="flex-1 flex flex-col min-h-0">
-                    {context.currentView === 'analyst' ? (
-                        <div className="flex-1 flex flex-row min-h-0">
-                             <div className="relative hidden md:flex h-full">
-                                <div className={`transition-all duration-300 ease-in-out ${context.isConversationListOpen ? 'w-80' : 'w-0'} h-full overflow-hidden`}>
-                                    <Sidebar
-                                        conversations={context.conversations}
-                                        activeConversationId={context.activeConversationId}
-                                        onSelectConversation={context.setActiveConversationId}
-                                        onNewConversation={context.handleNewConversation}
-                                        onUpdateConversationTitle={context.updateConversationTitle}
-                                        onDeleteConversation={context.deleteConversation}
-                                        isOpen={context.isConversationListOpen}
-                                        setIsOpen={context.setIsConversationListOpen}
-                                    />
-                                </div>
-                                <button
-                                    onClick={() => context.setIsConversationListOpen(!context.isConversationListOpen)}
-                                    title={context.isConversationListOpen ? "Sohbet Listesini Gizle" : "Sohbet Listesini Göster"}
-                                    className="absolute top-1/2 -translate-y-1/2 -right-3 z-10 w-6 h-12 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-r-md flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-600"
-                                >
-                                    {context.isConversationListOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-                                </button>
-                            </div>
-                            <div className="flex-1 h-full">
-                                <AnalystWorkspace />
+                    <div className="flex-1 flex flex-row min-h-0">
+                            <div className="relative hidden md:flex h-full">
+                            <div className={`transition-all duration-300 ease-in-out ${context.isConversationListOpen ? 'w-80' : 'w-0'} h-full overflow-hidden`}>
+                                <Sidebar
+                                    conversations={context.conversations}
+                                    activeConversationId={context.activeConversationId}
+                                    onSelectConversation={context.setActiveConversationId}
+                                    onNewConversation={context.handleNewConversation}
+                                    onUpdateConversationTitle={context.updateConversationTitle}
+                                    onDeleteConversation={context.deleteConversation}
+                                    isOpen={context.isConversationListOpen}
+                                    setIsOpen={context.setIsConversationListOpen}
+                                />
                             </div>
                         </div>
-                    ) : (
-                        <ProjectBoard user={context.user} />
-                    )}
+                        <div className="flex-1 h-full">
+                            <AnalystWorkspace />
+                        </div>
+                    </div>
                 </div>
             </div>
 

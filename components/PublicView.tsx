@@ -12,10 +12,9 @@ interface PublicViewProps {
 }
 
 // FIX: Add `requestDoc` to `defaultGeneratedDocs` to match the `GeneratedDocs` type definition.
-// FIX: Initialize object/array-based doc types with null to match the type definition.
 const defaultGeneratedDocs: GeneratedDocs = {
-    requestDoc: null,
-    analysisDoc: null,
+    requestDoc: '',
+    analysisDoc: '',
     testScenarios: '',
     visualization: '',
     traceabilityMatrix: '',
@@ -170,7 +169,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
                     )}
                     {activeTab === 'analysis' && (
                         <DocumentCanvas
-                            content={generatedDocs.analysisDoc ? JSON.stringify(generatedDocs.analysisDoc) : ''} onContentChange={noOpWithArgs} docKey="analysisDoc" onModifySelection={noOpWithArgs}
+                            content={generatedDocs.analysisDoc} onContentChange={noOpWithArgs} docKey="analysisDoc" onModifySelection={noOpWithArgs}
                             inlineModificationState={null} isGenerating={false} isStreaming={false} documentVersions={conversation.documentVersions}
                             onAddTokens={noOpWithArgs} onRestoreVersion={noOpWithArgs} filename={`${title}-analiz`}
                         />

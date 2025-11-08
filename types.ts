@@ -1,13 +1,12 @@
 // types.ts
 import type { User as SupabaseUser } from '@supabase/supabase-js';
-import type { Block } from '@blocknote/core';
 
 // Re-exporting Supabase user type for convenience
 export type User = SupabaseUser;
 
 export type Theme = 'light' | 'dark' | 'system';
 
-export type AppMode = 'analyst' | 'backlog';
+export type AppMode = 'analyst';
 
 export type GeminiModel = 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.5-flash-lite';
 
@@ -149,8 +148,8 @@ export interface SourcedDocument {
 }
 
 export interface GeneratedDocs {
-    requestDoc: IsBirimiTalep | null;
-    analysisDoc: Block[] | null;
+    requestDoc: string;
+    analysisDoc: string;
     testScenarios: SourcedDocument | string;
     visualization: string; // Legacy, for backward compatibility
     visualizationType?: 'mermaid' | 'bpmn'; // Legacy
@@ -260,6 +259,32 @@ export interface LintingIssue {
     details: string; // e.g., "FR-001'den sonra FR-003 geliyor."
 }
 
+export interface AnalysisHeader {
+    talepAdi: string;
+    talepNo: string;
+    talepSahibi: string;
+    revizyon: string;
+    tarih: string;
+    hazirlayan: string;
+}
+
+export interface AnalysisContentSection {
+    id: string;
+    baslik: string;
+    icerik: string;
+}
+
+export interface AnalysisSection {
+    id: string;
+    baslik: string;
+    altBasliklar: AnalysisContentSection[];
+}
+
+export interface StructuredAnalysisDoc {
+    header: AnalysisHeader;
+    icindekiler: (AnalysisSection | AnalysisContentSection)[];
+}
+
 export interface IsBirimiTalep {
   dokumanTipi: "IsBirimiTalep";
   dokumanNo: string;
@@ -303,7 +328,7 @@ export interface StructuredTraceabilityRow {
 }
 
 
-export function isBlockNoteContent(obj: any): obj is Block[] {
-    return Array.isArray(obj) && (obj.length === 0 || (typeof obj[0] === 'object' && obj[0] !== null && 'type' in obj[0]));
+export function isStructuredAnalysisDoc(obj: any): obj is StructuredAnalysisDoc {
+    return obj && typeof obj === 'object' && obj.header && Array.isArray(obj.icindekiler);
 }
 // ... diğer tipler

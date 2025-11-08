@@ -4,14 +4,12 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { StreamingIndicator } from './StreamingIndicator';
 import { TemplateSelector } from './TemplateSelector';
 import { ExportDropdown } from './ExportDropdown';
-import { Template, DocumentVersion, LintingIssue, IsBirimiTalep, isIsBirimiTalep, isBlockNoteContent } from '../types';
+import { Template, DocumentVersion, LintingIssue, StructuredAnalysisDoc, isStructuredAnalysisDoc, IsBirimiTalep, isIsBirimiTalep } from '../types';
 import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, Edit, Eye, Wrench, X, History } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 import { VersionHistoryModal } from './VersionHistoryModal';
 import { AnalysisDocumentViewer } from './AnalysisDocumentViewer';
 import { RequestDocumentViewer } from './RequestDocumentViewer';
-import type { Block } from '@blocknote/core';
-import { sanitizeBlockNoteContent } from '../utils/converters';
 
 interface DocumentCanvasProps {
     content: string;
@@ -37,6 +35,11 @@ interface DocumentCanvasProps {
 }
 
 // --- Helper Functions for Structured Document Conversion ---
+
+// FIX: Add a type guard to correctly handle the union type of sections in a StructuredAnalysisDoc.
+function isAnalysisSection(section: any): section is import('../types').AnalysisSection {
+    return Array.isArray(section.altBasliklar);
+}
 
 const jsonToMarkdownTable = (content: string): string => {
     const trimmedContent = (content || '').trim();
@@ -71,6 +74,25 @@ const jsonToMarkdownTable = (content: string): string => {
     }
 };
 
+// FIX: Property 'sections' does not exist on type 'StructuredAnalysisDoc'. Iterating over 'icindekiler' and using correct property names like 'baslik' and 'icerik'.
+function structuredDocToMarkdown(doc: StructuredAnalysisDoc): string {
+    let markdown = '';
+    doc.icindekiler.forEach(section => {
+        markdown += `## ${section.baslik}\n\n`;
+        if (isAnalysisSection(section)) {
+            section.altBasliklar.forEach(subSection => {
+                markdown += `### ${subSection.baslik}\n\n`;
+                if (subSection.icerik) {
+                    markdown += `${subSection.icerik}\n\n`;
+                }
+            });
+        } else if (section.icerik) {
+            markdown += `${section.icerik}\n\n`;
+        }
+    });
+    return markdown;
+}
+
 function requestDocToMarkdown(doc: IsBirimiTalep): string {
     if (!doc) return '';
 
@@ -100,62 +122,38 @@ function requestDocToMarkdown(doc: IsBirimiTalep): string {
     return md;
 }
 
-const blocksToText = (blocks: Block[]): string => {
-    let text = '';
-    for (const block of blocks) {
-        if (block.content) {
-            if (typeof block.content === 'string') {
-                text += block.content + '\n';
-            } else { // It's InlineContent[]
-                text += block.content.map(c => c.text).join('') + '\n';
-            }
-        }
-        if (block.children) {
-            text += blocksToText(block.children);
-        }
-    }
-    return text;
-};
 
-const blocksToMarkdown = (blocks: Block[]): string => {
-    let markdown = '';
-    for (const block of blocks) {
-        let line = '';
-        if (block.content) {
-             if (typeof block.content === 'string') {
-                line = block.content;
-            } else {
-                line = block.content.map(inline => {
-                    let text = inline.text;
-                    if (inline.styles?.bold) text = `**${text}**`;
-                    if (inline.styles?.italic) text = `*${text}*`;
-                    return text;
-                }).join('');
-            }
-        }
+function simpleMarkdownToHtml(md: string): string {
+    if (!md) return '';
+    // This is a very basic parser. It won't handle nested lists or complex cases,
+    // but it's good enough to get the content into an editable HTML format.
+    return md
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/^- (.*$)/gm, '<li>$1</li>')
+        .replace(/(\<\/li\>)\n\<li\> /g, '$1<li>') // fix list spacing
+        .replace(/\n/g, '<br/>');
+}
 
-        switch (block.type) {
-            case 'heading':
-                markdown += `${'#'.repeat(block.props.level || 1)} ${line}\n\n`;
-                break;
-            case 'bulletListItem':
-                markdown += `- ${line}\n`;
-                break;
-            case 'numberedListItem':
-                markdown += `1. ${line}\n`; // Note: This doesn't handle correct numbering
-                break;
-            case 'paragraph':
-            default:
-                markdown += `${line}\n\n`;
-                break;
+
+// FIX: Property 'sections' does not exist on type 'StructuredAnalysisDoc'. Iterating over 'icindekiler' and using correct property names. Removed logic for non-existent 'requirements' property.
+function structuredDocToHtml(doc: StructuredAnalysisDoc): string {
+    let html = '';
+    doc.icindekiler.forEach(section => {
+        html += `<h2>${section.baslik}</h2>`;
+        if (isAnalysisSection(section)) {
+            section.altBasliklar.forEach(subSection => {
+                html += `<h3>${subSection.baslik}</h3>`;
+                if (subSection.icerik) {
+                    html += `<p>${simpleMarkdownToHtml(subSection.icerik)}</p>`;
+                }
+            });
+        } else if (section.icerik) {
+            html += `<p>${simpleMarkdownToHtml(section.icerik)}</p>`;
         }
-        
-        if (block.children) {
-            markdown += blocksToMarkdown(block.children);
-        }
-    }
-    return markdown;
-};
+    });
+    return html;
+}
 
 const AiAssistantModal: React.FC<{
     selectedText: string;
@@ -271,11 +269,12 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     
     // State for structured documents
-    const [docBlocks, setDocBlocks] = useState<Block[] | null>(null);
-    const [editedBlocks, setEditedBlocks] = useState<Block[] | null>(null);
+    const [docObject, setDocObject] = useState<StructuredAnalysisDoc | null>(null);
     const [parsedRequestDoc, setParsedRequestDoc] = useState<IsBirimiTalep | null>(null);
+    const isStructured = !!docObject;
     
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const editorRef = useRef<HTMLDivElement>(null);
     const originalContentRef = useRef<string>('');
     
     const documentTypeMap: Record<string, DocumentVersion['document_type']> = {
@@ -302,26 +301,27 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     // Parse final JSON only when streaming stops for different doc types.
     useEffect(() => {
         if (!isStreaming && localContent && !isTable) {
-            setDocBlocks(null);
+            // Reset all structured states first
+            setDocObject(null);
             setParsedRequestDoc(null);
             
             try {
                 const cleanedContent = localContent.replace(/^```json\s*|```\s*$/g, '').trim();
                 const parsed = JSON.parse(cleanedContent);
 
-                if (docKey === 'analysisDoc' && isBlockNoteContent(parsed)) {
-                    const sanitized = sanitizeBlockNoteContent(parsed);
-                    setDocBlocks(sanitized);
+                if (docKey === 'analysisDoc' && isStructuredAnalysisDoc(parsed)) {
+                    setDocObject(parsed);
                 } else if (docKey === 'requestDoc' && isIsBirimiTalep(parsed)) {
                     setParsedRequestDoc(parsed);
                 }
             } catch(e) {
-                console.warn("Failed to parse document content as JSON in DocumentCanvas", e);
-                setDocBlocks(null);
+                // Not a valid JSON, will be treated as plain markdown.
+                setDocObject(null);
                 setParsedRequestDoc(null);
             }
         } else if (isStreaming || isTable) {
-            setDocBlocks(null);
+            // Clear structured states during streaming or if it's a table
+            setDocObject(null);
             setParsedRequestDoc(null);
         }
     }, [isStreaming, localContent, isTable, docKey]);
@@ -336,45 +336,66 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     
         if (isEditing) { // === FINISHING EDIT ===
             const originalContent = originalContentRef.current;
-            
-            // For BlockNote editor (analysisDoc)
-            if (docKey === 'analysisDoc' && editedBlocks) {
-                const finalContentString = JSON.stringify(editedBlocks, null, 2);
-                if (finalContentString === originalContent) {
+            const finalContentToSave = localContent;
+    
+            // Special handling for structured analysisDoc (from contentEditable)
+            if (isStructured && editorRef.current && docObject) {
+                const htmlContent = editorRef.current.innerHTML;
+                const originalHtml = structuredDocToHtml(docObject);
+                if (htmlContent === originalHtml) {
                     setIsEditing(false);
-                    setEditedBlocks(null);
                     return;
-                }
-
+                };
+                
                 setIsSummarizing(true);
                 try {
-                    const oldText = blocksToText(JSON.parse(originalContent));
-                    const newText = blocksToText(editedBlocks);
-                    const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(oldText, newText);
+                    const { json: newDocObject, tokens } = await geminiService.convertHtmlToAnalysisJson(htmlContent);
+                    onAddTokens(tokens);
+                    const newContentString = JSON.stringify(newDocObject, null, 2);
+                    const oldMarkdown = structuredDocToMarkdown(docObject);
+                    const newMarkdown = structuredDocToMarkdown(newDocObject);
+                    const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(oldMarkdown, newMarkdown);
                     onAddTokens(summaryTokens);
-                    onContentChange(finalContentString, summary);
+                    onContentChange(newContentString, summary);
                 } catch (error) {
-                    console.error("Failed to summarize BlockNote changes:", error);
-                    onContentChange(finalContentString, "Manuel Düzenleme (Blok Editör)");
+                    console.error("Failed to convert HTML to JSON on save:", error);
                 } finally {
                     setIsSummarizing(false);
                     setIsEditing(false);
-                    setEditedBlocks(null);
                 }
                 return;
             }
     
-            // For both requestDoc and plain markdown
-            const finalContentToSave = localContent;
-            setIsEditing(false);
+            // For both requestDoc (from WYSIWYG editor) and plain markdown (from textarea)
+            setIsEditing(false); 
             
-            if (finalContentToSave === originalContent) return;
+            // For requestDoc, check for semantic changes before summarizing.
+            if (docKey === 'requestDoc') {
+                try {
+                    const originalObj = JSON.parse(originalContent);
+                    const finalObj = JSON.parse(finalContentToSave);
+                    if (JSON.stringify(originalObj) === JSON.stringify(finalObj)) {
+                        return; // No actual change, just formatting.
+                    }
+                } catch (e) {
+                    // Fallback to string comparison if parsing fails
+                    if (finalContentToSave === originalContent) return;
+                }
+            } else if (finalContentToSave === originalContent) {
+                return; // No change for plain markdown
+            }
 
             setIsSummarizing(true);
             try {
                 const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(originalContent, finalContentToSave);
                 onAddTokens(summaryTokens);
                 onContentChange(finalContentToSave, summary);
+                
+                if (docKey === 'analysisDoc' && !isStructured) {
+                    const { issues, tokens: lintTokens } = await geminiService.lintDocument(finalContentToSave);
+                    onAddTokens(lintTokens);
+                    setLintIssues(issues);
+                }
             } catch (error) {
                 console.error("Failed to summarize or lint changes:", error);
                 onContentChange(finalContentToSave, "Manuel Düzenleme");
@@ -384,22 +405,31 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     
         } else { // === STARTING EDIT ===
             originalContentRef.current = localContent;
-            if (docKey === 'analysisDoc' && docBlocks) {
-                setEditedBlocks(docBlocks); // Initialize editor state
-            }
             setLintIssues([]);
             setIsEditing(true);
         }
     };
     
     const handleSelection = useCallback(() => {
-        const currentSelection = window.getSelection();
-        if (currentSelection && currentSelection.toString().trim().length > 5) {
-            setSelection({ start: 0, end: 0, text: currentSelection.toString() });
+        if (isEditing && !isTable) {
+            const textarea = textareaRef.current;
+            if (!textarea || document.activeElement !== textarea) return;
+            const { selectionStart, selectionEnd } = textarea;
+            const selectedText = textarea.value.substring(selectionStart, selectionEnd);
+            if (selectedText.trim().length > 5) {
+                setSelection({ start: selectionStart, end: selectionEnd, text: selectedText });
+            } else {
+                setSelection(null);
+            }
         } else {
-            setSelection(null);
+            const currentSelection = window.getSelection();
+            if (currentSelection && currentSelection.toString().trim().length > 5) {
+                setSelection({ start: 0, end: 0, text: currentSelection.toString() });
+            } else {
+                setSelection(null);
+            }
         }
-    }, []);
+    }, [isEditing, isTable]);
 
     const applyMarkdown = (prefix: string, suffix: string = '', isBlock: boolean = false) => {
         const textarea = textareaRef.current;
@@ -436,6 +466,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const handleFixIssue = async (issue: LintingIssue) => {
         setIsFixing(true);
         try {
+            // FIX: Correctly call the 'fixDocumentLinterIssues' method which now exists on geminiService.
             const { fixedContent, tokens } = await geminiService.fixDocumentLinterIssues(content, issue);
             onAddTokens(tokens);
             onContentChange(fixedContent, `AI Tarafından Numaralandırma Düzeltildi: ${issue.section}`);
@@ -456,16 +487,37 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
             return jsonToMarkdownTable(localContent);
         }
 
-        if (docKey === 'analysisDoc' && docBlocks) {
-            return blocksToMarkdown(docBlocks);
+        if (!isStreaming) {
+            if (isStructured && docObject) {
+                return structuredDocToMarkdown(docObject);
+            }
+            if (docKey === 'requestDoc' && parsedRequestDoc) {
+                return requestDocToMarkdown(parsedRequestDoc);
+            }
+            return localContent;
         }
-        if (docKey === 'requestDoc' && parsedRequestDoc) {
-            return requestDocToMarkdown(parsedRequestDoc);
+
+        // Streaming Logic
+        try {
+            const parsed = JSON.parse(localContent);
+            if (isStructuredAnalysisDoc(parsed)) {
+                return structuredDocToMarkdown(parsed);
+            }
+        } catch (e) {
+            // Heuristic to clean up streaming JSON for better readability
+            const knownKeys = /"sections"|"subSections"|"requirements"|"title"|"content"|"id"|"text"|"kapsam"|"inScope"|"outOfScope"/g;
+            return localContent
+                .replace(knownKeys, '')
+                .replace(/[\{\}\[\]",:]/g, ' ')
+                .replace(/\\n/g, '\n')
+                .replace(/\\"/g, '"')
+                .replace(/\s+/g, ' ')
+                .trim();
         }
         
         return localContent;
 
-    }, [isStreaming, isTable, localContent, docKey, parsedRequestDoc, docBlocks]);
+    }, [isStreaming, isTable, localContent, isStructured, docObject, docKey, parsedRequestDoc]);
     
     const handleRequestDocChange = useCallback((updatedDoc: IsBirimiTalep) => {
         setParsedRequestDoc(updatedDoc);
@@ -518,7 +570,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
             />
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-2 md:p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2 flex-wrap">
-                    {(!isTable && isEditing && !docBlocks && !parsedRequestDoc) && (
+                    {(!isTable && isEditing && !isStructured && !parsedRequestDoc) && (
                         <>
                             <select onChange={(e) => applyMarkdown(e.target.value, '', true)} className="px-2 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-700">
                                 <option value="">Başlık...</option>
@@ -580,17 +632,19 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                 </div>
             </div>
             <div className="flex-1 relative" onMouseUp={handleSelection}>
-                 {docKey === 'analysisDoc' && docBlocks ? (
-                    <AnalysisDocumentViewer 
-                        initialContent={docBlocks}
-                        isEditable={isEditing}
-                        onChange={setEditedBlocks}
-                    />
-                ) : docKey === 'requestDoc' && parsedRequestDoc ? (
+                 {parsedRequestDoc && docKey === 'requestDoc' ? (
                     <RequestDocumentViewer
                         document={parsedRequestDoc}
                         isEditing={isEditing}
                         onChange={handleRequestDocChange}
+                    />
+                ) : (isEditing && isStructured && docObject) ? (
+                    <div
+                        ref={editorRef}
+                        contentEditable
+                        suppressContentEditableWarning
+                        dangerouslySetInnerHTML={{ __html: structuredDocToHtml(docObject) }}
+                        className="prose prose-slate dark:prose-invert max-w-none w-full h-full p-6 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 overflow-y-auto"
                     />
                 ) : (isEditing && !isTable) ? (
                     <textarea
@@ -600,18 +654,21 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                         className="w-full h-full p-6 bg-white dark:bg-slate-900 border-none focus:outline-none resize-none font-mono text-sm leading-relaxed"
                         placeholder={placeholder}
                     />
-                ) : (
-                    <div className="h-full overflow-y-auto p-2 md:p-6">
-                        <MarkdownRenderer
-                            content={displayContent}
-                            rephrasingText={
-                                inlineModificationState && inlineModificationState.docKey === docKey
-                                    ? inlineModificationState.originalText
-                                    : null
-                            }
-                            highlightedUserSelectionText={selection?.text || null}
-                        />
-                    </div>
+                ) : ((isStructured && docObject && !isTable) ? (
+                        <AnalysisDocumentViewer doc={docObject} />
+                    ) : (
+                        <div className="h-full overflow-y-auto p-2 md:p-6">
+                            <MarkdownRenderer
+                                content={displayContent}
+                                rephrasingText={
+                                    inlineModificationState && inlineModificationState.docKey === docKey
+                                        ? inlineModificationState.originalText
+                                        : null
+                                }
+                                highlightedUserSelectionText={selection?.text || null}
+                            />
+                        </div>
+                    )
                 )}
             </div>
              {isAiModalOpen && selection && (

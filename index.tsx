@@ -190,7 +190,7 @@ const Main = () => {
 
         fetchData();
 
-    }, [session]);
+    }, [session?.user.id]); // <-- *** THE FIX IS HERE *** Changed from [session]
 
 
     if (isLoading) {

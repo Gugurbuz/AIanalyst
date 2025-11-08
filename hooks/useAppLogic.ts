@@ -150,6 +150,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         const finalAssistantMessage: Message = { ...assistantMessage };
         
         try {
+            // FIX: Remove the incorrect `parseStreamingResponse` wrapper. `handleUserMessageStream` already returns the correct `StreamChunk` generator.
             const rawStream = uiState.isExpertMode 
                 ? geminiService.runExpertAnalysisStream(userMessage, conversationState.activeConversation!.generatedDocs, {
                     analysis: promptService.getPrompt('generateAnalysisDocument'),
@@ -164,30 +165,38 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
                     visualization: promptService.getPrompt(uiState.diagramType === 'bpmn' ? 'generateBPMN' : 'generateVisualization'),
                 }, activeModel());
             
+            let accumulatedContent = '';
+            let accumulatedThought: ThoughtProcess | null = null;
+            
             for await (const chunk of rawStream) {
                 if (generationController.current?.signal.aborted) break;
 
                 switch (chunk.type) {
                     case 'thought_chunk':
-                        finalAssistantMessage.thought = chunk.payload;
+                        accumulatedThought = chunk.payload;
+                        finalAssistantMessage.thought = accumulatedThought;
                         conversationState.updateStreamingMessage(assistantMessageId, chunk);
                         break;
                     
                     case 'text_chunk':
-                        finalAssistantMessage.content = (finalAssistantMessage.content || '') + chunk.text;
+                        accumulatedContent += chunk.text;
+                        finalAssistantMessage.content = accumulatedContent;
                         conversationState.updateStreamingMessage(assistantMessageId, { type: 'chat_stream_chunk', chunk: chunk.text });
                         break;
                     
+                    // Handle other chunks from expert mode or other tools
                     case 'doc_stream_chunk':
                         conversationState.streamDocument(chunk.docKey, chunk.chunk);
                         break;
                     case 'usage_update':
                         conversationState.commitTokenUsage(chunk.tokens);
                         break;
-                    case 'function_call':
-                        // This can be extended to handle client-side function calls if needed in the future.
-                        console.log("Function call received:", chunk.name, chunk.args);
-                        break;
+                    // FIX: This case was causing a type error because the yielding function was refactored.
+                    // The logic is now handled server-side by the model or within other chunks.
+                    /* case 'function_call':
+                         // In the new architecture, most function calls are handled within the expert mode stream itself.
+                         // This can be a place for additional client-side function handling if needed.
+                        break; */
                 }
             }
 
@@ -200,9 +209,13 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
             setGeneratingDocType(null);
             finalAssistantMessage.isStreaming = false;
             
+            // When streaming is complete, ensure all thought steps are marked as 'completed'
+            // to remove any lingering loading spinners from the UI.
             if (finalAssistantMessage.thought && Array.isArray(finalAssistantMessage.thought.steps)) {
                 const completedSteps = finalAssistantMessage.thought.steps.map(step => ({
                     ...step,
+                    // FIX: Explicitly cast the status to satisfy the strict 'ThinkingStep' type.
+                    // The type inference was failing and widening the status to 'string'.
                     status: (step.status === 'error' ? 'error' : 'completed') as ExpertStep['status'],
                 }));
                 finalAssistantMessage.thought = {
@@ -213,7 +226,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
 
             conversationState.updateMessage(assistantMessageId, { ...finalAssistantMessage });
             
-            if (!finalAssistantMessage.error && finalAssistantMessage.content) {
+            if (!finalAssistantMessage.error) {
                 const { error: assistantMessageError } = await supabase
                     .from('conversation_details')
                     .insert({
@@ -372,7 +385,6 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         const docKey = documentTypeToKeyMap[version.document_type] as keyof GeneratedDocs;
         if (!docKey) return;
         
-        // FIX: Correct property access from `version.number_number` to `version.version_number`.
         await conversationState.saveDocumentVersion(docKey, version.content, `v${version.version_number} versiyonuna geri dönüldü`, version.template_id);
     };
 

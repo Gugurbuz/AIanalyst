@@ -122,9 +122,17 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     };
 
     useEffect(() => {
-        // This effect is now simplified as generatedDocs.requestDoc is already a parsed object or null
-        if (generatedDocs.requestDoc && isIsBirimiTalep(generatedDocs.requestDoc)) {
-            setParsedRequestDoc(generatedDocs.requestDoc);
+        if (generatedDocs.requestDoc) {
+            try {
+                const parsed = JSON.parse(generatedDocs.requestDoc);
+                if (isIsBirimiTalep(parsed)) {
+                    setParsedRequestDoc(parsed);
+                } else {
+                    setParsedRequestDoc(null);
+                }
+            } catch (e) {
+                setParsedRequestDoc(null);
+            }
         } else {
             setParsedRequestDoc(null);
         }
@@ -135,10 +143,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             const analyze = async () => {
                 setIsAnalyzingChange(true);
                 try {
-                    const oldContentString = prevAnalysisDoc ? JSON.stringify(prevAnalysisDoc) : '';
-                    const newContentString = generatedDocs.analysisDoc ? JSON.stringify(generatedDocs.analysisDoc) : '';
-
-                    const { impact, tokens } = await geminiService.analyzeDocumentChange(oldContentString, newContentString, 'gemini-2.5-flash-lite');
+                    const { impact, tokens } = await geminiService.analyzeDocumentChange(prevAnalysisDoc || '', generatedDocs.analysisDoc, 'gemini-2.5-flash-lite');
                     onAddTokens(tokens);
                     if (impact.isVisualizationImpacted) await updateDocumentStaleness('mermaid', true);
                     if (impact.isVisualizationImpacted) await updateDocumentStaleness('bpmn', true);
@@ -160,20 +165,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
         }
     }, [generatedDocs.analysisDoc, prevAnalysisDoc, conversationId, isProcessing, onAddTokens]);
 
-    const analysisDocString = useMemo(() => {
-        if (!generatedDocs.analysisDoc) return '';
-        try {
-            return JSON.stringify(generatedDocs.analysisDoc);
-        } catch { return ''; }
-    }, [generatedDocs.analysisDoc]);
-
-    const requestDocString = useMemo(() => {
-        if (!generatedDocs.requestDoc) return '';
-        try {
-            return JSON.stringify(generatedDocs.requestDoc);
-        } catch { return ''; }
-    }, [generatedDocs.requestDoc]);
-
     const vizContent = diagramType === 'bpmn'
         ? generatedDocs.bpmnViz?.code ?? (generatedDocs.visualizationType === 'bpmn' ? generatedDocs.visualization : '')
         : generatedDocs.mermaidViz?.code ?? (generatedDocs.visualizationType !== 'bpmn' ? generatedDocs.visualization : '');
@@ -186,7 +177,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
         ? generatedDocs.traceabilityMatrix.content 
         : generatedDocs.traceabilityMatrix;
 
-    const isAnalysisDocReady = !!generatedDocs.analysisDoc;
+    const isAnalysisDocReady = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
 
     const handleRegenerate = (docType: 'viz' | 'test' | 'traceability' | 'backlog-generation') => {
         if (docType === 'viz') {
@@ -227,7 +218,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     const handleDiagramTypeChange = (newType: 'mermaid' | 'bpmn') => {
         if (newType === diagramType) return;
         setDiagramType(newType);
-        const analysisHash = simpleHash(analysisDocString);
+        const analysisHash = simpleHash(conversation.generatedDocs.analysisDoc);
         const targetVizData = newType === 'mermaid' ? conversation.generatedDocs.mermaidViz : conversation.generatedDocs.bpmnViz;
         if (!targetVizData || targetVizData.sourceHash !== analysisHash) {
             onGenerateDoc('viz', undefined, newType);
@@ -269,7 +260,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                     generatedDocs.requestDoc ? (
                         <DocumentCanvas
                             key="request"
-                            content={requestDocString}
+                            content={generatedDocs.requestDoc}
                             onContentChange={(newContent, reason) => onUpdateDocument('requestDoc', newContent, reason)}
                             docKey="requestDoc"
                             onModifySelection={onModifySelection}
@@ -286,7 +277,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                     )
                 )}
                 {activeDocTab === 'analysis' && (generatedDocs.analysisDoc ?
-                    <DocumentCanvas key="analysis" content={analysisDocString} onContentChange={(newContent, reason) => onUpdateDocument('analysisDoc', newContent, reason)} docKey="analysisDoc" onModifySelection={onModifySelection} inlineModificationState={inlineModificationState} isGenerating={isProcessing} isStreaming={generatingDocType === 'analysis'} templates={templates.analysis} selectedTemplate={selectedTemplates.analysis} onTemplateChange={onTemplateChange.analysis} filename={`${conversation.title}-analiz`} documentVersions={conversation.documentVersions} onAddTokens={onAddTokens} onRestoreVersion={onRestoreVersion} />
+                    <DocumentCanvas key="analysis" content={generatedDocs.analysisDoc} onContentChange={(newContent, reason) => onUpdateDocument('analysisDoc', newContent, reason)} docKey="analysisDoc" onModifySelection={onModifySelection} inlineModificationState={inlineModificationState} isGenerating={isProcessing} isStreaming={generatingDocType === 'analysis'} templates={templates.analysis} selectedTemplate={selectedTemplates.analysis} onTemplateChange={onTemplateChange.analysis} filename={`${conversation.title}-analiz`} documentVersions={conversation.documentVersions} onAddTokens={onAddTokens} onRestoreVersion={onRestoreVersion} />
                     : <DocumentEmptyState icon={<FileText />} title="İş Analizi Dokümanı" description="Analistle sohbet ederek gereksinimleri olgunlaştırın. Yeterli bilgi toplandığında, AI doküman oluşturmayı önerecektir." buttonText="Analiz Dokümanı Oluştur" onAction={() => onGenerateDoc('analysis')} isDisabled={isProcessing || !generatedDocs.requestDoc} disabledTooltip="Önce bir talep dokümanı gereklidir." isLoading={generatingDocType === 'analysis'}/>
                 )}
                  {activeDocTab === 'viz' && (generatedDocs.analysisDoc ?

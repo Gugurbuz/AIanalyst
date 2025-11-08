@@ -4,7 +4,7 @@ import type { IsBirimiTalep } from '../types';
 import { FileText, User, Target, AlertTriangle, CheckCircle, Code, List, ListX, Zap } from 'lucide-react';
 
 interface RequestDocumentViewerProps {
-    document: IsBirimiTalep | null; // Allow null
+    document: IsBirimiTalep;
     isEditing?: boolean;
     onChange?: (updatedDocument: IsBirimiTalep) => void;
 }
@@ -37,24 +37,13 @@ const EditableField: React.FC<{ isEditing?: boolean; value: string; onSave: (new
 
 export const RequestDocumentViewer: React.FC<RequestDocumentViewerProps> = ({ document, isEditing, onChange }) => {
     
-    // Safety Guard: Prevent component crash if the document data is null or malformed.
-    if (!document || typeof document !== 'object' || !document.talepAdi) {
-        return (
-            <div className="p-8 text-center text-slate-500 dark:text-slate-400 flex flex-col items-center justify-center h-full">
-                <AlertTriangle className="mx-auto h-10 w-10 text-amber-400" />
-                <h3 className="mt-2 text-lg font-medium text-slate-700 dark:text-slate-300">Talep Dokümanı Yüklenemedi</h3>
-                <p className="mt-1 text-sm">Bu dokümanın içeriği bozuk veya eksik olabilir. Lütfen sohbet geçmişini kontrol edin veya dokümanı yeniden oluşturmayı deneyin.</p>
-            </div>
-        );
-    }
-
     const handleFieldChange = (field: keyof IsBirimiTalep, value: any) => {
-        if (!onChange || !document) return;
+        if (!onChange) return;
         onChange({ ...document, [field]: value });
     };
 
     const handleListChange = (listName: 'inScope' | 'outOfScope' | 'beklenenIsFaydalari', e: React.FocusEvent<HTMLUListElement>) => {
-        if (!onChange || !document) return;
+        if (!onChange) return;
         const items = Array.from(e.currentTarget.querySelectorAll('li'))
             // FIX: Explicitly type `li` as `HTMLLIElement` to resolve TypeScript error where `li` was inferred as `unknown`.
             .map((li: HTMLLIElement) => (li.textContent || '').trim())

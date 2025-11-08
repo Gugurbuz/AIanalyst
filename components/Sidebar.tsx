@@ -176,13 +176,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ conversations, activeConversat
                         </div>
                     ))}
                 </div>
-
-                <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
-                    <button onClick={onNewConversation} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
-                        <Plus className="h-5 w-5" />
-                        Yeni Analiz Başlat
-                    </button>
-                </div>
             </div>
         </aside>
     );
