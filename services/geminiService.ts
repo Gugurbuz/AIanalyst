@@ -25,6 +25,7 @@ export type StreamChunk =
   | { type: 'generative_suggestion'; suggestion: GenerativeSuggestion }
   | { type: 'usage_update'; tokens: number }
   | { type: 'request_confirmation'; summary: string }
+  | { type: 'function_call'; name: string; args: any; }
   | { type: 'error'; message: string };
 
 export interface DocumentImpactAnalysis {
@@ -200,40 +201,41 @@ export async function* parseStreamingResponse(stream: AsyncGenerator<GenerateCon
 const analysisSchema = {
     type: Type.OBJECT,
     properties: {
-        header: {
-            type: Type.OBJECT,
-            properties: {
-                talepAdi: { type: Type.STRING },
-                talepNo: { type: Type.STRING },
-                talepSahibi: { type: Type.STRING },
-                revizyon: { type: Type.STRING },
-                tarih: { type: Type.STRING },
-                hazirlayan: { type: Type.STRING },
-            },
-        },
-        icindekiler: {
+        sections: {
             type: Type.ARRAY,
             items: {
                 type: Type.OBJECT,
                 properties: {
-                    id: { type: Type.STRING },
-                    baslik: { type: Type.STRING },
-                    icerik: { type: Type.STRING },
-                    altBasliklar: {
+                    title: { type: Type.STRING },
+                    content: { type: Type.STRING },
+                    subSections: {
                         type: Type.ARRAY,
                         items: {
                             type: Type.OBJECT,
                             properties: {
-                                id: { type: Type.STRING },
-                                baslik: { type: Type.STRING },
-                                icerik: { type: Type.STRING },
+                                title: { type: Type.STRING },
+                                content: { type: Type.STRING },
+                                requirements: {
+                                    type: Type.ARRAY,
+                                    items: {
+                                        type: Type.OBJECT,
+                                        properties: {
+                                            id: { type: Type.STRING },
+                                            text: { type: Type.STRING },
+                                        },
+                                        required: ['id', 'text'],
+                                    },
+                                },
                             },
+                            required: ['title'],
                         },
                     },
                 },
+                required: ['title'],
             },
         },
     },
+    required: ['sections'],
 };
 
 const isBirimiTalepSchema = {
@@ -322,10 +324,7 @@ export const geminiService = {
             
             if (functionCalls.length > 0) {
                 for (const fc of functionCalls) {
-                    // Handle other function calls as before
-                    // (This example focuses on separating thought/text, so function logic is omitted for brevity)
-                    // FIX: This type is not defined in StreamChunk, this will be handled in useAppLogic
-                    // yield { type: 'function_call', name: fc.name, args: fc.args };
+                    yield { type: 'function_call', name: fc.name, args: fc.args };
                 }
             }
 
@@ -733,19 +732,18 @@ export const geminiService = {
     
         // 1. Generate a plan by parsing the template
         let planSteps: ExpertStep[];
-        let templateJson: any;
         try {
             const jsonTemplateMatch = template.match(/```json\s*([\s\S]*?)\s*```/);
             if (!jsonTemplateMatch || !jsonTemplateMatch[1]) {
                 throw new Error("Analiz dokümanı şablonu geçerli bir JSON bloğu içermiyor.");
             }
-            templateJson = JSON.parse(jsonTemplateMatch[1]);
-             if (!templateJson.icindekiler || !Array.isArray(templateJson.icindekiler)) {
-                 throw new Error("Şablondaki JSON 'icindekiler' dizisini içermiyor.");
+            const templateJson = JSON.parse(jsonTemplateMatch[1]);
+            if (!templateJson.sections || !Array.isArray(templateJson.sections)) {
+                 throw new Error("Şablondaki JSON 'sections' dizisini içermiyor.");
             }
-            planSteps = templateJson.icindekiler.map((section: any, index: number) => ({
-                id: section.id || `sec${index + 1}`,
-                name: section.baslik,
+            planSteps = templateJson.sections.map((section: any, index: number) => ({
+                id: `sec${index + 1}`,
+                name: section.title,
                 status: 'pending' as const
             }));
         } catch(e: any) {
@@ -756,38 +754,24 @@ export const geminiService = {
         yield { type: 'expert_run_update', checklist: [...planSteps], isComplete: false };
     
         // 2. Execute the plan
-        const fullDoc: Partial<StructuredAnalysisDoc> = { icindekiler: [] };
+        const fullDoc: StructuredAnalysisDoc = { sections: [] };
     
         for (let i = 0; i < planSteps.length; i++) {
             planSteps[i].status = 'in_progress';
             yield { type: 'expert_run_update', checklist: [...planSteps], isComplete: false };
     
-            // On the first step, also generate the header
-            if (i === 0) {
-                const headerPrompt = `Bir uzman iş analisti olarak, sana verilen Talep Dokümanı ve Konuşma Geçmişi'ni kullanarak, iş analizi dokümanının SADECE "header" bölümünü JSON formatında oluştur.
-                **Talep Dokümanı:**\n---\n${requestDoc}\n---\n**Konuşma Geçmişi:**\n---\n${JSON.stringify(history, null, 2)}\n---`;
-                const headerSchema = analysisSchema.properties.header;
-                const { text: headerJson, tokens: headerTokens } = await generateContent(headerPrompt, model, {
-                    responseMimeType: "application/json", responseSchema: headerSchema,
-                });
-                totalTokens += headerTokens;
-                yield { type: 'usage_update', tokens: headerTokens };
-                try {
-                    fullDoc.header = JSON.parse(headerJson);
-                } catch (e) { console.error("Error parsing header:", e); }
-            }
-
-            const sectionTemplate = templateJson.icindekiler[i];
-            const sectionPrompt = `Bir uzman iş analisti olarak, sana verilen Talep Dokümanı ve Konuşma Geçmişi'ni kullanarak, iş analizi dokümanının SADECE "${planSteps[i].name}" bölümünü JSON formatında oluştur. Çıktın, aşağıdaki şablon nesnesiyle uyumlu olmalıdır. Sadece tek bir bölüm nesnesi döndür.
-            
-            **Bölüm Şablonu:**
-            \`\`\`json
-            ${JSON.stringify(sectionTemplate, null, 2)}
-            \`\`\`
-
-            **Talep Dokümanı:**\n---\n${requestDoc}\n---\n**Konuşma Geçmişi:**\n---\n${JSON.stringify(history, null, 2)}\n---`;
+            const sectionPrompt = `Bir uzman iş analisti olarak, sana verilen Talep Dokümanı ve Konuşma Geçmişi'ni kullanarak, iş analizi dokümanının SADECE "${planSteps[i].name}" bölümünü JSON formatında oluştur. Çıktın, analysisSchema'daki bir 'section' nesnesi ile uyumlu olmalıdır. Sadece tek bir bölüm nesnesi döndür.
     
-            const sectionSchema = analysisSchema.properties.icindekiler.items;
+            **Talep Dokümanı:**
+            ---
+            ${requestDoc}
+            ---
+            **Konuşma Geçmişi:**
+            ---
+            ${JSON.stringify(history, null, 2)}
+            ---`;
+    
+            const sectionSchema = analysisSchema.properties.sections.items;
 
             const { text: sectionJson, tokens: sectionTokens } = await generateContent(sectionPrompt, model, {
                 responseMimeType: "application/json",
@@ -798,10 +782,10 @@ export const geminiService = {
     
             try {
                 const section = JSON.parse(sectionJson);
-                fullDoc.icindekiler?.push(section);
+                fullDoc.sections.push(section);
             } catch (e) {
                 console.error(`Error parsing section "${planSteps[i].name}":`, e);
-                fullDoc.icindekiler?.push({ id: planSteps[i].id, baslik: planSteps[i].name, icerik: "[Bu bölüm oluşturulurken bir hata oluştu.]" });
+                fullDoc.sections.push({ title: planSteps[i].name, content: "[Bu bölüm oluşturulurken bir hata oluştu.]" });
             }
     
             planSteps[i].status = 'completed';

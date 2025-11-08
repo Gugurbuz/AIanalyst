@@ -38,16 +38,14 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
     for (const doc of documents) {
         const key = documentTypeToKeyMap[doc.document_type];
         if (key) {
-            if (key === 'mermaidViz' || key === 'bpmnViz' || key === 'maturityReport' || key === 'testScenarios' || key === 'traceabilityMatrix') {
+            if (key === 'mermaidViz' || key === 'bpmnViz' || key === 'maturityReport') {
                 try {
                     (docs as any)[key] = JSON.parse(doc.content);
                 } catch (e) {
                     console.error(`Error parsing JSON for ${key}:`, e);
                      if (key.endsWith('Viz')) {
                         (docs as any)[key] = { code: '', sourceHash: '' };
-                     } else if (key === 'testScenarios' || key === 'traceabilityMatrix') {
-                        (docs as any)[key] = doc.content; // Fallback for old string format
-                     } else {
+                     } else if (key === 'maturityReport') {
                         (docs as any)[key] = null;
                      }
                 }

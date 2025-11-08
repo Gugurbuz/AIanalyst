@@ -121,6 +121,124 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         }
     }, [user.id, conversationState, uiState]);
     
+    const handleGenerateDoc = async (type: 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn', assistantMessageId?: string): Promise<string> => {
+        const activeConv = conversationState.activeConversation;
+        if (!activeConv || (isProcessing && !assistantMessageId)) return '';
+        if (!checkTokenLimit()) return '';
+
+        let messageIdForUpdates = assistantMessageId;
+        let wasMessageCreatedInternally = false;
+        const activeId = conversationState.activeConversationId!;
+
+        if (!messageIdForUpdates) {
+            wasMessageCreatedInternally = true;
+            const tempMessageId = uuidv4();
+            const tempMessage: Message = { 
+                id: tempMessageId, 
+                conversation_id: activeId, 
+                role: 'assistant', 
+                content: '',
+                thought: { title: `Oluşturuluyor: ${type}...`, steps: [] },
+                created_at: new Date().toISOString(), 
+                isStreaming: true 
+            };
+            conversationState.updateConversation(activeId, { messages: [...activeConv.messages, tempMessage] });
+            messageIdForUpdates = tempMessageId;
+        }
+
+        setGeneratingDocType(type);
+        setIsProcessing(true);
+        
+        const diagramTypeToUse = newDiagramType || uiState.diagramType;
+        const templates = {
+            analysis: conversationState.allTemplates.find(t => t.id === (newTemplateId || conversationState.selectedTemplates.analysis))?.prompt || promptService.getPrompt('generateAnalysisDocument'),
+            test: conversationState.allTemplates.find(t => t.id === (newTemplateId || conversationState.selectedTemplates.test))?.prompt || promptService.getPrompt('generateTestScenarios'),
+            traceability: conversationState.allTemplates.find(t => t.id === (newTemplateId || conversationState.selectedTemplates.traceability))?.prompt || promptService.getPrompt('generateTraceabilityMatrix'),
+            visualization: promptService.getPrompt(diagramTypeToUse === 'bpmn' ? 'generateBPMN' : 'generateVisualization'),
+        };
+
+        const streamGenerators = {
+            analysis: () => geminiService.generateAnalysisDocument(activeConv.generatedDocs.requestDoc, activeConv.messages, templates.analysis, activeModel()),
+            test: () => geminiService.generateTestScenarios(activeConv.generatedDocs.analysisDoc, templates.test, activeModel()),
+            traceability: () => geminiService.generateTraceabilityMatrix(activeConv.generatedDocs.analysisDoc, (activeConv.generatedDocs.testScenarios as SourcedDocument)?.content || activeConv.generatedDocs.testScenarios as string, templates.traceability, activeModel()),
+        };
+        
+        const docNameMap: Record<string, string> = {
+            analysis: 'Analiz Dokümanı',
+            test: 'Test Senaryoları',
+            traceability: 'İzlenebilirlik Matrisi',
+            viz: 'Görselleştirme',
+            'backlog-generation': 'Backlog'
+        };
+        const docName = docNameMap[type] || 'Doküman';
+
+        try {
+            if (type === 'viz') {
+                const { code, tokens } = await geminiService.generateDiagram(activeConv.generatedDocs.analysisDoc, diagramTypeToUse, templates.visualization, activeModel());
+                conversationState.commitTokenUsage(tokens);
+                const sourceHash = simpleHash(activeConv.generatedDocs.analysisDoc);
+                const vizData = { code, sourceHash };
+                const docKey = diagramTypeToUse === 'bpmn' ? 'bpmnViz' : 'mermaidViz';
+                await conversationState.saveDocumentVersion(docKey, vizData, `Diyagram oluşturuldu (${diagramTypeToUse})`);
+            } else if (type === 'analysis' || type === 'test' || type === 'traceability') {
+                const stream = streamGenerators[type]();
+                for await (const chunk of stream) {
+                     if (chunk.type === 'doc_stream_chunk') {
+                        conversationState.streamDocument(chunk.docKey, chunk.chunk);
+                    } else if (chunk.type === 'usage_update') {
+                        conversationState.commitTokenUsage(chunk.tokens);
+                    } else if (chunk.type === 'expert_run_update' && messageIdForUpdates) {
+                        conversationState.updateStreamingMessage(messageIdForUpdates, {
+                            type: 'thought_chunk',
+                            payload: { title: `${docName} oluşturuluyor...`, steps: chunk.checklist }
+                        });
+                    }
+                }
+                await conversationState.finalizeStreamedDocuments(newTemplateId);
+            }
+
+            const confirmationMsg = `"${docName}" başarıyla oluşturuldu.`;
+            if (wasMessageCreatedInternally && messageIdForUpdates) {
+                const finalMessageState = {
+                    isStreaming: false,
+                    content: confirmationMsg,
+                    thought: {
+                        ...(conversationState.getMessageById(messageIdForUpdates)?.thought || { title: '', steps: [] }),
+                        title: `${docName} tamamlandı.`
+                    }
+                };
+                conversationState.updateMessage(messageIdForUpdates, finalMessageState);
+                
+                const finalMessage = conversationState.getMessageById(messageIdForUpdates);
+                if (finalMessage) {
+                     await supabase.from('conversation_details').insert({
+                        id: finalMessage.id, conversation_id: finalMessage.conversation_id, role: finalMessage.role,
+                        content: finalMessage.content, created_at: finalMessage.created_at,
+                        thought: finalMessage.thought || null
+                    });
+                }
+                return ''; // Handled internally
+            }
+            return confirmationMsg; // Return for sendMessage to handle
+
+        } catch(e: any) {
+            uiState.setError(e.message);
+             if (wasMessageCreatedInternally && messageIdForUpdates) {
+                conversationState.updateMessage(messageIdForUpdates, {
+                    isStreaming: false,
+                    error: { name: 'GenerationError', message: e.message }
+                });
+            }
+            return '';
+        } finally {
+            setIsProcessing(false);
+            setGeneratingDocType(null);
+            if (newTemplateId) {
+                conversationState.setSelectedTemplates(prev => ({ ...prev, [type]: newTemplateId }));
+            }
+        }
+    };
+
     const sendMessage = useCallback(async (text: string, isRetry = false) => {
         if (!checkTokenLimit()) return;
         const activeId = conversationState.activeConversationId;
@@ -150,7 +268,6 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         const finalAssistantMessage: Message = { ...assistantMessage };
         
         try {
-            // FIX: Remove the incorrect `parseStreamingResponse` wrapper. `handleUserMessageStream` already returns the correct `StreamChunk` generator.
             const rawStream = uiState.isExpertMode 
                 ? geminiService.runExpertAnalysisStream(userMessage, conversationState.activeConversation!.generatedDocs, {
                     analysis: promptService.getPrompt('generateAnalysisDocument'),
@@ -184,19 +301,77 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
                         conversationState.updateStreamingMessage(assistantMessageId, { type: 'chat_stream_chunk', chunk: chunk.text });
                         break;
                     
-                    // Handle other chunks from expert mode or other tools
                     case 'doc_stream_chunk':
                         conversationState.streamDocument(chunk.docKey, chunk.chunk);
                         break;
                     case 'usage_update':
                         conversationState.commitTokenUsage(chunk.tokens);
                         break;
-                    // FIX: This case was causing a type error because the yielding function was refactored.
-                    // The logic is now handled server-side by the model or within other chunks.
-                    /* case 'function_call':
-                         // In the new architecture, most function calls are handled within the expert mode stream itself.
-                         // This can be a place for additional client-side function handling if needed.
-                        break; */
+                    case 'function_call': {
+                        if (chunk.name === 'saveRequestDocument') {
+                            const { request_summary } = chunk.args;
+                            if (request_summary) {
+                                const thought: ThoughtProcess = {
+                                    title: "Talep İşleniyor",
+                                    steps: [{ id: 'save_req', name: 'Talep dokümanı oluşturuluyor...', status: 'in_progress' }]
+                                };
+                                conversationState.updateStreamingMessage(assistantMessageId, { type: 'thought_chunk', payload: thought });
+
+                                try {
+                                    const { jsonString, tokens } = await geminiService.parseTextToRequestDocument(request_summary);
+                                    conversationState.commitTokenUsage(tokens);
+                                    await conversationState.saveDocumentVersion('requestDoc', jsonString, "AI tarafından talep özeti oluşturuldu");
+                                    
+                                    thought.steps[0].status = 'completed';
+                                    conversationState.updateStreamingMessage(assistantMessageId, { type: 'thought_chunk', payload: thought });
+                                    
+                                    const confirmationText = "Talebinizi anladım ve 'Talep Dokümanı'nı oluşturdum. Çalışma alanından inceleyebilirsiniz.";
+                                    accumulatedContent += confirmationText;
+                                    finalAssistantMessage.content = accumulatedContent;
+                                    conversationState.updateStreamingMessage(assistantMessageId, { type: 'chat_stream_chunk', chunk: confirmationText });
+                                } catch (e: any) {
+                                    thought.steps[0].status = 'error';
+                                    thought.steps[0].details = e.message;
+                                    conversationState.updateStreamingMessage(assistantMessageId, { type: 'thought_chunk', payload: thought });
+                                    
+                                    const errorText = `Talep dokümanı oluşturulurken bir hata oluştu: ${e.message}`;
+                                    accumulatedContent += errorText;
+                                    finalAssistantMessage.content = accumulatedContent;
+                                    conversationState.updateStreamingMessage(assistantMessageId, { type: 'chat_stream_chunk', chunk: errorText });
+                                }
+                            }
+                        } else {
+                            const functionMessages: Partial<Record<string, string>> = {
+                                generateAnalysisDocument: "Elbette, analiz dokümanını şimdi oluşturuyorum. Bu işlem, dokümanın karmaşıklığına bağlı olarak biraz zaman alabilir.",
+                                generateTestScenarios: "Harika, test senaryolarını hazırlıyorum...",
+                                generateTraceabilityMatrix: "Tamamdır, izlenebilirlik matrisini oluşturuyorum...",
+                                generateVisualization: "Süreci sizin için hemen görselleştiriyorum..."
+                            };
+
+                            const autoResponseMessage = functionMessages[chunk.name];
+                            if (autoResponseMessage && !accumulatedContent) {
+                                accumulatedContent += autoResponseMessage;
+                                finalAssistantMessage.content = accumulatedContent;
+                                conversationState.updateStreamingMessage(assistantMessageId, { type: 'chat_stream_chunk', chunk: autoResponseMessage });
+                            }
+                            
+                            let confirmationMsg = '';
+                            if (chunk.name === 'generateAnalysisDocument') {
+                                confirmationMsg = await handleGenerateDoc('analysis', undefined, undefined, assistantMessageId);
+                            } else if (chunk.name === 'generateTestScenarios') {
+                                confirmationMsg = await handleGenerateDoc('test', undefined, undefined, assistantMessageId);
+                            } else if (chunk.name === 'generateTraceabilityMatrix') {
+                                confirmationMsg = await handleGenerateDoc('traceability', undefined, undefined, assistantMessageId);
+                            } else if (chunk.name === 'generateVisualization') {
+                                confirmationMsg = await handleGenerateDoc('viz', undefined, undefined, assistantMessageId);
+                            }
+
+                             if (confirmationMsg) {
+                                accumulatedContent += (accumulatedContent ? '\n\n' : '') + confirmationMsg;
+                            }
+                        }
+                        break;
+                    }
                 }
             }
 
@@ -209,13 +384,9 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
             setGeneratingDocType(null);
             finalAssistantMessage.isStreaming = false;
             
-            // When streaming is complete, ensure all thought steps are marked as 'completed'
-            // to remove any lingering loading spinners from the UI.
             if (finalAssistantMessage.thought && Array.isArray(finalAssistantMessage.thought.steps)) {
                 const completedSteps = finalAssistantMessage.thought.steps.map(step => ({
                     ...step,
-                    // FIX: Explicitly cast the status to satisfy the strict 'ThinkingStep' type.
-                    // The type inference was failing and widening the status to 'string'.
                     status: (step.status === 'error' ? 'error' : 'completed') as ExpertStep['status'],
                 }));
                 finalAssistantMessage.thought = {
@@ -246,7 +417,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
                 await conversationState.finalizeStreamedDocuments();
             }
         }
-    }, [conversationState, checkTokenLimit, uiState, activeModel, handleNewConversation]);
+    }, [conversationState, checkTokenLimit, uiState, activeModel, handleNewConversation, handleGenerateDoc]);
 
     const handleFeedbackUpdate = async (messageId: string, feedback: { rating: 'up' | 'down' | null; comment?: string }) => {
         conversationState.updateMessage(messageId, { feedback });
@@ -292,58 +463,6 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         }
     };
 
-    const handleGenerateDoc = async (type: 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => {
-        const activeConv = conversationState.activeConversation;
-        if (!activeConv || isProcessing) return;
-        if (!checkTokenLimit()) return;
-
-        setGeneratingDocType(type);
-        setIsProcessing(true);
-        
-        const diagramTypeToUse = newDiagramType || uiState.diagramType;
-        const templates = {
-            analysis: conversationState.allTemplates.find(t => t.id === (newTemplateId || conversationState.selectedTemplates.analysis))?.prompt || promptService.getPrompt('generateAnalysisDocument'),
-            test: conversationState.allTemplates.find(t => t.id === (newTemplateId || conversationState.selectedTemplates.test))?.prompt || promptService.getPrompt('generateTestScenarios'),
-            traceability: conversationState.allTemplates.find(t => t.id === (newTemplateId || conversationState.selectedTemplates.traceability))?.prompt || promptService.getPrompt('generateTraceabilityMatrix'),
-            visualization: promptService.getPrompt(diagramTypeToUse === 'bpmn' ? 'generateBPMN' : 'generateVisualization'),
-        };
-
-        const streamGenerators = {
-            analysis: () => geminiService.generateAnalysisDocument(activeConv.generatedDocs.requestDoc, activeConv.messages, templates.analysis, activeModel()),
-            test: () => geminiService.generateTestScenarios(activeConv.generatedDocs.analysisDoc, templates.test, activeModel()),
-            traceability: () => geminiService.generateTraceabilityMatrix(activeConv.generatedDocs.analysisDoc, (activeConv.generatedDocs.testScenarios as SourcedDocument)?.content || activeConv.generatedDocs.testScenarios as string, templates.traceability, activeModel()),
-        };
-
-        try {
-            if (type === 'viz') {
-                const { code, tokens } = await geminiService.generateDiagram(activeConv.generatedDocs.analysisDoc, diagramTypeToUse, templates.visualization, activeModel());
-                conversationState.commitTokenUsage(tokens);
-                const sourceHash = simpleHash(activeConv.generatedDocs.analysisDoc);
-                const vizData = { code, sourceHash };
-                const docKey = diagramTypeToUse === 'bpmn' ? 'bpmnViz' : 'mermaidViz';
-                await conversationState.saveDocumentVersion(docKey, vizData, `Diyagram oluşturuldu (${diagramTypeToUse})`);
-            } else if (type === 'analysis' || type === 'test' || type === 'traceability') {
-                const stream = streamGenerators[type]();
-                for await (const chunk of stream) {
-                     if (chunk.type === 'doc_stream_chunk') {
-                        conversationState.streamDocument(chunk.docKey, chunk.chunk);
-                    } else if (chunk.type === 'usage_update') {
-                        conversationState.commitTokenUsage(chunk.tokens);
-                    }
-                }
-                await conversationState.finalizeStreamedDocuments(newTemplateId);
-            }
-        } catch(e: any) {
-            uiState.setError(e.message);
-        } finally {
-            setIsProcessing(false);
-            setGeneratingDocType(null);
-            if (newTemplateId) {
-                conversationState.setSelectedTemplates(prev => ({ ...prev, [type]: newTemplateId }));
-            }
-        }
-    };
-    
     const handleTemplateChange = (docType: 'analysis' | 'test' | 'traceability') => (event: React.ChangeEvent<HTMLSelectElement>) => {
         const newTemplateId = event.target.value;
         const activeConv = conversationState.activeConversation;
@@ -353,7 +472,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         const docKey = docKeyMap[docType];
         
         const docContent = activeConv.generatedDocs[docKey];
-        const contentExists = typeof docContent === 'string' ? docContent.trim() !== '' : !!docContent?.content?.trim();
+        const contentExists = typeof docContent === 'string' ? docContent.trim() !== '' : !!(docContent as any)?.content?.trim();
 
         if (contentExists) {
             uiState.regenerateModalData.current = { docType, newTemplateId };

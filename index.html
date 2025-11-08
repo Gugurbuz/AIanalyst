@@ -9,6 +9,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <!-- React Quill stylesheet -->
+    <link href="https://cdn.jsdelivr.net/npm/react-quill@2.0.0/dist/quill.snow.css" rel="stylesheet">
     <!-- BPMN.io stylesheets -->
     <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.0.2/dist/assets/diagram-js.css">
     <link rel="stylesheet" href="https://unpkg.com/bpmn-js@17.0.2/dist/assets/bpmn-js.css">
@@ -164,6 +166,54 @@
       .dark ::-webkit-scrollbar-thumb:hover {
         background-color: #64748b; /* slate-500 */
       }
+
+      /* --- Custom Quill Editor Theme --- */
+      .ql-editor {
+          font-family: 'Inter', sans-serif;
+          font-size: 1rem;
+          line-height: 1.75;
+          color: #1e293b; /* slate-800 */
+      }
+      .dark .ql-editor {
+          color: #cbd5e1; /* slate-300 */
+      }
+      .ql-editor.ql-blank::before {
+          color: #94a3b8; /* slate-400 */
+          font-style: normal;
+      }
+      .ql-toolbar.ql-snow {
+          border-top-left-radius: 0.5rem;
+          border-top-right-radius: 0.5rem;
+          border-color: #e2e8f0 !important; /* slate-200 */
+          background-color: #f8fafc; /* slate-50 */
+      }
+      .dark .ql-toolbar.ql-snow {
+          border-color: #334155 !important; /* slate-700 */
+          background-color: #1e293b; /* slate-800 */
+      }
+      .ql-container.ql-snow {
+          border-bottom-left-radius: 0.5rem;
+          border-bottom-right-radius: 0.5rem;
+          border-color: #e2e8f0 !important; /* slate-200 */
+      }
+      .dark .ql-container.ql-snow {
+           border-color: #334155 !important; /* slate-700 */
+           background-color: #0f172a; /* slate-900 */
+      }
+      .dark .ql-toolbar .ql-stroke { stroke: #94a3b8; }
+      .dark .ql-toolbar .ql-fill { fill: #94a3b8; }
+      .dark .ql-toolbar .ql-picker-label { color: #94a3b8; }
+      .dark .ql-toolbar button:hover .ql-stroke,
+      .dark .ql-toolbar button:focus .ql-stroke,
+      .dark .ql-toolbar button.ql-active .ql-stroke { stroke: #c7d2fe; }
+      .dark .ql-toolbar .ql-picker-label:hover,
+      .dark .ql-toolbar .ql-picker-item:hover { color: #c7d2fe; }
+      .dark .ql-toolbar .ql-picker-item.ql-selected { color: #818cf8; }
+      .dark .ql-snow .ql-picker-options {
+          background-color: #334155; /* slate-700 */
+          border-color: #475569; /* slate-600 */
+          color: #cbd5e1; /* slate-300 */
+      }
     </style>
     <script>
       tailwind.config = {
@@ -244,7 +294,11 @@
     "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.0",
     "path": "https://aistudiocdn.com/path@^0.12.7",
     "vite": "https://aistudiocdn.com/vite@^7.1.12",
-    "url": "https://aistudiocdn.com/url@^0.11.4"
+    "url": "https://aistudiocdn.com/url@^0.11.4",
+    "zustand": "https://aistudiocdn.com/zustand@^5.0.8",
+    "react-quill": "https://aistudiocdn.com/react-quill@^2.0.0",
+    "markdown-it": "https://aistudiocdn.com/markdown-it@^14.1.0",
+    "turndown": "https://aistudiocdn.com/turndown@^7.1.3"
   }
 }
 </script>

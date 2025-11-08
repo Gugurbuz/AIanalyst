@@ -259,30 +259,26 @@ export interface LintingIssue {
     details: string; // e.g., "FR-001'den sonra FR-003 geliyor."
 }
 
-export interface AnalysisHeader {
-    talepAdi: string;
-    talepNo: string;
-    talepSahibi: string;
-    revizyon: string;
-    tarih: string;
-    hazirlayan: string;
+// NEW: Types for structured analysis document
+export interface AnalysisRequirement {
+    id: string; // e.g., "FR-001"
+    text: string;
 }
 
-export interface AnalysisContentSection {
-    id: string;
-    baslik: string;
-    icerik: string;
+export interface AnalysisSubSection {
+    title: string;
+    content: string; // Markdown content
+    requirements?: AnalysisRequirement[];
 }
 
 export interface AnalysisSection {
-    id: string;
-    baslik: string;
-    altBasliklar: AnalysisContentSection[];
+    title: string; // e.g., "1. ANALİZ KAPSAMI"
+    content?: string; // Markdown content for simple sections
+    subSections?: AnalysisSubSection[];
 }
 
 export interface StructuredAnalysisDoc {
-    header: AnalysisHeader;
-    icindekiler: (AnalysisSection | AnalysisContentSection)[];
+    sections: AnalysisSection[];
 }
 
 export interface IsBirimiTalep {
@@ -329,6 +325,6 @@ export interface StructuredTraceabilityRow {
 
 
 export function isStructuredAnalysisDoc(obj: any): obj is StructuredAnalysisDoc {
-    return obj && typeof obj === 'object' && obj.header && Array.isArray(obj.icindekiler);
+    return obj && typeof obj === 'object' && Array.isArray(obj.sections);
 }
 // ... diğer tipler
