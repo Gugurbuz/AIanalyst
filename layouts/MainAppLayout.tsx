@@ -13,9 +13,9 @@ import { FeedbackDashboard } from '../components/FeedbackDashboard';
 import { UpgradeModal } from '../components/UpgradeModal';
 import { LongTextModal } from '../components/LongTextModal';
 import { ResetConfirmationModal } from '../components/ResetConfirmationModal';
-import { AlertTriangle, FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, X, PanelLeftClose, PanelLeftOpen, PanelRightOpen, PanelRightClose } from 'lucide-react';
+import { ProjectBoard } from '../components/ProjectBoard';
+import { AlertTriangle, FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, X, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { MainSidebar } from './MainSidebar';
-import { Sidebar } from '../components/Sidebar';
 
 const AnalystWorkspace = () => {
     const context = useAppContext();
@@ -166,7 +166,7 @@ export const MainAppLayout: React.FC = () => {
     }, [context.theme]);
 
     return (
-        <div className="font-sans bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 h-screen flex flex-col overflow-hidden">
+        <div className="font-sans bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 h-screen flex overflow-hidden">
              {context.error && (
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-lg z-50 flex items-center gap-2 error-banner-enter dark:bg-red-900/80 dark:text-red-200 dark:border-red-600">
                     <AlertTriangle className="h-5 w-5"/>
@@ -176,36 +176,19 @@ export const MainAppLayout: React.FC = () => {
                     </button>
                 </div>
             )}
-            <div className="flex-1 flex min-h-0 relative">
-                <MainSidebar
-                    user={context.user}
-                    profile={context.userProfile}
-                    theme={context.theme}
-                    onThemeChange={context.setTheme}
-                    onLogout={context.onLogout}
-                    onOpenShareModal={() => context.setIsShareModalOpen(true)}
-                />
-                <div className="flex-1 flex flex-col min-h-0">
-                    <div className="flex-1 flex flex-row min-h-0">
-                            <div className="relative hidden md:flex h-full">
-                            <div className={`transition-all duration-300 ease-in-out ${context.isConversationListOpen ? 'w-80' : 'w-0'} h-full overflow-hidden`}>
-                                <Sidebar
-                                    conversations={context.conversations}
-                                    activeConversationId={context.activeConversationId}
-                                    onSelectConversation={context.setActiveConversationId}
-                                    onNewConversation={context.handleNewConversation}
-                                    onUpdateConversationTitle={context.updateConversationTitle}
-                                    onDeleteConversation={context.deleteConversation}
-                                    isOpen={context.isConversationListOpen}
-                                    setIsOpen={context.setIsConversationListOpen}
-                                />
-                            </div>
-                        </div>
-                        <div className="flex-1 h-full">
-                            <AnalystWorkspace />
-                        </div>
-                    </div>
-                </div>
+            
+            <MainSidebar
+                user={context.user}
+                profile={context.userProfile}
+                theme={context.theme}
+                onThemeChange={context.setTheme}
+                onLogout={context.onLogout}
+                onOpenShareModal={() => context.setIsShareModalOpen(true)}
+            />
+            
+            <div className="flex-1 flex flex-col min-h-0">
+                 {context.appMode === 'analyst' && <AnalystWorkspace />}
+                 {context.appMode === 'backlog' && context.user && <ProjectBoard user={context.user} />}
             </div>
 
             {context.isShareModalOpen && context.activeConversation && <ShareModal isOpen={context.isShareModalOpen} onClose={() => context.setIsShareModalOpen(false)} conversation={context.activeConversation} onUpdateShareSettings={(id, updates) => context.updateConversation(id, updates)} />}

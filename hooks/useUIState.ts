@@ -5,6 +5,7 @@ import type { Theme, GeminiModel, GeneratedDocs } from '../types';
 
 export const useUIState = () => {
     const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'light');
+    const [appMode, setAppMode] = useState<'analyst' | 'backlog'>('analyst');
     const [isConversationListOpen, setIsConversationListOpen] = useState(true);
     const [isWorkspaceVisible, setIsWorkspaceVisible] = useState(true);
     // FIX: Add state for the NewAnalysisModal, which was missing.
@@ -51,6 +52,8 @@ export const useUIState = () => {
     return {
         theme,
         setTheme: handleThemeChange,
+        appMode,
+        setAppMode,
         isConversationListOpen,
         setIsConversationListOpen,
         isWorkspaceVisible,

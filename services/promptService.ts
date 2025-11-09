@@ -169,7 +169,82 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
             versionId: 'default',
             name: 'Varsayılan',
             createdAt: new Date().toISOString(),
-            prompt: `Bir uzman iş analisti olarak, sana verilen **Talep Dokümanı** ve **Konuşma Geçmişi**'ni kullanarak, aşağıdaki JSON ŞABLONUNU doldurarak bir iş analizi dokümanı oluştur. Şablonun yapısını veya başlıklarını DEĞİŞTİRME. Sadece içeriği doldur. **ÖNEMLİ:** "4. FONKSİYONEL GEREKSİNİMLER (FR)" bölümü altındaki 'subSections' dizisini, konuşma geçmişinden ve talepten çıkardığın **gerçek modül adlarına (örn: Sipariş Yönetimi, Kullanıcı Paneli) göre dinamik olarak oluştur.** Eğer sadece tek bir modül varsa, sadece bir 'subSection' ekle. Eğer modül belli değilse, "Genel Gereksinimler" gibi tek bir başlık kullan. Eğer bir bölüm için bilgi yoksa, o bölümün 'content' alanına "[Belirlenecek]" yaz veya 'requirements' dizisini boş \`[]\` bırak. Tüm gereksinim ID'lerini "FR-", "NFR-" gibi standart ön eklerle ve modül adıyla başlat (örn: "FR-SIPARIS-01"). Sadece ve sadece bu doldurulmuş JSON nesnesini bir string olarak döndür. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
+            prompt: `Bir uzman iş analisti olarak, sana verilen **Talep Dokümanı** ve **Konuşma Geçmişi**'ni kullanarak, aşağıdaki **ZORUNLU ŞABLONA** harfiyen uyan bir iş analizi dokümanını **Markdown formatında** oluştur. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme. Sadece ve sadece Markdown içeriğini döndür.
+
+**KURALLAR:**
+- **ŞABLONA UY:** Aşağıdaki şablonda bulunan TÜM başlıkları ve alt başlıkları SIRASIYLA ve EKSİKSİZ olarak kullan. Hiçbir başlığı atlama veya sırasını değiştirme.
+- **TABLOLAR:** Konuşma geçmişinden ve talep dokümanından yola çıkarak tablolardaki \`[Belirlenecek]\` alanlarını ilgili bilgilerle doldur.
+- **BAŞLIKLAR:** Ana başlıklar için \`## Sayı. Başlık Adı\`, alt başlıklar için \`### Sayı.Sayı. Alt Başlık Adı\` kullan.
+- **GEREKSİNİMLER:** Gereksinimleri \`- **ID:** Açıklama\` formatında listele. (Örnek: \`- **FR-001:** Bir kullanıcı olarak... \`)
+- **BOŞ BÖLÜMLER:** Eğer bir bölüm veya tablo hücresi için yeterli bilgi yoksa, o bölümün/hücrenin altına \`[Belirlenecek]\` yaz. Bölümü SİLME.
+- **GEREKSİNİM ID'LERİ:** Tüm gereksinim ID'lerini "FR-", "NFR-" gibi standart ön eklerle oluştur.
+
+**ZORUNLU ŞABLON:**
+\`\`\`
+## 1. ANALİZ KAPSAMI
+[Analizin genel kapsamı, hangi geliştirmeleri içerdiği ve içermediği...]
+
+| Kapsam Detayı | Açıklama |
+|---|---|
+| Sistem | [Belirlenecek] |
+| Ana Modül | [Belirlenecek] |
+| Etkilenen İş Birimleri | [Belirlenecek] |
+| Etkilenen Modüller | [Belirlenecek] |
+| Etkilenen Sistemler | [Belirlenecek] |
+| Talep Türü | [Belirlenecek] |
+| Öncelik | [Belirlenecek] |
+
+## 2. KISALTMALAR
+| Kısaltma | Açıklama |
+|---|---|
+| Örn: CRM | Müşteri İlişkileri Yönetimi |
+
+## 3. İŞ GEREKSİNİMLERİ
+### 3.1. İş Kuralları
+[Projenin uyması gereken temel iş kuralları listesi...]
+
+### 3.2. İş Modeli ve Kullanıcı Gereksinimleri
+[İşin nasıl yürüyeceği, kullanıcıların sistemden beklentileri...]
+
+## 4. FONKSİYONEL GEREKSİNİMLER (FR)
+[Sistemin yapması gereken işlevler, kullanıcı hikayeleri formatında...]
+
+## 5. FONKSİYONEL OLMAYAN GEREKSİNİMLER (NFR)
+### 5.1. Güvenlik ve Yetkilendirme Gereksinimleri
+[Erişim kontrolü, veri güvenliği, yetkilendirme kuralları...]
+
+### 5.2. Performans Gereksinimleri
+[Sayfa yüklenme hızları, yanıt süreleri, eş zamanlı kullanıcı sayısı...]
+
+### 5.3. Raporlama Gereksinimleri
+[Sistemden alınması gereken raporlar ve içerikleri...]
+
+## 6. SÜREÇ RİSK ANALİZİ
+### 6.1. Kısıtlar ve Varsayımlar
+[Projenin teknik veya işlevsel kısıtları ve doğru kabul edilen varsayımlar...]
+
+### 6.2. Bağlılıklar
+[Projenin bağlı olduğu diğer sistemler veya süreçler...]
+
+### 6.3. Süreç Etkileri
+[Bu projenin mevcut diğer iş süreçlerine etkileri...]
+
+## 7. ONAY
+### 7.1. İş Analizi
+[Belirlenecek]
+
+### 7.2. Değişiklik Kayıtları
+[Belirlenecek]
+
+### 7.3. Doküman Onay
+[Belirlenecek]
+
+### 7.4. Referans Dokümanlar
+[Belirlenecek]
+
+## 8. FONKSİYONEL TASARIM DOKÜMANLARI
+[Belirlenecek]
+\`\`\`
 
 **Talep Dokümanı:**
 ---
@@ -180,134 +255,6 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
 ---
 {conversation_history}
 ---
-
-**DOLDURULACAK JSON ŞABLONU:**
-\`\`\`json
-{
-  "header": {
-    "talepAdi": "[Talep Adı Buraya Eklenecek]",
-    "talepNo": "[Talep No Buraya Eklenecek]",
-    "tarih": "[GG.AA.YYYY]",
-    "sistem": "[Sistem Adı]",
-    "anaModul": "[Ana Modül Adı]",
-    "etkilenenIsBirimleri": "[Birimler]",
-    "etkilenenModuller": "[Modüller]",
-    "etkilenenSistemler": "[Sistemler]",
-    "talepTuru": "[Geliştirme / Hata / vb.]",
-    "oncelik": "[Critical / High / Medium / Low]"
-  },
-  "sections": [
-    {
-      "title": "1. ANALİZ KAPSAMI",
-      "content": "[Analizin kapsamı, hangi geliştirmeleri, sistem çıktılarını, hesaplamaları ve süreçleri içerdiği burada detaylandırılır.]"
-    },
-    {
-      "title": "2. KISALTMALAR",
-      "content": "[Kısaltmalar ve açıklamaları Markdown listesi olarak buraya eklenir. Örn: \n- P4F: ...\n- CRM: ...]"
-    },
-    {
-      "title": "3. İŞ GEREKSİNİMLERİ",
-      "subSections": [
-        {
-          "title": "3.1. İş Kuralları",
-          "content": "[Projenin veya geliştirmenin uyması gereken temel iş mantığı ve kurallar maddeler halinde buraya eklenir.\n- [Kural 1]\n- [Kural 2]]"
-        },
-        {
-          "title": "3.2. İş Modeli ve Kullanıcı Gereksinimleri",
-          "content": "[İş modelinin nasıl çalışacağı ve son kullanıcıların sistemden beklentileri bu bölüme eklenir.]"
-        }
-      ]
-    },
-    {
-      "title": "4. FONKSİYONEL GEREKSİNİMLER (FR)",
-      "content": "Bu bölümde, projenin hedeflerine ulaşmak için geliştirilmesi gereken sistem özelliklerine dair gereksinimler bulunmaktadır.",
-      "subSections": [
-         {
-            "title": "Fonksiyonel Gereksinim Maddeleri ([Dinamik Modül Adı 1])",
-            "requirements": [
-                { "id": "FR-[MODUL1]-01", "text": "[Gereksinim 1]" },
-                { "id": "FR-[MODUL1]-02", "text": "[Gereksinim 2]" }
-            ]
-         },
-         {
-            "title": "Fonksiyonel Gereksinim Maddeleri ([Dinamik Modül Adı 2])",
-            "requirements": [
-                { "id": "FR-[MODUL2]-01", "text": "[Gereksinim 1]" }
-            ]
-         }
-      ]
-    },
-    {
-      "title": "5. FONKSİYONEL OLMAYAN GEREKSİNİMLER (NFR)",
-      "subSections": [
-        {
-          "title": "5.1. Güvenlik ve Yetkilendirme Gereksinimleri",
-          "content": "[Güvenlik ve yetkilendirme ile ilgili kurallar.]",
-           "requirements": [
-                { "id": "NFR-GUV-01", "text": "[Güvenlik Gereksinimi 1]" }
-            ]
-        },
-        {
-          "title": "5.2. Performans Gereksinimleri",
-          "content": "[Sistemin yanıt süreleri, işlem kapasitesi gibi performans beklentileri.]",
-           "requirements": [
-                { "id": "NFR-PER-01", "text": "[Performans Gereksinimi 1]" }
-            ]
-        },
-        {
-          "title": "5.3. Raporlama Gereksinimleri",
-          "content": "[Sistemden alınması beklenen raporlar veya çıktı gereksinimleri.]",
-           "requirements": [
-                { "id": "NFR-RAP-01", "text": "[Raporlama Gereksinimi 1]" }
-            ]
-        }
-      ]
-    },
-    {
-      "title": "6. SÜREÇ RİSK ANALİZİ",
-      "subSections": [
-        {
-          "title": "6.1. Kısıtlar ve Varsayımlar",
-          "content": "**Kısıtlar:**\n- [Kısıt 1]\n\n**Varsayımlar:**\n- [Varsayım 1]"
-        },
-        {
-          "title": "6.2. Bağlılıklar",
-          "content": "[Projenin başarısı için bağlı olunan diğer sistemler, ekipler veya projeler.\n- [Bağlılık 1]]"
-        },
-        {
-          "title": "6.3. Süreç Etkileri",
-          "content": "[Bu geliştirmenin mevcut iş süreçleri üzerindeki etkileri.\n- [Etki 1]]"
-        }
-      ]
-    },
-    {
-      "title": "7. ONAY",
-      "subSections": [
-        {
-          "title": "7.1. İş Analizi",
-          "content": "**Analiz Tamamlanma Tarihi:** [GG.AA.YYYY]\n**Hazırlayan:** [İsim Soyisim]\n\n**Kontrol Tarihi:** [GG.AA.YYYY]\n**Kontrol Eden:** [İsim Soyisim]"
-        },
-        {
-          "title": "7.2. Değişiklik Kayıtları",
-          "content": "[Değişiklik kayıtları tablo veya liste olarak buraya eklenecek.\n- **Tarih:** GG.AA.YYYY, **Hazırlayan:** İsim, **Sürüm:** v1.1, **Açıklama:** ...]"
-        },
-        {
-          "title": "7.3. Doküman Onay",
-          "content": "[Onaylayan bilgileri tablo veya liste olarak buraya eklenecek.\n- **Tarih:** GG.AA.YYYY, **Onaylayan:** İsim, **Görevi:** ...]"
-        },
-        {
-          "title": "7.4. Referans Dokümanlar",
-          "content": "[Referans dokümanlar listesi.\n- **Tür:** Talep Dokümanı, **Doküman:** [Link veya Doküman Adı]]"
-        }
-      ]
-    },
-    {
-       "title": "8. FONKSİYONEL TASARIM DOKÜMANLARI",
-       "content": "[Varsa ilgili FSD dokümanlarının listesi.\n- [FSD-001 Linki]]"
-    }
-  ]
-}
-\`\`\`
 `,
           },
         ],
@@ -324,14 +271,11 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
             versionId: 'default',
             name: 'Varsayılan',
             createdAt: new Date().toISOString(),
-            prompt: `Bir uzman kalite güvence mühendisi olarak, sana verilen iş analizi dokümanındaki gereksinimleri (hem fonksiyonel hem de fonksiyonel olmayan) dikkatlice incele. Görevin, bu gereksinimleri kapsayan pozitif, negatif ve sınır durumlarını içeren test senaryoları oluşturmaktır. Çıktıyı **SADECE** aşağıdaki sütunları içeren bir JSON array formatında döndür. Her bir test senaryosu bu array içinde bir JSON nesnesi olmalıdır. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
+            prompt: `Bir uzman kalite güvence mühendisi olarak, sana verilen iş analizi dokümanındaki gereksinimleri dikkatlice incele. Görevin, bu gereksinimleri kapsayan pozitif, negatif ve sınır durumlarını içeren test senaryoları oluşturmaktır. Çıktıyı **SADECE** bir **Markdown tablosu** formatında döndür. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme. Test adımlarını \`<br>\` ile ayır.
 
-**Sütunlar:**
-- "Test Senaryo ID" (Örn: TC-001)
-- "İlgili Gereksinim" (Örn: REQ-R01)
-- "Senaryo Açıklaması"
-- "Test Adımları" (Adımları numaralandırarak \`1. Adım...\n2. Adım...\` şeklinde yaz)
-- "Beklenen Sonuç"
+**KULLANILACAK SÜTUNLAR:**
+| Test Senaryo ID | İlgili Gereksinim | Senaryo Açıklaması | Test Adımları | Beklenen Sonuç |
+|---|---|---|---|---|
 
 **İş Analizi Dokümanı:**
 ---
@@ -441,7 +385,7 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
         <dc:Bounds x="425" y="152" width="50" height="50" />
         <bpmndi:BPMNLabel>
           <dc:Bounds x="408" y="122" width="84" height="14" />
-        </dixs:BPMNLabel>
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
         <di:waypoint x="370" y="177" />
@@ -456,13 +400,13 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
         <bpmndi:BPMNLabel>
           <dc:Bounds x="495" y="159" width="22" height="14" />
         </bpmndi:BPMNLabel>
-      </bpmndi:BPMNEdge>
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
         <dc:Bounds x="682" y="159" width="36" height="36" />
         <bpmndi:BPMNLabel>
           <dc:Bounds x="672" y="202" width="56" height="14" />
         </bpmndi:BPMNLabel>
-      </bpmndi:BPMNEdge>
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4">
         <di:waypoint x="450" y="202" />
         <di:waypoint x="450" y="250" />
@@ -501,12 +445,11 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
             versionId: 'default',
             name: 'Varsayılan',
             createdAt: new Date().toISOString(),
-            prompt: `Bir uzman iş analisti olarak, sana verilen **İş Analizi Dokümanı** ve **Test Senaryoları**'nı incele. Görevin, her bir gereksinimin hangi test senaryoları tarafından kapsandığını gösteren bir izlenebilirlik matrisi oluşturmaktır. Çıktıyı **SADECE** aşağıdaki sütunları içeren bir JSON array formatında döndür. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
+            prompt: `Bir uzman iş analisti olarak, sana verilen **İş Analizi Dokümanı** ve **Test Senaryoları**'nı incele. Görevin, her bir gereksinimin hangi test senaryoları tarafından kapsandığını gösteren bir izlenebilirlik matrisi oluşturmaktır. Çıktıyı **SADECE** bir **Markdown tablosu** formatında döndür. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
 
-**Sütunlar:**
-- "Gereksinim ID" (Örn: REQ-R01)
-- "Gereksinim Açıklaması"
-- "İlgili Test Senaryo ID'leri" (Virgülle ayrılmış, örn: "TC-001, TC-002")
+**KULLANILACAK SÜTUNLAR:**
+| Gereksinim ID | Gereksinim Açıklaması | İlgili Test Senaryo ID'leri |
+|---|---|---|
 
 **İş Analizi Dokümanı:**
 ---
@@ -682,16 +625,22 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
     name: 'Bakım ve Düzeltme',
     prompts: [
         {
-            id: 'convertHtmlToAnalysisJson',
-            name: 'HTML\'den Analiz JSON\'una Dönüştür',
-            description: 'Kullanıcının contentEditable div üzerinde yaptığı değişiklikleri tekrar yapısal JSON formatına dönüştürür.',
+            id: 'convertMarkdownToRequestJson',
+            name: 'Markdown\'dan Talep JSON\'una Dönüştür',
+            description: 'Kullanıcının düzenlediği Markdown metnini yapısal "İş Birimi Talep" JSON nesnesine geri dönüştürür.',
             is_system_template: true,
             versions: [
                 {
                     versionId: 'default',
                     name: 'Varsayılan',
                     createdAt: new Date().toISOString(),
-                    prompt: `Bir veri dönüştürme uzmanı olarak, aşağıda verilen HTML içeriğini, daha önce oluşturulmuş olan yapısal iş analizi dokümanı JSON formatına geri dönüştür. HTML'deki \`<h2>\`, \`<h3>\`, \`<ul>\`, \`<li>\` ve \`<p>\` etiketlerini analiz ederek orijinal JSON yapısını (sections, subSections, requirements) yeniden oluştur. Gereksinim ID'lerini (örn: "REQ-001") koru. Çıktın sadece ve sadece geçerli bir JSON nesnesi olmalıdır.`
+                    prompt: `Bir veri dönüştürme uzmanı olarak, aşağıda verilen Markdown içeriğini, "İş Birimi Talep Dokümanı" JSON formatına geri dönüştür. Markdown'daki başlıkları (#), listeleri (-) ve metinleri analiz ederek orijinal JSON yapısını yeniden oluştur. Çıktın sadece ve sadece geçerli bir JSON nesnesi olmalıdır.
+
+**MARKDOWN İÇERİĞİ:**
+---
+{markdown_content}
+---
+`
                 }
             ],
             activeVersionId: 'default'

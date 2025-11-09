@@ -2,7 +2,7 @@
 
 import { GoogleGenAI, Type, Content, FunctionDeclaration, GenerateContentResponse } from "@google/genai";
 // FIX: Import StreamChunk from the central types file and remove the local definition.
-import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep, GenerativeSuggestion, LintingIssue, SourcedDocument, StructuredAnalysisDoc, VizData, ThoughtProcess, StreamChunk } from '../types';
+import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep, GenerativeSuggestion, LintingIssue, SourcedDocument, VizData, ThoughtProcess, StreamChunk } from '../types';
 import { promptService } from './promptService';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -183,46 +183,6 @@ export async function* parseStreamingResponse(stream: AsyncGenerator<GenerateCon
     }
 }
 
-
-const analysisSchema = {
-    type: Type.OBJECT,
-    properties: {
-        sections: {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    title: { type: Type.STRING },
-                    content: { type: Type.STRING },
-                    subSections: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                title: { type: Type.STRING },
-                                content: { type: Type.STRING },
-                                requirements: {
-                                    type: Type.ARRAY,
-                                    items: {
-                                        type: Type.OBJECT,
-                                        properties: {
-                                            id: { type: Type.STRING },
-                                            text: { type: Type.STRING },
-                                        },
-                                        required: ['id', 'text'],
-                                    },
-                                },
-                            },
-                            required: ['title'],
-                        },
-                    },
-                },
-                required: ['title'],
-            },
-        },
-    },
-    required: ['sections'],
-};
 
 const isBirimiTalepSchema = {
     type: Type.OBJECT,
@@ -650,15 +610,16 @@ export const geminiService = {
         }
     },
 
-    convertHtmlToAnalysisJson: async (htmlContent: string): Promise<{ json: StructuredAnalysisDoc, tokens: number }> => {
-        const prompt = promptService.getPrompt('convertHtmlToAnalysisJson') + `\n\n**HTML İçeriği:**\n${htmlContent}`;
-        const generationConfig = { responseMimeType: "application/json", responseSchema: analysisSchema };
+    convertMarkdownToRequestJson: async (markdownContent: string): Promise<{ jsonString: string, tokens: number }> => {
+        const prompt = promptService.getPrompt('convertMarkdownToRequestJson').replace('{markdown_content}', markdownContent);
+        const generationConfig = { responseMimeType: "application/json", responseSchema: isBirimiTalepSchema };
         const { text: jsonString, tokens } = await generateContent(prompt, 'gemini-2.5-flash', generationConfig);
         try {
-            return { json: JSON.parse(jsonString) as StructuredAnalysisDoc, tokens };
+            JSON.parse(jsonString); // Validate JSON
+            return { jsonString, tokens };
         } catch (e) {
-            console.error("Failed to parse HTML to JSON:", e, "Received string:", jsonString);
-            throw new Error("HTML içeriği yapısal dokümana dönüştürülemedi.");
+            console.error("Failed to parse Markdown to Request JSON:", e, "Received string:", jsonString);
+            throw new Error("Markdown içeriği yapısal talep dokümanına dönüştürülemedi.");
         }
     },
 
@@ -757,8 +718,6 @@ export const geminiService = {
             .replace('{request_document_content}', requestDoc || "[Talep Dokümanı Yok]")
             .replace('{conversation_history}', historyString);
 
-        // Katı JSON zorunluluğunu kaldırarak modelin daha esnek yanıt vermesini sağlıyoruz.
-        // Bu, modelin zorlandığı durumlarda boş yanıt göndermesini engeller.
         const stream = generateContentStream(prompt, model);
 
         let totalTokens = 0;
@@ -770,7 +729,6 @@ export const geminiService = {
             const text = chunk.text;
             if (text) {
                 fullText += text;
-                // UI'ın canlı güncellenmesi için chunk'ı yolla
                 yield { type: 'doc_stream_chunk', docKey: 'analysisDoc', chunk: fullText };
             }
         }
@@ -780,7 +738,6 @@ export const geminiService = {
 
     generateTestScenarios: async function* (analysisDoc: string, template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
         const prompt = template.replace('{analysis_document_content}', analysisDoc);
-        // Katı JSON zorunluluğunu kaldırarak esnekliği artırıyoruz.
         const stream = generateContentStream(prompt, model);
         let totalTokens = 0;
         let fullText = '';
@@ -801,7 +758,6 @@ export const geminiService = {
         const prompt = template
             .replace('{analysis_document_content}', analysisDoc)
             .replace('{test_scenarios_content}', testScenarios);
-        // Katı JSON zorunluluğunu kaldırarak esnekliği artırıyoruz.
         const stream = generateContentStream(prompt, model);
         let totalTokens = 0;
         let fullText = '';
