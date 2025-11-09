@@ -163,7 +163,7 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
             versionId: 'default',
             name: 'Varsayılan',
             createdAt: new Date().toISOString(),
-            prompt: `Bir uzman iş analisti olarak, sana verilen **Talep Dokümanı** ve **Konuşma Geçmişi**'ni kullanarak, aşağıdaki JSON ŞABLONUNU doldurarak bir iş analizi dokümanı oluştur. Şablonun yapısını veya başlıklarını DEĞİŞTİRME. Sadece içeriği doldur. Eğer bir bölüm için bilgi yoksa, o bölümün 'content' alanına "[Belirlenecek]" yaz. Tüm gereksinim ID'lerini "REQ-" ön ekiyle başlat (örn: "REQ-R01"). Sadece ve sadece bu doldurulmuş JSON nesnesini bir string olarak döndür. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
+            prompt: `Bir uzman iş analisti olarak, sana verilen **Talep Dokümanı** ve **Konuşma Geçmişi**'ni kullanarak, aşağıdaki JSON ŞABLONUNU doldurarak bir iş analizi dokümanı oluştur. Şablonun yapısını veya başlıklarını DEĞİŞTİRME. Sadece içeriği doldur. **ÖNEMLİ:** "4. FONKSİYONEL GEREKSİNİMLER (FR)" bölümü altındaki 'subSections' dizisini, konuşma geçmişinden ve talepten çıkardığın **gerçek modül adlarına (örn: Sipariş Yönetimi, Kullanıcı Paneli) göre dinamik olarak oluştur.** Eğer sadece tek bir modül varsa, sadece bir 'subSection' ekle. Eğer modül belli değilse, "Genel Gereksinimler" gibi tek bir başlık kullan. Eğer bir bölüm için bilgi yoksa, o bölümün 'content' alanına "[Belirlenecek]" yaz veya 'requirements' dizisini boş \`[]\` bırak. Tüm gereksinim ID'lerini "FR-", "NFR-" gibi standart ön eklerle ve modül adıyla başlat (örn: "FR-SIPARIS-01"). Sadece ve sadece bu doldurulmuş JSON nesnesini bir string olarak döndür. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
 
 **Talep Dokümanı:**
 ---
@@ -178,99 +178,126 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
 **DOLDURULACAK JSON ŞABLONU:**
 \`\`\`json
 {
+  "header": {
+    "talepAdi": "[Talep Adı Buraya Eklenecek]",
+    "talepNo": "[Talep No Buraya Eklenecek]",
+    "tarih": "[GG.AA.YYYY]",
+    "sistem": "[Sistem Adı]",
+    "anaModul": "[Ana Modül Adı]",
+    "etkilenenIsBirimleri": "[Birimler]",
+    "etkilenenModuller": "[Modüller]",
+    "etkilenenSistemler": "[Sistemler]",
+    "talepTuru": "[Geliştirme / Hata / vb.]",
+    "oncelik": "[Critical / High / Medium / Low]"
+  },
   "sections": [
     {
-      "title": "Proje Özeti",
-      "content": "[Proje özetini buraya yazın]"
+      "title": "1. ANALİZ KAPSAMI",
+      "content": "[Analizin kapsamı, hangi geliştirmeleri, sistem çıktılarını, hesaplamaları ve süreçleri içerdiği burada detaylandırılır.]"
     },
     {
-      "title": "Talep Sahibi",
-      "content": "[Talep sahibini buraya yazın]"
+      "title": "2. KISALTMALAR",
+      "content": "[Kısaltmalar ve açıklamaları Markdown listesi olarak buraya eklenir. Örn: \n- P4F: ...\n- CRM: ...]"
     },
     {
-      "title": "İş Problemi ve Hedefler",
+      "title": "3. İŞ GEREKSİNİMLERİ",
       "subSections": [
         {
-          "title": "İş Problemi",
-          "content": "[İş problemini detaylıca buraya yazın]"
+          "title": "3.1. İş Kuralları",
+          "content": "[Projenin veya geliştirmenin uyması gereken temel iş mantığı ve kurallar maddeler halinde buraya eklenir.\n- [Kural 1]\n- [Kural 2]]"
         },
         {
-          "title": "Proje Hedefi",
-          "content": "[Proje hedefini detaylıca buraya yazın]"
+          "title": "3.2. İş Modeli ve Kullanıcı Gereksinimleri",
+          "content": "[İş modelinin nasıl çalışacağı ve son kullanıcıların sistemden beklentileri bu bölüme eklenir.]"
         }
       ]
     },
     {
-      "title": "Kapsam",
-      "subSections": [
-        {
-          "title": "Kapsam İçi",
-          "content": "[Kapsam içi maddeleri Markdown listesi olarak buraya yazın]"
-        },
-        {
-          "title": "Kapsam Dışı",
-          "content": "[Kapsam dışı maddeleri Markdown listesi olarak buraya yazın]"
-        }
-      ]
-    },
-    {
-      "title": "Başarı Ölçütleri (Hipotez)",
-       "subSections": [
-        {
-          "title": "Ölçütler",
-          "content": "[BC-001, BC-002 gibi başarı ölçütlerini Markdown listesi olarak buraya yazın]"
-        }
-      ]
-    },
-    {
-      "title": "Mevcut Durum Analizi",
-      "subSections": [
-        { "title": "Mevcut Bildirim Kanalları ve Süreçleri", "content": "[Belirlenecek]" },
-        { "title": "Mevcut Rıza Yönetimi", "content": "[Belirlenecek]" },
-        { "title": "Mevcut Veri Kaynakları", "content": "[Belirlenecek]" }
-      ]
-    },
-    {
-      "title": "Yeni Sistem Gereksinimleri",
+      "title": "4. FONKSİYONEL GEREKSİNİMLER (FR)",
       "content": "Bu bölümde, projenin hedeflerine ulaşmak için geliştirilmesi gereken sistem özelliklerine dair gereksinimler bulunmaktadır.",
       "subSections": [
+         {
+            "title": "Fonksiyonel Gereksinim Maddeleri ([Dinamik Modül Adı 1])",
+            "requirements": [
+                { "id": "FR-[MODUL1]-01", "text": "[Gereksinim 1]" },
+                { "id": "FR-[MODUL1]-02", "text": "[Gereksinim 2]" }
+            ]
+         },
+         {
+            "title": "Fonksiyonel Gereksinim Maddeleri ([Dinamik Modül Adı 2])",
+            "requirements": [
+                { "id": "FR-[MODUL2]-01", "text": "[Gereksinim 1]" }
+            ]
+         }
+      ]
+    },
+    {
+      "title": "5. FONKSİYONEL OLMAYAN GEREKSİNİMLER (NFR)",
+      "subSections": [
         {
-          "title": "Rıza Yönetimi",
-          "content": "Müşterilerin iletişim rızalarının toplanması ve yönetilmesi, hangi kanaldan hangi tür bildirim almak istediğini seçebilme özelliği sağlanmalıdır.",
-          "requirements": [
-            { "id": "REQ-R01", "text": "Müşterilerin iletişim rızalarını (SMS, e-posta, push) yönetebilmeleri sağlanmalıdır." },
-            { "id": "REQ-R02", "text": "Müşteriler, almak istedikleri bildirim türlerini (planlı, plansız, başlangıç, bitiş, güncelleme vb.) seçebilmelidir." }
-          ]
+          "title": "5.1. Güvenlik ve Yetkilendirme Gereksinimleri",
+          "content": "[Güvenlik ve yetkilendirme ile ilgili kurallar.]",
+           "requirements": [
+                { "id": "NFR-GUV-01", "text": "[Güvenlik Gereksinimi 1]" }
+            ]
         },
         {
-          "title": "Veri Kaynakları ve Entegrasyon",
-          "content": "Kesinti bilgileri (planlı/plansız, başlangıç/bitiş, lokasyon vb.) için ilgili sistemlerle entegrasyon sağlanmalıdır.",
-          "requirements": [
-            { "id": "REQ-T01", "text": "Planlı ve plansız kesinti verilerini alacak servis entegrasyonu yapılmalıdır." }
-          ]
+          "title": "5.2. Performans Gereksinimleri",
+          "content": "[Sistemin yanıt süreleri, işlem kapasitesi gibi performans beklentileri.]",
+           "requirements": [
+                { "id": "NFR-PER-01", "text": "[Performans Gereksinimi 1]" }
+            ]
         },
         {
-          "title": "Kullanıcı Akışları",
-          "content": "Sistemin temel kullanıcı etkileşimlerini ve arayüz gereksinimlerini tanımlar.",
-          "requirements": [
-            { "id": "REQ-A01", "text": "Kullanıcılar, rıza ve bildirim ayarlarını yapabilecekleri bir arayüze sahip olmalıdır." }
-          ]
+          "title": "5.3. Raporlama Gereksinimleri",
+          "content": "[Sistemden alınması beklenen raporlar veya çıktı gereksinimleri.]",
+           "requirements": [
+                { "id": "NFR-RAP-01", "text": "[Raporlama Gereksinimi 1]" }
+            ]
         }
       ]
     },
     {
-      "title": "Fonksiyonel Olmayan Gereksinimler",
+      "title": "6. SÜREÇ RİSK ANALİZİ",
       "subSections": [
-        { "title": "Performans", "content": "- Bildirim gönderim süresi, kesinti başlangıcından itibaren en fazla 5 dakika olmalıdır." },
-        { "title": "Güvenlik", "content": "- Kullanıcı verileri KVKK standartlarına uygun olarak saklanmalı ve işlenmelidir." }
+        {
+          "title": "6.1. Kısıtlar ve Varsayımlar",
+          "content": "**Kısıtlar:**\n- [Kısıt 1]\n\n**Varsayımlar:**\n- [Varsayım 1]"
+        },
+        {
+          "title": "6.2. Bağlılıklar",
+          "content": "[Projenin başarısı için bağlı olunan diğer sistemler, ekipler veya projeler.\n- [Bağlılık 1]]"
+        },
+        {
+          "title": "6.3. Süreç Etkileri",
+          "content": "[Bu geliştirmenin mevcut iş süreçleri üzerindeki etkileri.\n- [Etki 1]]"
+        }
       ]
     },
     {
-      "title": "Varsayımlar ve Kısıtlar",
+      "title": "7. ONAY",
       "subSections": [
-        { "title": "Varsayımlar", "content": "[Proje ile ilgili varsayımları buraya yazın]" },
-        { "title": "Kısıtlar", "content": "[Proje ile ilgili kısıtları buraya yazın]" }
+        {
+          "title": "7.1. İş Analizi",
+          "content": "**Analiz Tamamlanma Tarihi:** [GG.AA.YYYY]\n**Hazırlayan:** [İsim Soyisim]\n\n**Kontrol Tarihi:** [GG.AA.YYYY]\n**Kontrol Eden:** [İsim Soyisim]"
+        },
+        {
+          "title": "7.2. Değişiklik Kayıtları",
+          "content": "[Değişiklik kayıtları tablo veya liste olarak buraya eklenecek.\n- **Tarih:** GG.AA.YYYY, **Hazırlayan:** İsim, **Sürüm:** v1.1, **Açıklama:** ...]"
+        },
+        {
+          "title": "7.3. Doküman Onay",
+          "content": "[Onaylayan bilgileri tablo veya liste olarak buraya eklenecek.\n- **Tarih:** GG.AA.YYYY, **Onaylayan:** İsim, **Görevi:** ...]"
+        },
+        {
+          "title": "7.4. Referans Dokümanlar",
+          "content": "[Referans dokümanlar listesi.\n- **Tür:** Talep Dokümanı, **Doküman:** [Link veya Doküman Adı]]"
+        }
       ]
+    },
+    {
+       "title": "8. FONKSİYONEL TASARIM DOKÜMANLARI",
+       "content": "[Varsa ilgili FSD dokümanlarının listesi.\n- [FSD-001 Linki]]"
     }
   ]
 }
