@@ -65,10 +65,11 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
     const [inlineModificationState, setInlineModificationState] = useState<{ docKey: 'analysisDoc' | 'testScenarios'; originalText: string } | null>(null);
     const generationController = useRef<AbortController | null>(null);
 
-    const activeModel = (): GeminiModel => {
+    // FIX: Wrap activeModel in useCallback to stabilize dependencies for other hooks.
+    const activeModel = useCallback((): GeminiModel => {
         if (uiState.isDeepAnalysisMode) return 'gemini-2.5-pro';
         return (localStorage.getItem('geminiModel') as GeminiModel) || 'gemini-2.5-flash';
-    };
+    }, [uiState.isDeepAnalysisMode]);
     
     const checkTokenLimit = useCallback(() => {
         if (conversationState.userProfile && conversationState.userProfile.plan === 'free' && conversationState.userProfile.tokens_used >= conversationState.userProfile.token_limit) {
@@ -77,6 +78,59 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         }
         return true;
     }, [conversationState.userProfile, uiState]);
+
+    // FIX: Moved handleGenerateDoc before its usage in handleFunctionCall and wrapped in useCallback.
+    const handleGenerateDoc = useCallback(async (type: 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => {
+        const activeConv = conversationState.activeConversation;
+        if (!activeConv || isProcessing) return;
+        if (!checkTokenLimit()) return;
+
+        setGeneratingDocType(type);
+        setIsProcessing(true);
+        
+        const diagramTypeToUse = newDiagramType || uiState.diagramType;
+        const templates = {
+            analysis: conversationState.allTemplates.find(t => t.id === (newTemplateId || conversationState.selectedTemplates.analysis))?.prompt || promptService.getPrompt('generateAnalysisDocument'),
+            test: conversationState.allTemplates.find(t => t.id === (newTemplateId || conversationState.selectedTemplates.test))?.prompt || promptService.getPrompt('generateTestScenarios'),
+            traceability: conversationState.allTemplates.find(t => t.id === (newTemplateId || conversationState.selectedTemplates.traceability))?.prompt || promptService.getPrompt('generateTraceabilityMatrix'),
+            visualization: promptService.getPrompt(diagramTypeToUse === 'bpmn' ? 'generateBPMN' : 'generateVisualization'),
+        };
+
+        const streamGenerators = {
+            analysis: () => geminiService.generateAnalysisDocument(activeConv.generatedDocs.requestDoc, activeConv.messages, templates.analysis, activeModel()),
+            test: () => geminiService.generateTestScenarios(activeConv.generatedDocs.analysisDoc, templates.test, activeModel()),
+            traceability: () => geminiService.generateTraceabilityMatrix(activeConv.generatedDocs.analysisDoc, (activeConv.generatedDocs.testScenarios as SourcedDocument)?.content || activeConv.generatedDocs.testScenarios as string, templates.traceability, activeModel()),
+        };
+
+        try {
+            if (type === 'viz') {
+                const { code, tokens } = await geminiService.generateDiagram(activeConv.generatedDocs.analysisDoc, diagramTypeToUse, templates.visualization, activeModel());
+                conversationState.commitTokenUsage(tokens);
+                const sourceHash = simpleHash(activeConv.generatedDocs.analysisDoc);
+                const vizData = { code, sourceHash };
+                const docKey = diagramTypeToUse === 'bpmn' ? 'bpmnViz' : 'mermaidViz';
+                await conversationState.saveDocumentVersion(docKey, vizData, `Diyagram oluşturuldu (${diagramTypeToUse})`);
+            } else if (type === 'analysis' || type === 'test' || type === 'traceability') {
+                const stream = streamGenerators[type]();
+                for await (const chunk of stream) {
+                     if (chunk.type === 'doc_stream_chunk') {
+                        conversationState.streamDocument(chunk.docKey, chunk.chunk);
+                    } else if (chunk.type === 'usage_update') {
+                        conversationState.commitTokenUsage(chunk.tokens);
+                    }
+                }
+                await conversationState.finalizeStreamedDocuments(newTemplateId);
+            }
+        } catch(e: any) {
+            uiState.setError(e.message);
+        } finally {
+            setIsProcessing(false);
+            setGeneratingDocType(null);
+            if (newTemplateId) {
+                conversationState.setSelectedTemplates(prev => ({ ...prev, [type]: newTemplateId }));
+            }
+        }
+    }, [conversationState, isProcessing, checkTokenLimit, uiState, activeModel]);
     
     const handleNewConversation = useCallback(async (documentContentOrEvent?: string | React.MouseEvent, title?: string) => {
         // FIX: The NewAnalysisModal is not being used, so this state setter is not available and not needed.
@@ -176,8 +230,25 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
             }
         }
         
+        if (name === 'generateAnalysisDocument') {
+            handleGenerateDoc('analysis');
+            return "Elbette, iş analizi dokümanını oluşturmaya başlıyorum. Lütfen çalışma alanını kontrol edin.";
+        }
+        if (name === 'generateTestScenarios') {
+            handleGenerateDoc('test');
+            return "Test senaryolarını hazırlıyorum. Lütfen çalışma alanını kontrol edin.";
+        }
+        if (name === 'generateVisualization') {
+            handleGenerateDoc('viz');
+            return "Süreç akışını görselleştiriyorum. Lütfen çalışma alanını kontrol edin.";
+        }
+        if (name === 'generateTraceabilityMatrix') {
+            handleGenerateDoc('traceability');
+            return "İzlenebilirlik matrisini oluşturuyorum. Lütfen çalışma alanını kontrol edin.";
+        }
+        
         return null;
-    }, [conversationState.updateMessage, conversationState.commitTokenUsage, conversationState.saveDocumentVersion]);
+    }, [conversationState.updateMessage, conversationState.commitTokenUsage, conversationState.saveDocumentVersion, handleGenerateDoc]);
     
     const sendMessage = useCallback(async (text: string, isRetry = false) => {
         if (!checkTokenLimit()) return;
@@ -351,59 +422,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         }
     };
 
-    const handleGenerateDoc = async (type: 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => {
-        const activeConv = conversationState.activeConversation;
-        if (!activeConv || isProcessing) return;
-        if (!checkTokenLimit()) return;
-
-        setGeneratingDocType(type);
-        setIsProcessing(true);
-        
-        const diagramTypeToUse = newDiagramType || uiState.diagramType;
-        const templates = {
-            analysis: conversationState.allTemplates.find(t => t.id === (newTemplateId || conversationState.selectedTemplates.analysis))?.prompt || promptService.getPrompt('generateAnalysisDocument'),
-            test: conversationState.allTemplates.find(t => t.id === (newTemplateId || conversationState.selectedTemplates.test))?.prompt || promptService.getPrompt('generateTestScenarios'),
-            traceability: conversationState.allTemplates.find(t => t.id === (newTemplateId || conversationState.selectedTemplates.traceability))?.prompt || promptService.getPrompt('generateTraceabilityMatrix'),
-            visualization: promptService.getPrompt(diagramTypeToUse === 'bpmn' ? 'generateBPMN' : 'generateVisualization'),
-        };
-
-        const streamGenerators = {
-            analysis: () => geminiService.generateAnalysisDocument(activeConv.generatedDocs.requestDoc, activeConv.messages, templates.analysis, activeModel()),
-            test: () => geminiService.generateTestScenarios(activeConv.generatedDocs.analysisDoc, templates.test, activeModel()),
-            traceability: () => geminiService.generateTraceabilityMatrix(activeConv.generatedDocs.analysisDoc, (activeConv.generatedDocs.testScenarios as SourcedDocument)?.content || activeConv.generatedDocs.testScenarios as string, templates.traceability, activeModel()),
-        };
-
-        try {
-            if (type === 'viz') {
-                const { code, tokens } = await geminiService.generateDiagram(activeConv.generatedDocs.analysisDoc, diagramTypeToUse, templates.visualization, activeModel());
-                conversationState.commitTokenUsage(tokens);
-                const sourceHash = simpleHash(activeConv.generatedDocs.analysisDoc);
-                const vizData = { code, sourceHash };
-                const docKey = diagramTypeToUse === 'bpmn' ? 'bpmnViz' : 'mermaidViz';
-                await conversationState.saveDocumentVersion(docKey, vizData, `Diyagram oluşturuldu (${diagramTypeToUse})`);
-            } else if (type === 'analysis' || type === 'test' || type === 'traceability') {
-                const stream = streamGenerators[type]();
-                for await (const chunk of stream) {
-                     if (chunk.type === 'doc_stream_chunk') {
-                        conversationState.streamDocument(chunk.docKey, chunk.chunk);
-                    } else if (chunk.type === 'usage_update') {
-                        conversationState.commitTokenUsage(chunk.tokens);
-                    }
-                }
-                await conversationState.finalizeStreamedDocuments(newTemplateId);
-            }
-        } catch(e: any) {
-            uiState.setError(e.message);
-        } finally {
-            setIsProcessing(false);
-            setGeneratingDocType(null);
-            if (newTemplateId) {
-                conversationState.setSelectedTemplates(prev => ({ ...prev, [type]: newTemplateId }));
-            }
-        }
-    };
-    
-    const handleTemplateChange = (docType: 'analysis' | 'test' | 'traceability') => (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const handleTemplateChange = useCallback((docType: 'analysis' | 'test' | 'traceability') => (event: React.ChangeEvent<HTMLSelectElement>) => {
         const newTemplateId = event.target.value;
         const activeConv = conversationState.activeConversation;
         if (!activeConv) return;
@@ -421,7 +440,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
             conversationState.setSelectedTemplates(prev => ({ ...prev, [docType]: newTemplateId }));
             handleGenerateDoc(docType, newTemplateId);
         }
-    };
+    }, [conversationState, uiState, handleGenerateDoc]);
 
     const handleConfirmRegenerate = (saveCurrent: boolean) => {
         const { docType, newTemplateId } = uiState.regenerateModalData.current!;

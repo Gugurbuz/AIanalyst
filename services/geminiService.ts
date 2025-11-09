@@ -751,86 +751,37 @@ export const geminiService = {
     },
 
     generateAnalysisDocument: async function* (requestDoc: string, history: Message[], template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
-        let totalTokens = 0;
-    
-        // 1. Generate a plan
-        const planPrompt = `Bir iş analizi dokümanı oluşturmak için gereken adımları listele. Adımlar şunları içermeli: Proje Özeti, Kapsam, Gereksinimler vb. Her adıma benzersiz bir ID ver.`;
+        const historyString = history.map(m => `${m.role}: ${m.content}`).join('\n');
         
-        const planSchema = {
-            type: Type.ARRAY,
-            items: {
-                type: Type.OBJECT,
-                properties: {
-                    id: { type: Type.STRING },
-                    name: { type: Type.STRING }
-                },
-                required: ['id', 'name']
-            }
-        };
-        
-        const generationConfig = { responseMimeType: "application/json", responseSchema: planSchema };
-        
-        const { text: planJson, tokens: planTokens } = await generateContent(planPrompt, 'gemini-2.5-flash-lite', generationConfig);
-        totalTokens += planTokens;
-        yield { type: 'usage_update', tokens: planTokens };
-    
-        let planSteps: ExpertStep[];
-        try {
-            planSteps = JSON.parse(planJson).map((step: any) => ({ ...step, status: 'pending' }));
-        } catch (e) {
-            console.error("Failed to parse the plan from Gemini, even in JSON mode:", planJson, e);
-            throw new Error("Doküman oluşturma planı yapılandırılamadı.");
-        }
-        
-        yield { type: 'expert_run_update', checklist: [...planSteps], isComplete: false };
-    
-        // 2. Execute the plan
-        const fullDoc: StructuredAnalysisDoc = { sections: [] };
-    
-        for (let i = 0; i < planSteps.length; i++) {
-            planSteps[i].status = 'in_progress';
-            yield { type: 'expert_run_update', checklist: [...planSteps], isComplete: false };
-    
-            const sectionPrompt = `Bir uzman iş analisti olarak, sana verilen Talep Dokümanı ve Konuşma Geçmişi'ni kullanarak, iş analizi dokümanının SADECE "${planSteps[i].name}" bölümünü JSON formatında oluştur. Çıktın, analysisSchema'daki bir 'section' nesnesi ile uyumlu olmalıdır. Sadece tek bir bölüm nesnesi döndür.
-    
-            **Talep Dokümanı:**
-            ---
-            ${requestDoc}
-            ---
-            **Konuşma Geçmişi:**
-            ---
-            ${JSON.stringify(history, null, 2)}
-            ---`;
-    
-            const sectionSchema = analysisSchema.properties.sections.items;
+        const prompt = template
+            .replace('{request_document_content}', requestDoc || "[Talep Dokümanı Yok]")
+            .replace('{conversation_history}', historyString);
 
-            const { text: sectionJson, tokens: sectionTokens } = await generateContent(sectionPrompt, model, {
-                responseMimeType: "application/json",
-                responseSchema: sectionSchema,
-            });
-            totalTokens += sectionTokens;
-            yield { type: 'usage_update', tokens: sectionTokens };
-    
-            try {
-                const section = JSON.parse(sectionJson);
-                fullDoc.sections.push(section);
-            } catch (e) {
-                console.error(`Error parsing section "${planSteps[i].name}":`, e);
-                fullDoc.sections.push({ title: planSteps[i].name, content: "[Bu bölüm oluşturulurken bir hata oluştu.]" });
+        // Katı JSON zorunluluğunu kaldırarak modelin daha esnek yanıt vermesini sağlıyoruz.
+        // Bu, modelin zorlandığı durumlarda boş yanıt göndermesini engeller.
+        const stream = generateContentStream(prompt, model);
+
+        let totalTokens = 0;
+        let fullText = '';
+        for await (const chunk of stream) {
+            if (chunk.usageMetadata) {
+                totalTokens = chunk.usageMetadata.totalTokenCount;
             }
-    
-            planSteps[i].status = 'completed';
-            yield { type: 'expert_run_update', checklist: [...planSteps], isComplete: false };
-            yield { type: 'doc_stream_chunk', docKey: 'analysisDoc', chunk: JSON.stringify(fullDoc, null, 2) };
+            const text = chunk.text;
+            if (text) {
+                fullText += text;
+                // UI'ın canlı güncellenmesi için chunk'ı yolla
+                yield { type: 'doc_stream_chunk', docKey: 'analysisDoc', chunk: fullText };
+            }
         }
-    
-        // 3. Yield the final document
-        yield { type: 'doc_stream_chunk', docKey: 'analysisDoc', chunk: JSON.stringify(fullDoc, null, 2) };
+        
+        if (totalTokens > 0) yield { type: 'usage_update', tokens: totalTokens };
     },
 
     generateTestScenarios: async function* (analysisDoc: string, template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
         const prompt = template.replace('{analysis_document_content}', analysisDoc);
-        const stream = generateContentStream(prompt, model, { responseMimeType: "application/json" });
+        // Katı JSON zorunluluğunu kaldırarak esnekliği artırıyoruz.
+        const stream = generateContentStream(prompt, model);
         let totalTokens = 0;
         let fullText = '';
         for await (const chunk of stream) {
@@ -850,7 +801,8 @@ export const geminiService = {
         const prompt = template
             .replace('{analysis_document_content}', analysisDoc)
             .replace('{test_scenarios_content}', testScenarios);
-        const stream = generateContentStream(prompt, model, { responseMimeType: "application/json" });
+        // Katı JSON zorunluluğunu kaldırarak esnekliği artırıyoruz.
+        const stream = generateContentStream(prompt, model);
         let totalTokens = 0;
         let fullText = '';
         for await (const chunk of stream) {
