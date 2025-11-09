@@ -15,6 +15,7 @@ import { LongTextModal } from '../components/LongTextModal';
 import { ResetConfirmationModal } from '../components/ResetConfirmationModal';
 import { AlertTriangle, FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, X, PanelLeftClose, PanelLeftOpen, PanelRightOpen, PanelRightClose } from 'lucide-react';
 import { MainSidebar } from './MainSidebar';
+import { Sidebar } from '../components/Sidebar';
 
 const AnalystWorkspace = () => {
     const context = useAppContext();
@@ -184,8 +185,26 @@ export const MainAppLayout: React.FC = () => {
                     onLogout={context.onLogout}
                     onOpenShareModal={() => context.setIsShareModalOpen(true)}
                 />
-                <div className="flex-1 h-full">
-                    <AnalystWorkspace />
+                <div className="flex-1 flex flex-col min-h-0">
+                    <div className="flex-1 flex flex-row min-h-0">
+                            <div className="relative hidden md:flex h-full">
+                            <div className={`transition-all duration-300 ease-in-out ${context.isConversationListOpen ? 'w-80' : 'w-0'} h-full overflow-hidden`}>
+                                <Sidebar
+                                    conversations={context.conversations}
+                                    activeConversationId={context.activeConversationId}
+                                    onSelectConversation={context.setActiveConversationId}
+                                    onNewConversation={context.handleNewConversation}
+                                    onUpdateConversationTitle={context.updateConversationTitle}
+                                    onDeleteConversation={context.deleteConversation}
+                                    isOpen={context.isConversationListOpen}
+                                    setIsOpen={context.setIsConversationListOpen}
+                                />
+                            </div>
+                        </div>
+                        <div className="flex-1 h-full">
+                            <AnalystWorkspace />
+                        </div>
+                    </div>
                 </div>
             </div>
 

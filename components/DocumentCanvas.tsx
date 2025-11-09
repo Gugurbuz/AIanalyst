@@ -5,12 +5,11 @@ import { StreamingIndicator } from './StreamingIndicator';
 import { TemplateSelector } from './TemplateSelector';
 import { ExportDropdown } from './ExportDropdown';
 import { Template, DocumentVersion, LintingIssue, StructuredAnalysisDoc, isStructuredAnalysisDoc, IsBirimiTalep, isIsBirimiTalep } from '../types';
-import { Sparkles, LoaderCircle, Edit, Eye, Wrench, X, History } from 'lucide-react';
+import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, Edit, Eye, Wrench, X, History } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 import { VersionHistoryModal } from './VersionHistoryModal';
 import { AnalysisDocumentViewer } from './AnalysisDocumentViewer';
 import { RequestDocumentViewer } from './RequestDocumentViewer';
-import { RichTextEditor } from './RichTextEditor';
 
 interface DocumentCanvasProps {
     content: string;
@@ -267,12 +266,8 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         isGenerationDisabled, generationDisabledTooltip, documentVersions, onAddTokens,
         onRestoreVersion
     } = props;
-    
-    // `localContent` is for UI state, especially for controlled components like RichTextEditor.
-    const [localContent, setLocalContent] = useState(content || '');
-    // `contentRef` holds the latest version of the content synchronously to avoid race conditions on save.
-    const contentRef = useRef(content || '');
-    
+
+    const [localContent, setLocalContent] = useState('');
     const [isEditing, setIsEditing] = useState(false);
     const [selection, setSelection] = useState<{ start: number, end: number, text: string } | null>(null);
     const [isAiModalOpen, setIsAiModalOpen] = useState(false);
@@ -286,8 +281,9 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const [parsedRequestDoc, setParsedRequestDoc] = useState<IsBirimiTalep | null>(null);
     const isStructured = !!docObject;
     
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
     const editorRef = useRef<HTMLDivElement>(null);
-    const contentOnEditStartRef = useRef<string>('');
+    const originalContentRef = useRef<string>('');
     
     const documentTypeMap: Record<string, DocumentVersion['document_type']> = {
         analysisDoc: 'analysis',
@@ -305,12 +301,10 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     };
     const documentName = docNameMap[docKey] || 'Doküman';
 
-    // Sync local state and ref when the parent content (the stream) changes.
+    // Update local content whenever the parent content (the stream) changes.
     useEffect(() => {
         setLocalContent(content || '');
-        contentRef.current = content || '';
     }, [content]);
-
     
     // Parse final JSON only when streaming stops for different doc types.
     useEffect(() => {
@@ -345,11 +339,156 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         setLintIssues([]);
     }, [content]);
 
-    // A stable function to update both state and ref.
-    const updateLocalContent = useCallback((newContent: string) => {
-        setLocalContent(newContent);
-        contentRef.current = newContent;
-    }, []);
+    const handleToggleEditing = async () => {
+        if (docKey !== 'analysisDoc' && docKey !== 'requestDoc') return;
+    
+        if (isEditing) { // === FINISHING EDIT ===
+            const originalContent = originalContentRef.current;
+            const finalContentToSave = localContent;
+    
+            // Special handling for structured analysisDoc (from contentEditable)
+            if (isStructured && editorRef.current && docObject) {
+                const htmlContent = editorRef.current.innerHTML;
+                const originalHtml = structuredDocToHtml(docObject);
+                if (htmlContent === originalHtml) {
+                    setIsEditing(false);
+                    return;
+                };
+                
+                setIsSummarizing(true);
+                try {
+                    const { json: newDocObject, tokens } = await geminiService.convertHtmlToAnalysisJson(htmlContent);
+                    onAddTokens(tokens);
+                    const newContentString = JSON.stringify(newDocObject, null, 2);
+                    const oldMarkdown = structuredDocToMarkdown(docObject);
+                    const newMarkdown = structuredDocToMarkdown(newDocObject);
+                    const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(oldMarkdown, newMarkdown);
+                    onAddTokens(summaryTokens);
+                    onContentChange(newContentString, summary);
+                } catch (error) {
+                    console.error("Failed to convert HTML to JSON on save:", error);
+                } finally {
+                    setIsSummarizing(false);
+                    setIsEditing(false);
+                }
+                return;
+            }
+    
+            // For both requestDoc (from WYSIWYG editor) and plain markdown (from textarea)
+            setIsEditing(false); 
+            
+            // For requestDoc, check for semantic changes before summarizing.
+            if (docKey === 'requestDoc') {
+                try {
+                    const originalObj = JSON.parse(originalContent);
+                    const finalObj = JSON.parse(finalContentToSave);
+                    if (JSON.stringify(originalObj) === JSON.stringify(finalObj)) {
+                        return; // No actual change, just formatting.
+                    }
+                } catch (e) {
+                    // Fallback to string comparison if parsing fails
+                    if (finalContentToSave === originalContent) return;
+                }
+            } else if (finalContentToSave === originalContent) {
+                return; // No change for plain markdown
+            }
+
+            setIsSummarizing(true);
+            try {
+                const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(originalContent, finalContentToSave);
+                onAddTokens(summaryTokens);
+                onContentChange(finalContentToSave, summary);
+                
+                if (docKey === 'analysisDoc' && !isStructured) {
+                    const { issues, tokens: lintTokens } = await geminiService.lintDocument(finalContentToSave);
+                    onAddTokens(lintTokens);
+                    setLintIssues(issues);
+                }
+            } catch (error) {
+                console.error("Failed to summarize or lint changes:", error);
+                onContentChange(finalContentToSave, "Manuel Düzenleme");
+            } finally {
+                setIsSummarizing(false);
+            }
+    
+        } else { // === STARTING EDIT ===
+            originalContentRef.current = localContent;
+            setLintIssues([]);
+            setIsEditing(true);
+        }
+    };
+    
+    const handleSelection = useCallback(() => {
+        if (isEditing && !isTable) {
+            const textarea = textareaRef.current;
+            if (!textarea || document.activeElement !== textarea) return;
+            const { selectionStart, selectionEnd } = textarea;
+            const selectedText = textarea.value.substring(selectionStart, selectionEnd);
+            if (selectedText.trim().length > 5) {
+                setSelection({ start: selectionStart, end: selectionEnd, text: selectedText });
+            } else {
+                setSelection(null);
+            }
+        } else {
+            const currentSelection = window.getSelection();
+            if (currentSelection && currentSelection.toString().trim().length > 5) {
+                setSelection({ start: 0, end: 0, text: currentSelection.toString() });
+            } else {
+                setSelection(null);
+            }
+        }
+    }, [isEditing, isTable]);
+
+    const applyMarkdown = (prefix: string, suffix: string = '', isBlock: boolean = false) => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+
+        const { selectionStart, selectionEnd } = textarea;
+        const originalText = localContent;
+
+        let newText;
+        if (isBlock) {
+            const lineStart = originalText.lastIndexOf('\n', selectionStart - 1) + 1;
+            const line = originalText.substring(lineStart, selectionEnd);
+            const cleanedLine = line.replace(/^(#+\s|\d+\.\s|-\s|\*\s)/, '');
+            const newBlock = `${prefix}${cleanedLine}`;
+            newText = originalText.substring(0, lineStart) + newBlock + originalText.substring(selectionEnd);
+            setTimeout(() => textarea.setSelectionRange(lineStart, lineStart + newBlock.length), 0);
+        } else {
+            const selectedText = originalText.substring(selectionStart, selectionEnd);
+            newText = `${originalText.substring(0, selectionStart)}${prefix}${selectedText}${suffix}${originalText.substring(selectionEnd)}`;
+            setTimeout(() => textarea.setSelectionRange(selectionStart + prefix.length, selectionEnd + prefix.length), 0);
+        }
+        
+        setLocalContent(newText);
+        textarea.focus();
+    };
+    
+    const handleAiModify = async (userPrompt: string) => {
+        if (!selection) return;
+        await onModifySelection(selection.text, userPrompt, docKey as 'analysisDoc' | 'testScenarios');
+        setIsAiModalOpen(false);
+        setSelection(null);
+    };
+    
+    const handleFixIssue = async (issue: LintingIssue) => {
+        setIsFixing(true);
+        try {
+            // FIX: Correctly call the 'fixDocumentLinterIssues' method which now exists on geminiService.
+            const { fixedContent, tokens } = await geminiService.fixDocumentLinterIssues(content, issue);
+            onAddTokens(tokens);
+            onContentChange(fixedContent, `AI Tarafından Numaralandırma Düzeltildi: ${issue.section}`);
+            setLintIssues([]); // Clear issues after fixing
+        } catch (error) {
+            console.error("Failed to fix linting issue:", error);
+        } finally {
+            setIsFixing(false);
+        }
+    };
+    
+    const filteredHistory = useMemo(() => {
+        return (documentVersions || []).filter(v => v.document_type === currentDocType);
+    }, [documentVersions, currentDocType]);
 
     const displayContent = useMemo(() => {
         if (isTable && !isStreaming) {
@@ -373,6 +512,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                 return structuredDocToMarkdown(parsed);
             }
         } catch (e) {
+            // Heuristic to clean up streaming JSON for better readability
             const knownKeys = /"sections"|"subSections"|"requirements"|"title"|"content"|"id"|"text"|"kapsam"|"inScope"|"outOfScope"/g;
             return localContent
                 .replace(knownKeys, '')
@@ -386,95 +526,19 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         return localContent;
 
     }, [isStreaming, isTable, localContent, isStructured, docObject, docKey, parsedRequestDoc]);
-
-    const handleToggleEditing = async () => {
-        if (docKey !== 'analysisDoc' && docKey !== 'requestDoc') return;
     
-        if (isEditing) { // === FINISHING EDIT ===
-            setIsEditing(false); 
-            
-            const originalContent = contentOnEditStartRef.current;
-            const finalContentToSave = contentRef.current; // Read from ref to get the latest value
-    
-            if (finalContentToSave === originalContent) {
-                return; // No change, no need to save
-            }
-
-            setIsSummarizing(true);
-            try {
-                const { summary, tokens: summaryTokens } = await geminiService.summarizeDocumentChange(originalContent, finalContentToSave);
-                onAddTokens(summaryTokens);
-                onContentChange(finalContentToSave, summary);
-                
-                if (docKey === 'analysisDoc') {
-                     try {
-                        const parsed = JSON.parse(finalContentToSave);
-                        // don't lint if it's a structured doc
-                    } catch(e) {
-                        const { issues, tokens: lintTokens } = await geminiService.lintDocument(finalContentToSave);
-                        onAddTokens(lintTokens);
-                        setLintIssues(issues);
-                    }
-                }
-            } catch (error) {
-                console.error("Failed to summarize or lint changes:", error);
-                onContentChange(finalContentToSave, "Manuel Düzenleme");
-            } finally {
-                setIsSummarizing(false);
-            }
-    
-        } else { // === STARTING EDIT ===
-            contentOnEditStartRef.current = displayContent;
-            setLintIssues([]);
-            setIsEditing(true);
-        }
-    };
-    
-    const handleSelection = useCallback(() => {
-        const currentSelection = window.getSelection();
-        if (currentSelection && currentSelection.toString().trim().length > 5) {
-            setSelection({ start: 0, end: 0, text: currentSelection.toString() });
-        } else {
-            setSelection(null);
-        }
-    }, []);
-    
-    const handleAiModify = async (userPrompt: string) => {
-        if (!selection) return;
-        await onModifySelection(selection.text, userPrompt, docKey as 'analysisDoc' | 'testScenarios');
-        setIsAiModalOpen(false);
-        setSelection(null);
-    };
-    
-    const handleFixIssue = async (issue: LintingIssue) => {
-        setIsFixing(true);
-        try {
-            const { fixedContent, tokens } = await geminiService.fixDocumentLinterIssues(content, issue);
-            onAddTokens(tokens);
-            onContentChange(fixedContent, `AI Tarafından Numaralandırma Düzeltildi: ${issue.section}`);
-            setLintIssues([]); // Clear issues after fixing
-        } catch (error) {
-            console.error("Failed to fix linting issue:", error);
-        } finally {
-            setIsFixing(false);
-        }
-    };
-    
-    const filteredHistory = useMemo(() => {
-        return (documentVersions || []).filter(v => v.document_type === currentDocType);
-    }, [documentVersions, currentDocType]);
-
     const handleRequestDocChange = useCallback((updatedDoc: IsBirimiTalep) => {
         setParsedRequestDoc(updatedDoc);
         try {
             const newContentString = JSON.stringify(updatedDoc, null, 2);
-            updateLocalContent(newContentString);
+            setLocalContent(newContentString);
         } catch (e) {
             console.error("Error stringifying updated request doc:", e);
         }
-    }, [updateLocalContent]);
+    }, []);
 
     
+    // View for documents that can be generated from within the canvas (e.g., Traceability Matrix)
     if (!content && !isStreaming && onGenerate) {
         return (
             <div className="p-6 text-center text-slate-500 dark:text-slate-400 h-full flex flex-col justify-center items-center">
@@ -491,6 +555,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         );
     }
     
+    // View for documents that are generated externally (e.g., Analysis Doc, Test Scenarios)
     if (!content && !isStreaming && !onGenerate) {
         return (
             <div className="p-6 text-center text-slate-500 dark:text-slate-400 h-full flex flex-col justify-center items-center">
@@ -513,6 +578,22 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
             />
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-2 md:p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2 flex-wrap">
+                    {(!isTable && isEditing && !isStructured && !parsedRequestDoc) && (
+                        <>
+                            <select onChange={(e) => applyMarkdown(e.target.value, '', true)} className="px-2 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-700">
+                                <option value="">Başlık...</option>
+                                <option value="## ">Başlık 1</option>
+                                <option value="### ">Başlık 2</option>
+                            </select>
+                             <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
+                             <button onClick={() => applyMarkdown('**', '**')} title="Kalın" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"><Bold className="h-4 w-4" /></button>
+                             <button onClick={() => applyMarkdown('*', '*')} title="İtalik" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"><Italic className="h-4 w-4" /></button>
+                             <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
+                             <button onClick={() => applyMarkdown('- ', '', true)} title="Madde İşaretli Liste" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"><List className="h-4 w-4" /></button>
+                             <button onClick={() => applyMarkdown('1. ', '', true)} title="Numaralı Liste" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"><ListOrdered className="h-4 w-4" /></button>
+                             <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
+                        </>
+                    )}
                      <button onClick={() => setIsAiModalOpen(true)} disabled={!selection || (docKey !== 'analysisDoc' && docKey !== 'testScenarios')} title="AI ile düzenle" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1 text-indigo-600 dark:text-indigo-400 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed">
                         <Sparkles className="h-4 w-4" /> <span className="text-sm font-semibold">Oluştur</span>
                     </button>
@@ -565,14 +646,22 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                         isEditing={isEditing}
                         onChange={handleRequestDocChange}
                     />
+                ) : (isEditing && isStructured && docObject) ? (
+                    <div
+                        ref={editorRef}
+                        contentEditable
+                        suppressContentEditableWarning
+                        dangerouslySetInnerHTML={{ __html: structuredDocToHtml(docObject) }}
+                        className="prose prose-slate dark:prose-invert max-w-none w-full h-full p-6 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 overflow-y-auto"
+                    />
                 ) : (isEditing && !isTable) ? (
-                    <div className="h-full w-full p-2 bg-white dark:bg-slate-900">
-                        <RichTextEditor
-                            value={displayContent}
-                            onChange={updateLocalContent}
-                            placeholder={placeholder}
-                        />
-                    </div>
+                    <textarea
+                        ref={textareaRef}
+                        value={localContent}
+                        onChange={(e) => setLocalContent(e.target.value)}
+                        className="w-full h-full p-6 bg-white dark:bg-slate-900 border-none focus:outline-none resize-none font-mono text-sm leading-relaxed"
+                        placeholder={placeholder}
+                    />
                 ) : ((isStructured && docObject && !isTable) ? (
                         <AnalysisDocumentViewer doc={docObject} />
                     ) : (

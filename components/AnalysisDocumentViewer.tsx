@@ -22,7 +22,7 @@ export const AnalysisDocumentViewer: React.FC<AnalysisDocumentViewerProps> = ({ 
                                 <ul className="list-none !p-0">
                                     {subSection.requirements.map((req, reqIndex) => (
                                         <li key={reqIndex} className="!p-0 mb-6">
-                                            <div className="!mb-2"><strong>{req.id}:</strong></div>
+                                            <p className="!mb-2"><strong>{req.id}:</strong></p>
                                             <div className="pl-4 border-l-2 border-slate-200 dark:border-slate-700">
                                                 <MarkdownRenderer content={req.text} />
                                             </div>

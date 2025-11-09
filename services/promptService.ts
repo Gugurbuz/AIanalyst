@@ -119,7 +119,8 @@ Kullanıcıyla yaptığımız konuşma ve oluşturduğumuz dokümanlar aşağıd
 **GÖREVİN:**
 1.  Kullanıcının niyetini anla (selamlama mı, yoksa doğrudan bir talep mi?).
 2.  Eğer selamlama ise, onu karşıla ve ne üzerinde çalışmak istediğini sor.
-3.  Eğer talep ise, talebi anladığını belirt ve netleştirici sorular sor.
+3.  Eğer talep yeterince detaylı ise, talebi 'saveRequestDocument' aracını kullanarak doğrudan kaydet ve kullanıcıya kaydettiğini bildir.
+4.  Eğer talepte eksik bilgi varsa, talebi anladığını belirt ve netleştirici sorular sor.
 
 **YANIT FORMATI (KESİNLİKLE UYULMALIDIR):**
 Her yanıtın iki ayrı bölümü OLMALIDIR:
@@ -162,7 +163,7 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
             versionId: 'default',
             name: 'Varsayılan',
             createdAt: new Date().toISOString(),
-            prompt: `Bir uzman iş analisti olarak, sana verilen **Talep Dokümanı** ve **Konuşma Geçmişi**'ni kullanarak, aşağıdaki JSON ŞABLONUNU doldurarak tam bir iş analizi dokümanı oluştur. Şablonun yapısını veya başlıklarını DEĞİŞTİRME. Sadece içeriği doldur. Eğer bir bölüm için bilgi yoksa, o bölümün 'content' alanına "[Belirlenecek]" yaz. Tüm gereksinim ID'lerini "FR-" ön ekiyle başlat (örn: "FR-001"). Sadece ve sadece bu doldurulmuş JSON nesnesini bir string olarak döndür. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
+            prompt: `Bir uzman iş analisti olarak, sana verilen **Talep Dokümanı** ve **Konuşma Geçmişi**'ni kullanarak, aşağıdaki JSON ŞABLONUNU doldurarak bir iş analizi dokümanı oluştur. Şablonun yapısını veya başlıklarını DEĞİŞTİRME. Sadece içeriği doldur. Eğer bir bölüm için bilgi yoksa, o bölümün 'content' alanına "[Belirlenecek]" yaz. Tüm gereksinim ID'lerini "REQ-" ön ekiyle başlat (örn: "REQ-R01"). Sadece ve sadece bu doldurulmuş JSON nesnesini bir string olarak döndür. Başka hiçbir metin, açıklama veya kod bloğu (\`\`\`) ekleme.
 
 **Talep Dokümanı:**
 ---
@@ -179,79 +180,97 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
 {
   "sections": [
     {
-      "title": "1. ANALİZ KAPSAMI",
-      "content": "[Projenin kapsamını, hedeflerini ve sınırlarını detaylıca buraya yazın]"
+      "title": "Proje Özeti",
+      "content": "[Proje özetini buraya yazın]"
     },
     {
-      "title": "2. KISALTMALAR",
-      "content": "[Dokümanda kullanılan kısaltmalar ve tanımlarını bir liste olarak buraya yazın, örn: FR - Fonksiyonel Gereksinim]"
+      "title": "Talep Sahibi",
+      "content": "[Talep sahibini buraya yazın]"
     },
     {
-      "title": "3. İŞ GEREKSİNİMLERİ",
+      "title": "İş Problemi ve Hedefler",
       "subSections": [
         {
-          "title": "3.1. İş Kuralları",
-          "content": "[Sistemin uyması gereken temel iş kurallarını maddeler halinde buraya yazın]"
+          "title": "İş Problemi",
+          "content": "[İş problemini detaylıca buraya yazın]"
         },
         {
-          "title": "3.2. İş Modeli ve Kullanıcı Gereksinimleri",
-          "content": "[İş sürecinin nasıl işlediğini, kullanıcıların sistemden beklentilerini ve ihtiyaçlarını buraya yazın]"
+          "title": "Proje Hedefi",
+          "content": "[Proje hedefini detaylıca buraya yazın]"
         }
       ]
     },
     {
-      "title": "4. FONKSİYONEL GEREKSİNİMLER (FR)",
-      "content": "Bu bölümde, sistemin gerçekleştirmesi gereken işlevler ve kullanıcı etkileşimleri detaylandırılmıştır.",
-      "requirements": [
-        { "id": "FR-001", "text": "[Fonksiyonel gereksinim metnini buraya yazın]" }
-      ]
-    },
-    {
-      "title": "5. FONKSİYONEL OLMAYAN GEREKSİNİMLER (NFR)",
+      "title": "Kapsam",
       "subSections": [
         {
-          "title": "5.1. Güvenlik ve Yetkilendirme Gereksinimleri",
-          "content": "[Güvenlik ve yetkilendirme ile ilgili gereksinimleri maddeler halinde buraya yazın]"
+          "title": "Kapsam İçi",
+          "content": "[Kapsam içi maddeleri Markdown listesi olarak buraya yazın]"
         },
         {
-          "title": "5.2. Performans Gereksinimleri",
-          "content": "[Sistemin performans beklentilerini (hız, yanıt süresi vb.) maddeler halinde buraya yazın]"
-        },
-        {
-          "title": "5.3. Raporlama Gereksinimleri",
-          "content": "[Gerekliyse, raporlama ile ilgili gereksinimleri maddeler halinde buraya yazın]"
+          "title": "Kapsam Dışı",
+          "content": "[Kapsam dışı maddeleri Markdown listesi olarak buraya yazın]"
         }
       ]
     },
     {
-      "title": "6. SÜREÇ RİSK ANALİZİ",
-      "subSections": [
+      "title": "Başarı Ölçütleri (Hipotez)",
+       "subSections": [
         {
-          "title": "6.1. Kısıtlar ve Varsayımlar",
-          "content": "[Projenin kısıtlarını ve varsayımlarını maddeler halinde buraya yazın]"
-        },
-        {
-          "title": "6.2. Bağlılıklar",
-          "content": "[Projenin diğer sistemlere veya süreçlere olan bağlılıklarını maddeler halinde buraya yazın]"
-        },
-        {
-          "title": "6.3. Süreç Etkileri",
-          "content": "[Bu projenin mevcut iş süreçleri üzerindeki olası etkilerini buraya yazın]"
+          "title": "Ölçütler",
+          "content": "[BC-001, BC-002 gibi başarı ölçütlerini Markdown listesi olarak buraya yazın]"
         }
       ]
     },
     {
-      "title": "7. ONAY",
+      "title": "Mevcut Durum Analizi",
       "subSections": [
-        { "title": "7.1. İş Analizi", "content": "[İlgili paydaşların onayları için ayrılmıştır.]" },
-        { "title": "7.2. Değişiklik Kayıtları", "content": "[Dokümandaki revizyon geçmişi burada tutulacaktır.]" },
-        { "title": "7.3. Doküman Onay", "content": "[Dokümanın resmi onay durumu burada belirtilecektir.]" },
-        { "title": "7.4. Referans Dokümanlar", "content": "[Bu analize referans olan diğer dokümanlar listelenecektir.]" }
+        { "title": "Mevcut Bildirim Kanalları ve Süreçleri", "content": "[Belirlenecek]" },
+        { "title": "Mevcut Rıza Yönetimi", "content": "[Belirlenecek]" },
+        { "title": "Mevcut Veri Kaynakları", "content": "[Belirlenecek]" }
       ]
     },
     {
-      "title": "8. FONKSİYONEL TASARIM DOKÜMANLARI",
-      "content": "[İlgili fonksiyonel tasarım dokümanları bu bölüme eklenecektir.]"
+      "title": "Yeni Sistem Gereksinimleri",
+      "content": "Bu bölümde, projenin hedeflerine ulaşmak için geliştirilmesi gereken sistem özelliklerine dair gereksinimler bulunmaktadır.",
+      "subSections": [
+        {
+          "title": "Rıza Yönetimi",
+          "content": "Müşterilerin iletişim rızalarının toplanması ve yönetilmesi, hangi kanaldan hangi tür bildirim almak istediğini seçebilme özelliği sağlanmalıdır.",
+          "requirements": [
+            { "id": "REQ-R01", "text": "Müşterilerin iletişim rızalarını (SMS, e-posta, push) yönetebilmeleri sağlanmalıdır." },
+            { "id": "REQ-R02", "text": "Müşteriler, almak istedikleri bildirim türlerini (planlı, plansız, başlangıç, bitiş, güncelleme vb.) seçebilmelidir." }
+          ]
+        },
+        {
+          "title": "Veri Kaynakları ve Entegrasyon",
+          "content": "Kesinti bilgileri (planlı/plansız, başlangıç/bitiş, lokasyon vb.) için ilgili sistemlerle entegrasyon sağlanmalıdır.",
+          "requirements": [
+            { "id": "REQ-T01", "text": "Planlı ve plansız kesinti verilerini alacak servis entegrasyonu yapılmalıdır." }
+          ]
+        },
+        {
+          "title": "Kullanıcı Akışları",
+          "content": "Sistemin temel kullanıcı etkileşimlerini ve arayüz gereksinimlerini tanımlar.",
+          "requirements": [
+            { "id": "REQ-A01", "text": "Kullanıcılar, rıza ve bildirim ayarlarını yapabilecekleri bir arayüze sahip olmalıdır." }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Fonksiyonel Olmayan Gereksinimler",
+      "subSections": [
+        { "title": "Performans", "content": "- Bildirim gönderim süresi, kesinti başlangıcından itibaren en fazla 5 dakika olmalıdır." },
+        { "title": "Güvenlik", "content": "- Kullanıcı verileri KVKK standartlarına uygun olarak saklanmalı ve işlenmelidir." }
+      ]
+    },
+    {
+      "title": "Varsayımlar ve Kısıtlar",
+      "subSections": [
+        { "title": "Varsayımlar", "content": "[Proje ile ilgili varsayımları buraya yazın]" },
+        { "title": "Kısıtlar", "content": "[Proje ile ilgili kısıtları buraya yazın]" }
+      ]
     }
   ]
 }
@@ -306,8 +325,8 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
 **ÇOK ÖNEMLİ KURALLAR:**
 1.  Çıktın **SADECE VE SADECE** \`\`\`mermaid ... \`\`\` kod bloğu içinde olmalıdır. Başka HİÇBİR metin, başlık, açıklama veya not ekleme.
 2.  Diyagram tipi **MUTLAKA** \`graph TD\` (Yukarıdan Aşağıya Akış Şeması) olmalıdır. Diğer diyagram tiplerini (sequenceDiagram, classDiagram vb.) KESİNLİKLE KULLANMA.
-3.  Bağlantılar için **SADECE** \`-->\` operatörünü kullan. Örnek: \`A --> B\`. Metinli bağlantı (\`-- text -->\`) veya noktalı bağlantı (\`-.->\`) KULLANMA.
-4.  Kutu metinlerinde satır atlamak için **SADECE** \`<br>\` etiketini kullan. Parantez \`()\`, köşeli parantez \`[]\` gibi özel karakterler içeren metinleri çift tırnak \`"\` içine al. Örnek: \`A["Metin (detaylı)"]\`.
+3.  Bağlantılar için **SADECE** \`-->\` operatörünü kullan. Örnek: \`A --> B\`.
+4.  Kutu metinlerinde satır atlamak için **SADECE** \`<br>\` etiketini kullan. Çift tırnak (") veya özel karakterler kullanmaktan kaçın.
 5.  Kutuları basit tut. Örnek: \`A[Kutu 1]\`, \`B(Kutu 2)\`, \`C{Karar Kutusu}\`. Karmaşık şekiller veya stiller KULLANMA.
 6.  Kodun ayrıştırılabilir (parsable) ve sözdizimsel olarak (syntactically) doğru olduğundan emin ol.
 

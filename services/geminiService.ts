@@ -1,8 +1,8 @@
 // services/geminiService.ts
 
 import { GoogleGenAI, Type, Content, FunctionDeclaration, GenerateContentResponse } from "@google/genai";
-// FIX: Import 'ExpertStep' type to resolve the module not found error.
-import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep, GenerativeSuggestion, LintingIssue, SourcedDocument, StructuredAnalysisDoc, VizData, ThoughtProcess } from '../types';
+// FIX: Import StreamChunk from the central types file and remove the local definition.
+import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep, GenerativeSuggestion, LintingIssue, SourcedDocument, StructuredAnalysisDoc, VizData, ThoughtProcess, StreamChunk } from '../types';
 import { promptService } from './promptService';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -12,21 +12,7 @@ const getApiKey = (): string => {
     return apiKey;
 };
 
-export type StreamChunk =
-  | { type: 'text_chunk'; text: string }
-  | { type: 'thought_chunk'; payload: ThoughtProcess }
-  | { type: 'doc_stream_chunk'; docKey: 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix' | 'requestDoc' | 'mermaidViz' | 'bpmnViz'; chunk: any }
-  | { type: 'visualization_update'; content: string; }
-  | { type: 'chat_response'; content: string }
-  | { type: 'chat_stream_chunk'; chunk: string }
-  | { type: 'status_update'; message: string }
-  | { type: 'maturity_update'; report: MaturityReport }
-  | { type: 'expert_run_update'; checklist: ExpertStep[]; isComplete: boolean; finalMessage?: string; }
-  | { type: 'generative_suggestion'; suggestion: GenerativeSuggestion }
-  | { type: 'usage_update'; tokens: number }
-  | { type: 'request_confirmation'; summary: string }
-  | { type: 'function_call'; name: string; args: any; }
-  | { type: 'error'; message: string };
+// This type is now imported from types.ts to avoid duplication.
 
 export interface DocumentImpactAnalysis {
     changeType: 'minor' | 'major';
@@ -290,44 +276,81 @@ export const geminiService = {
                     tools: [{ functionDeclarations: tools }],
                 },
             });
-            
-            const functionCalls: any[] = [];
-            let fullText = '';
+
+            let buffer = '';
+            let thoughtYielded = false;
             
             for await (const chunk of responseStream) {
-                if (chunk.usageMetadata) {
+                 if (chunk.usageMetadata) {
                      yield { type: 'usage_update', tokens: chunk.usageMetadata.totalTokenCount };
                 }
                 if (chunk.functionCalls) {
-                    functionCalls.push(...chunk.functionCalls);
+                    for (const fc of chunk.functionCalls) {
+                        yield { type: 'function_call', name: fc.name, args: fc.args };
+                    }
                 }
-                if (chunk.text) {
-                    fullText += chunk.text;
-                }
-            }
-            
-            // Now that we have the full response, parse it
-            const thoughtMatch = fullText.match(/<dusunce>(.*?)<\/dusunce>/);
-            if (thoughtMatch && thoughtMatch[1]) {
-                 try {
-                    const thoughtPayload: ThoughtProcess = JSON.parse(thoughtMatch[1]);
-                    yield { type: 'thought_chunk', payload: thoughtPayload };
-                } catch (e) {
-                    console.warn("Could not parse thought JSON:", e);
+                
+                const text = chunk.text;
+                if (text) {
+                    buffer += text;
+
+                    if (!thoughtYielded) {
+                        const startTag = '<dusunce>';
+                        const endTag = '</dusunce>';
+                        const startIdx = buffer.indexOf(startTag);
+                        const endIdx = buffer.indexOf(endTag);
+
+                        if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+                            const jsonStr = buffer.substring(startIdx + startTag.length, endIdx);
+                            try {
+                                const thoughtPayload: ThoughtProcess = JSON.parse(jsonStr);
+                                yield { type: 'thought_chunk', payload: thoughtPayload };
+                                thoughtYielded = true;
+
+                                const remainingText = buffer.substring(endIdx + endTag.length);
+                                if (remainingText) {
+                                    yield { type: 'text_chunk', text: remainingText };
+                                }
+                                buffer = ''; // Clear buffer
+                            } catch (e) {
+                                // Incomplete JSON, wait for more chunks
+                            }
+                        }
+                    } else {
+                        yield { type: 'text_chunk', text: buffer };
+                        buffer = ''; // Clear buffer
+                    }
                 }
             }
 
-            const textResponse = fullText.replace(/<dusunce>[\s\S]*?<\/dusunce>/, '').trim();
-            if (textResponse) {
-                yield { type: 'text_chunk', text: textResponse };
-            }
-            
-            if (functionCalls.length > 0) {
-                for (const fc of functionCalls) {
-                    yield { type: 'function_call', name: fc.name, args: fc.args };
+            // After the loop, process any remaining content in the buffer
+            if (buffer) {
+                if (!thoughtYielded) {
+                     const startTag = '<dusunce>';
+                    const endTag = '</dusunce>';
+                    const startIdx = buffer.indexOf(startTag);
+                    const endIdx = buffer.indexOf(endTag);
+
+                     if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+                        // This logic is duplicated, but it's a safeguard for thoughts at the very end
+                        const jsonStr = buffer.substring(startIdx + startTag.length, endIdx);
+                        try {
+                            const thoughtPayload: ThoughtProcess = JSON.parse(jsonStr);
+                            yield { type: 'thought_chunk', payload: thoughtPayload };
+                            const remainingText = buffer.substring(endIdx + endTag.length);
+                            if (remainingText) {
+                                yield { type: 'text_chunk', text: remainingText };
+                            }
+                        } catch(e) {
+                             yield { type: 'text_chunk', text: buffer.substring(endIdx + endTag.length) };
+                        }
+                    } else {
+                         yield { type: 'text_chunk', text: buffer };
+                    }
+                } else {
+                    yield { type: 'text_chunk', text: buffer };
                 }
             }
-
 
         } catch (error) {
             yield { type: 'error', message: error instanceof Error ? error.message : "Bilinmeyen bir hata oluştu" };
@@ -730,25 +753,33 @@ export const geminiService = {
     generateAnalysisDocument: async function* (requestDoc: string, history: Message[], template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
         let totalTokens = 0;
     
-        // 1. Generate a plan by parsing the template
+        // 1. Generate a plan
+        const planPrompt = `Bir iş analizi dokümanı oluşturmak için gereken adımları listele. Adımlar şunları içermeli: Proje Özeti, Kapsam, Gereksinimler vb. Her adıma benzersiz bir ID ver.`;
+        
+        const planSchema = {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    id: { type: Type.STRING },
+                    name: { type: Type.STRING }
+                },
+                required: ['id', 'name']
+            }
+        };
+        
+        const generationConfig = { responseMimeType: "application/json", responseSchema: planSchema };
+        
+        const { text: planJson, tokens: planTokens } = await generateContent(planPrompt, 'gemini-2.5-flash-lite', generationConfig);
+        totalTokens += planTokens;
+        yield { type: 'usage_update', tokens: planTokens };
+    
         let planSteps: ExpertStep[];
         try {
-            const jsonTemplateMatch = template.match(/```json\s*([\s\S]*?)\s*```/);
-            if (!jsonTemplateMatch || !jsonTemplateMatch[1]) {
-                throw new Error("Analiz dokümanı şablonu geçerli bir JSON bloğu içermiyor.");
-            }
-            const templateJson = JSON.parse(jsonTemplateMatch[1]);
-            if (!templateJson.sections || !Array.isArray(templateJson.sections)) {
-                 throw new Error("Şablondaki JSON 'sections' dizisini içermiyor.");
-            }
-            planSteps = templateJson.sections.map((section: any, index: number) => ({
-                id: `sec${index + 1}`,
-                name: section.title,
-                status: 'pending' as const
-            }));
-        } catch(e: any) {
-            console.error("Failed to parse plan from template:", template, e);
-            throw new Error(`Doküman oluşturma planı şablondan ayrıştırılamadı: ${e.message}`);
+            planSteps = JSON.parse(planJson).map((step: any) => ({ ...step, status: 'pending' }));
+        } catch (e) {
+            console.error("Failed to parse the plan from Gemini, even in JSON mode:", planJson, e);
+            throw new Error("Doküman oluşturma planı yapılandırılamadı.");
         }
         
         yield { type: 'expert_run_update', checklist: [...planSteps], isComplete: false };
