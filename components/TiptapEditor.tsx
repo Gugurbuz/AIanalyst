@@ -1,29 +1,30 @@
 // components/TiptapEditor.tsx
 import React, { useCallback, useRef } from 'react';
-// FIX: The BubbleMenu component is part of @tiptap/react, not the extension package.
+// FIX: To resolve the component type error, BubbleMenu is imported from '@tiptap/react' which provides the JSX component, not from the extension package.
 import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Link from '@tiptap/extension-link';
-// FIX: Import Table as a named export to resolve the issue with the .configure method.
+// FIX: Changed to a named import to resolve potential type resolution issues where `Table.configure` was not being found on the default import.
 import { Table } from '@tiptap/extension-table';
-import TableRow from '@tiptap/extension-table-row';
-import TableCell from '@tiptap/extension-table-cell';
-import TableHeader from '@tiptap/extension-table-header';
+// FIX: Changed table components to named imports for consistency with modern Tiptap versions.
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableCell } from '@tiptap/extension-table-cell';
+import { TableHeader } from '@tiptap/extension-table-header';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Highlight from '@tiptap/extension-highlight';
 import TextAlign from '@tiptap/extension-text-align';
 import Image from '@tiptap/extension-image';
-import BubbleMenuExtension from '@tiptap/extension-bubble-menu';
 
 import { supabase } from '../services/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 
-// FIX: Import the pre-configured 'lowlight' instance with common languages.
-// This avoids manual registration which was causing errors with newer versions of `lowlight`.
-import { lowlight } from 'lowlight';
+// FIX: Changed `lowlight` import to use the `createLowlight` API from v3+, which resolves the "does not provide an export named 'lowlight'" error.
+import { createLowlight } from 'lowlight';
+// FIX: Corrected the import path and type for common languages based on lowlight v3 documentation.
+import { common } from 'lowlight/common';
 
 import { marked } from 'marked';
 import TurndownService from 'turndown';
@@ -35,8 +36,6 @@ import {
     Table2, Trash2, Columns, Rows, Sparkles, Code2, ListTodo, Highlighter,
     AlignLeft, AlignCenter, AlignRight, AlignJustify, Image as ImageIcon
 } from 'lucide-react';
-
-// Languages are now included in the 'lowlight' common bundle, so manual registration is no longer needed.
 
 interface TiptapEditorProps {
     content: string;
@@ -184,6 +183,8 @@ const EditorBubbleMenu = ({ editor, onAiModifyClick }: { editor: any, onAiModify
     );
 };
 
+// FIX: Create a lowlight instance with common languages to pass to the CodeBlock extension.
+const lowlight = createLowlight(common);
 
 export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, onSelectionUpdate, isEditable, onAiModifyClick }) => {
     const handleImageUpload = useCallback(async (file: File) => {
@@ -221,7 +222,6 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
                 heading: { levels: [1, 2, 3] },
                 codeBlock: false,
             }),
-            BubbleMenuExtension,
             Placeholder.configure({
                 placeholder: 'Doküman içeriğini buraya yazın...',
             }),
@@ -229,7 +229,6 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
                 openOnClick: true,
                 autolink: true,
             }),
-            // FIX: Use Table.configure as it is now correctly imported as a named export.
             Table.configure({ resizable: true }),
             TableRow,
             TableHeader,
@@ -290,7 +289,6 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
     });
 
     React.useEffect(() => {
-        // FIX: Make this effect async to handle the promise from marked.parse.
         const updateContent = async () => {
             if (editor && !editor.isDestroyed) {
                 if (editor.isEditable !== isEditable) {
@@ -299,10 +297,8 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
                 
                 const currentContentAsMarkdown = turndownService.turndown(editor.getHTML());
                 if (currentContentAsMarkdown.trim() !== content.trim()) {
-                    // FIX: Await the result of marked.parse as it can be async.
                     const html = await marked.parse(content || '');
                     const sanitizedHtml = DOMPurify.sanitize(html, { ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling'] });
-                    // FIX: The setContent command now takes an options object as the second argument.
                     editor.commands.setContent(sanitizedHtml, { emitUpdate: false }); 
                 }
             }
