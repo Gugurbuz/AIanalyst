@@ -27,6 +27,7 @@ import json from 'lowlight/lib/languages/json.js';
 
 import { marked } from 'marked';
 import TurndownService from 'turndown';
+import * as turndownPluginGfm from 'turndown-plugin-gfm';
 import DOMPurify from 'dompurify';
 import { 
     Bold, Italic, Heading2, Heading3, List, ListOrdered,
@@ -52,7 +53,8 @@ interface TiptapEditorProps {
 }
 
 const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
-turndownService.keep(['table', 'thead', 'tbody', 'tr', 'th', 'td', 'img']);
+turndownService.use(turndownPluginGfm.tables);
+turndownService.keep(['img']);
 turndownService.addRule('task-list', {
     filter: (node) => {
         return node.nodeName === 'LI' && node.getAttribute('data-type') === 'taskItem';
