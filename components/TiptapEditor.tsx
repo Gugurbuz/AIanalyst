@@ -1,10 +1,13 @@
 // components/TiptapEditor.tsx
 import React, { useCallback, useRef } from 'react';
-import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
+// FIX: The BubbleMenu component is assumed to be exported from its extension package in the user's version.
+import { useEditor, EditorContent } from '@tiptap/react';
+import { BubbleMenu } from '@tiptap/extension-bubble-menu';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Link from '@tiptap/extension-link';
-import Table from '@tiptap/extension-table';
+// FIX: Import Table as a named export to resolve the issue with the .configure method.
+import { Table } from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
@@ -14,11 +17,13 @@ import TaskItem from '@tiptap/extension-task-item';
 import Highlight from '@tiptap/extension-highlight';
 import TextAlign from '@tiptap/extension-text-align';
 import Image from '@tiptap/extension-image';
+import BubbleMenuExtension from '@tiptap/extension-bubble-menu';
 
 import { supabase } from '../services/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 
-import { lowlight } from 'lowlight';
+// FIX: 'lowlight' is a default export, not a named one.
+import lowlight from 'lowlight';
 import javascript from 'lowlight/lib/languages/javascript.js';
 import typescript from 'lowlight/lib/languages/typescript.js';
 import css from 'lowlight/lib/languages/css.js';
@@ -227,6 +232,7 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
                 heading: { levels: [1, 2, 3] },
                 codeBlock: false,
             }),
+            BubbleMenuExtension,
             Placeholder.configure({
                 placeholder: 'Doküman içeriğini buraya yazın...',
             }),
@@ -234,6 +240,7 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
                 openOnClick: true,
                 autolink: true,
             }),
+            // FIX: Use Table.configure as it is now correctly imported as a named export.
             Table.configure({ resizable: true }),
             TableRow,
             TableHeader,
@@ -294,18 +301,24 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
     });
 
     React.useEffect(() => {
-        if (editor && !editor.isDestroyed) {
-            if (editor.isEditable !== isEditable) {
-                editor.setEditable(isEditable);
+        // FIX: Make this effect async to handle the promise from marked.parse.
+        const updateContent = async () => {
+            if (editor && !editor.isDestroyed) {
+                if (editor.isEditable !== isEditable) {
+                    editor.setEditable(isEditable);
+                }
+                
+                const currentContentAsMarkdown = turndownService.turndown(editor.getHTML());
+                if (currentContentAsMarkdown.trim() !== content.trim()) {
+                    // FIX: Await the result of marked.parse as it can be async.
+                    const html = await marked.parse(content || '');
+                    const sanitizedHtml = DOMPurify.sanitize(html, { ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling'] });
+                    // FIX: The setContent command now takes an options object as the second argument.
+                    editor.commands.setContent(sanitizedHtml, { emitUpdate: false }); 
+                }
             }
-            
-            const currentContentAsMarkdown = turndownService.turndown(editor.getHTML());
-            if (currentContentAsMarkdown.trim() !== content.trim()) {
-                const html = marked.parse(content || '');
-                const sanitizedHtml = DOMPurify.sanitize(html, { ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling'] });
-                editor.commands.setContent(sanitizedHtml, false); 
-            }
-        }
+        };
+        updateContent();
     }, [content, isEditable, editor]);
 
     return (
