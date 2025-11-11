@@ -1,29 +1,28 @@
 // components/TiptapEditor.tsx
 import React, { useCallback, useRef } from 'react';
-// FIX: To resolve the component type error, BubbleMenu is imported from '@tiptap/react' which provides the JSX component, not from the extension package.
+// HATA DÜZELTMESİ: BubbleMenu bileşeni react paketinden import edilmeli
 import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Link from '@tiptap/extension-link';
-// FIX: Changed to a named import to resolve potential type resolution issues where `Table.configure` was not being found on the default import.
-import { Table } from '@tiptap/extension-table';
-// FIX: Changed table components to named imports for consistency with modern Tiptap versions.
-import { TableRow } from '@tiptap/extension-table-row';
-import { TableCell } from '@tiptap/extension-table-cell';
-import { TableHeader } from '@tiptap/extension-table-header';
+import Table from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableCell from '@tiptap/extension-table-cell';
+import TableHeader from '@tiptap/extension-table-header';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Highlight from '@tiptap/extension-highlight';
 import TextAlign from '@tiptap/extension-text-align';
 import Image from '@tiptap/extension-image';
+// HATA DÜZELTMESİ: BubbleMenu eklentisi ayrı import edilmeli
+import BubbleMenuExtension from '@tiptap/extension-bubble-menu';
 
 import { supabase } from '../services/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 
-// FIX: Changed `lowlight` import to use the `createLowlight` API from v3+, which resolves the "does not provide an export named 'lowlight'" error.
-import { createLowlight } from 'lowlight';
-// FIX: Corrected the import path and type for common languages based on lowlight v3 documentation.
+// HATA DÜZELTMESİ: lowlight v3 import yapısı
+import { createLowlight } from 'lowlight/lib/core';
 import { common } from 'lowlight/common';
 
 import { marked } from 'marked';
@@ -36,6 +35,9 @@ import {
     Table2, Trash2, Columns, Rows, Sparkles, Code2, ListTodo, Highlighter,
     AlignLeft, AlignCenter, AlignRight, AlignJustify, Image as ImageIcon
 } from 'lucide-react';
+
+// HATA DÜZELTMESİ: lowlight v3 kullanımı
+const lowlight = createLowlight(common);
 
 interface TiptapEditorProps {
     content: string;
@@ -183,44 +185,18 @@ const EditorBubbleMenu = ({ editor, onAiModifyClick }: { editor: any, onAiModify
     );
 };
 
-// FIX: Create a lowlight instance with common languages to pass to the CodeBlock extension.
-const lowlight = createLowlight(common);
 
 export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, onSelectionUpdate, isEditable, onAiModifyClick }) => {
-    const handleImageUpload = useCallback(async (file: File) => {
-        if (!editor || editor.isDestroyed) return;
-        
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${uuidv4()}.${fileExt}`;
-        const filePath = `public/${fileName}`;
-
-        try {
-            const { error: uploadError } = await supabase.storage
-                .from('document-assets')
-                .upload(filePath, file);
-
-            if (uploadError) throw uploadError;
-
-            const { data } = supabase.storage
-                .from('document-assets')
-                .getPublicUrl(filePath);
-
-            if (data.publicUrl) {
-                editor.chain().focus().setImage({ src: data.publicUrl }).run();
-            } else {
-                throw new Error("Yüklenen resim için genel URL alınamadı.");
-            }
-        } catch (error) {
-            console.error("Resim yükleme hatası:", error);
-            alert(`Resim yüklenirken bir hata oluştu: ${error instanceof Error ? error.message : String(error)}`);
-        }
-    }, [/* editor is a ref, stable */]);
-
+    
     const editor = useEditor({
         extensions: [
             StarterKit.configure({
                 heading: { levels: [1, 2, 3] },
                 codeBlock: false,
+            }),
+            // HATA DÜZELTMESİ: BubbleMenu eklentisini buraya ekle
+            BubbleMenuExtension.configure({
+                element: document.createElement('div'), // Gerçek elementi EditorBubbleMenu sağlar
             }),
             Placeholder.configure({
                 placeholder: 'Doküman içeriğini buraya yazın...',
@@ -264,6 +240,7 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
                 class: `prose prose-slate dark:prose-invert max-w-none focus:outline-none p-4 md:p-6 h-full ${isEditable ? '' : 'cursor-text'}`,
             },
             handleDrop: (view, event, slice, moved) => {
+                if (!isEditable) return false;
                 if (!moved && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]) {
                     const file = event.dataTransfer.files[0];
                     if (file.type.startsWith('image/')) {
@@ -275,6 +252,7 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
                 return false;
             },
             handlePaste: (view, event, slice) => {
+                if (!isEditable) return false;
                 if (event.clipboardData && event.clipboardData.files && event.clipboardData.files[0]) {
                     const file = event.clipboardData.files[0];
                      if (file.type.startsWith('image/')) {
@@ -288,6 +266,35 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
         },
     });
 
+    const handleImageUpload = useCallback(async (file: File) => {
+        if (!editor || editor.isDestroyed) return;
+        
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${uuidv4()}.${fileExt}`;
+        const filePath = `public/${fileName}`;
+
+        try {
+            const { error: uploadError } = await supabase.storage
+                .from('document-assets')
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data } = supabase.storage
+                .from('document-assets')
+                .getPublicUrl(filePath);
+
+            if (data.publicUrl) {
+                editor.chain().focus().setImage({ src: data.publicUrl }).run();
+            } else {
+                throw new Error("Yüklenen resim için genel URL alınamadı.");
+            }
+        } catch (error) {
+            console.error("Resim yükleme hatası:", error);
+            alert(`Resim yüklenirken bir hata oluştu: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }, [editor]); // editor'ü bağımlılık listesine ekle
+
     React.useEffect(() => {
         const updateContent = async () => {
             if (editor && !editor.isDestroyed) {
@@ -297,8 +304,10 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
                 
                 const currentContentAsMarkdown = turndownService.turndown(editor.getHTML());
                 if (currentContentAsMarkdown.trim() !== content.trim()) {
+                    // HATA DÜZELTMESİ: marked.parse asenkrondur (Promise döner)
                     const html = await marked.parse(content || '');
                     const sanitizedHtml = DOMPurify.sanitize(html, { ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling'] });
+                    // HATA DÜZELTMESİ: setContent'in 2. parametresi bir obje olmalı
                     editor.commands.setContent(sanitizedHtml, { emitUpdate: false }); 
                 }
             }
