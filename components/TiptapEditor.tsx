@@ -43,7 +43,7 @@ interface TiptapEditorProps {
     content: string;
     onChange: (markdown: string) => void;
     onSelectionUpdate: (text: string) => void;
-    isEditable: boolean; // <-- GEREKLİ PROP EKLENDİ
+    isEditable: boolean; 
     onAiModifyClick: () => void;
 }
 
