@@ -17,6 +17,9 @@ import TextAlign from '@tiptap/extension-text-align';
 import Image from '@tiptap/extension-image';
 // HATA DÜZELTMESİ: BubbleMenu eklentisi ayrı import edilmeli
 import BubbleMenuExtension from '@tiptap/extension-bubble-menu';
+import Underline from '@tiptap/extension-underline';
+import Subscript from '@tiptap/extension-subscript';
+import Superscript from '@tiptap/extension-superscript';
 
 import { supabase } from '../services/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
@@ -41,7 +44,9 @@ import {
     Bold, Italic, Heading2, Heading3, List, ListOrdered,
     Strikethrough, Quote, Code, Minus, Undo, Redo, Eraser, Link as LinkIcon,
     Table2, Trash2, Columns, Rows, Sparkles, Code2, ListTodo, Highlighter,
-    AlignLeft, AlignCenter, AlignRight, AlignJustify, Image as ImageIcon
+    AlignLeft, AlignCenter, AlignRight, AlignJustify, Image as ImageIcon,
+    // FIX: Alias lucide-react imports to avoid name collision with Tiptap extensions.
+    Underline as UnderlineIcon, Subscript as SubscriptIcon, Superscript as SuperscriptIcon
 } from 'lucide-react';
 
 // HATA DÜZELTMESİ: lowlight örneği oluşturulup diller manuel olarak kaydedildi.
@@ -111,8 +116,14 @@ const MenuBar = ({ editor, onImageUpload }: { editor: any, onImageUpload: (file:
             {/* Marks */}
             <button onClick={() => editor.chain().focus().toggleBold().run()} className={buttonClass(editor.isActive('bold'))} title="Kalın"><Bold className="h-4 w-4" /></button>
             <button onClick={() => editor.chain().focus().toggleItalic().run()} className={buttonClass(editor.isActive('italic'))} title="İtalik"><Italic className="h-4 w-4" /></button>
+            {/* FIX: Use aliased icon component 'UnderlineIcon'. */}
+            <button onClick={() => editor.chain().focus().toggleUnderline().run()} className={buttonClass(editor.isActive('underline'))} title="Altı Çizili"><UnderlineIcon className="h-4 w-4" /></button>
             <button onClick={() => editor.chain().focus().toggleStrike().run()} className={buttonClass(editor.isActive('strike'))} title="Üstü Çizili"><Strikethrough className="h-4 w-4" /></button>
             <button onClick={() => editor.chain().focus().toggleCode().run()} className={buttonClass(editor.isActive('code'))} title="Satır İçi Kod"><Code className="h-4 w-4" /></button>
+            {/* FIX: Use aliased icon component 'SubscriptIcon'. */}
+            <button onClick={() => editor.chain().focus().toggleSubscript().run()} className={buttonClass(editor.isActive('subscript'))} title="Alt Simge"><SubscriptIcon className="h-4 w-4" /></button>
+            {/* FIX: Use aliased icon component 'SuperscriptIcon'. */}
+            <button onClick={() => editor.chain().focus().toggleSuperscript().run()} className={buttonClass(editor.isActive('superscript'))} title="Üst Simge"><SuperscriptIcon className="h-4 w-4" /></button>
             <button onClick={setLink} className={buttonClass(editor.isActive('link'))} title="Link Ekle"><LinkIcon className="h-4 w-4" /></button>
             <button onClick={() => editor.chain().focus().toggleHighlight().run()} className={buttonClass(editor.isActive('highlight'))} title="Vurgula"><Highlighter className="h-4 w-4" /></button>
             <button onClick={() => editor.chain().focus().unsetAllMarks().run()} className={plainButtonClass.replace(' disabled:opacity-50 disabled:cursor-not-allowed', '')} title="Formatı Temizle"><Eraser className="h-4 w-4" /></button>
@@ -191,6 +202,8 @@ const EditorBubbleMenu = ({ editor, onAiModifyClick }: { editor: any, onAiModify
             <div className="flex items-center gap-1 p-1 bg-white dark:bg-slate-900 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700">
                 <button onClick={() => editor.chain().focus().toggleBold().run()} className={buttonClass(editor.isActive('bold'))} title="Kalın"><Bold className="h-4 w-4" /></button>
                 <button onClick={() => editor.chain().focus().toggleItalic().run()} className={buttonClass(editor.isActive('italic'))} title="İtalik"><Italic className="h-4 w-4" /></button>
+                {/* FIX: Use aliased icon component 'UnderlineIcon'. */}
+                <button onClick={() => editor.chain().focus().toggleUnderline().run()} className={buttonClass(editor.isActive('underline'))} title="Altı Çizili"><UnderlineIcon className="h-4 w-4" /></button>
                 <button onClick={() => editor.chain().focus().toggleStrike().run()} className={buttonClass(editor.isActive('strike'))} title="Üstü Çizili"><Strikethrough className="h-4 w-4" /></button>
                 <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
                 <button onClick={onAiModifyClick} className="p-2 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-indigo-500" title="AI ile Düzenle">
@@ -210,6 +223,9 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
                 heading: { levels: [1, 2, 3] },
                 codeBlock: false,
             }),
+            Underline,
+            Subscript,
+            Superscript,
             BubbleMenuExtension, // Eklentiyi buraya ekleyin
             Placeholder.configure({
                 placeholder: 'Doküman içeriğini buraya yazın...',
