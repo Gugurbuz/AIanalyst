@@ -2,7 +2,7 @@
 import React, { useCallback, useRef } from 'react';
 // FIX: The BubbleMenu component is assumed to be exported from its extension package in the user's version.
 import { useEditor, EditorContent } from '@tiptap/react';
-import { BubbleMenu } from '@tiptap/extension-bubble-menu';
+
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Link from '@tiptap/extension-link';
