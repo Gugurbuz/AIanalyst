@@ -1,8 +1,7 @@
 // components/TiptapEditor.tsx
 import React, { useCallback, useRef } from 'react';
-// FIX: The BubbleMenu component is assumed to be exported from its extension package in the user's version.
-import { useEditor, EditorContent } from '@tiptap/react';
-
+// FIX: The BubbleMenu component is part of @tiptap/react, not the extension package.
+import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Link from '@tiptap/extension-link';
@@ -22,13 +21,9 @@ import BubbleMenuExtension from '@tiptap/extension-bubble-menu';
 import { supabase } from '../services/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 
-// FIX: 'lowlight' is a default export, not a named one.
-import lowlight from 'lowlight';
-import javascript from 'lowlight/lib/languages/javascript.js';
-import typescript from 'lowlight/lib/languages/typescript.js';
-import css from 'lowlight/lib/languages/css.js';
-import xml from 'lowlight/lib/languages/xml.js'; // for html
-import json from 'lowlight/lib/languages/json.js';
+// FIX: Import the pre-configured 'lowlight' instance with common languages.
+// This avoids manual registration which was causing errors with newer versions of `lowlight`.
+import { lowlight } from 'lowlight';
 
 import { marked } from 'marked';
 import TurndownService from 'turndown';
@@ -41,13 +36,7 @@ import {
     AlignLeft, AlignCenter, AlignRight, AlignJustify, Image as ImageIcon
 } from 'lucide-react';
 
-// Register languages for syntax highlighting
-lowlight.registerLanguage('javascript', javascript);
-lowlight.registerLanguage('typescript', typescript);
-lowlight.registerLanguage('css', css);
-lowlight.registerLanguage('html', xml);
-lowlight.registerLanguage('xml', xml);
-lowlight.registerLanguage('json', json);
+// Languages are now included in the 'lowlight' common bundle, so manual registration is no longer needed.
 
 interface TiptapEditorProps {
     content: string;
