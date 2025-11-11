@@ -9,6 +9,7 @@ import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCi
 import { geminiService } from '../services/geminiService';
 import { VersionHistoryModal } from './VersionHistoryModal';
 import { RequestDocumentViewer } from './RequestDocumentViewer';
+import { TiptapEditor } from './TiptapEditor';
 
 interface DocumentCanvasProps {
     content: string;
@@ -124,7 +125,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const [isFixing, setIsFixing] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
     const originalContentRef = useRef<string>('');
     
     const documentTypeMap: Record<string, DocumentVersion['document_type']> = { analysisDoc: 'analysis', requestDoc: 'request', testScenarios: 'test', traceabilityMatrix: 'traceability' };
@@ -176,35 +176,20 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     };
     
     const handleSelection = useCallback(() => {
-        const activeEl = document.activeElement;
-        const selectedText = (isEditing && activeEl === textareaRef.current) 
-            ? textareaRef.current.value.substring(textareaRef.current.selectionStart, textareaRef.current.selectionEnd)
-            : window.getSelection()?.toString();
-
+        const selectedText = window.getSelection()?.toString();
         if (selectedText && selectedText.trim().length > 5) {
             setSelection({ start: 0, end: 0, text: selectedText });
         } else {
             setSelection(null);
         }
-    }, [isEditing]);
-
-    const applyMarkdown = (prefix: string, suffix: string = '', isBlock: boolean = false) => {
-        const textarea = textareaRef.current; if (!textarea) return;
-        const { selectionStart, selectionEnd } = textarea; const originalText = localContent;
-        let newText;
-        if (isBlock) {
-            const lineStart = originalText.lastIndexOf('\n', selectionStart - 1) + 1;
-            const line = originalText.substring(lineStart, selectionEnd);
-            const cleanedLine = line.replace(/^(#+\s|\d+\.\s|-\s|\*\s)/, '');
-            const newBlock = `${prefix}${cleanedLine}`;
-            newText = originalText.substring(0, lineStart) + newBlock + originalText.substring(selectionEnd);
-            setTimeout(() => textarea.setSelectionRange(lineStart, lineStart + newBlock.length), 0);
+    }, []);
+    
+    const handleTiptapSelection = (text: string) => {
+        if (text && text.trim().length > 5) {
+            setSelection({ start: 0, end: 0, text: text });
         } else {
-            const selectedText = originalText.substring(selectionStart, selectionEnd);
-            newText = `${originalText.substring(0, selectionStart)}${prefix}${selectedText}${suffix}${originalText.substring(selectionEnd)}`;
-            setTimeout(() => textarea.setSelectionRange(selectionStart + prefix.length, selectionEnd + prefix.length), 0);
+            setSelection(null);
         }
-        setLocalContent(newText); textarea.focus();
     };
     
     const handleAiModify = async (userPrompt: string) => {
@@ -249,18 +234,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
             <LintingSuggestionsBar issues={lintIssues} onFix={handleFixIssue} onDismiss={(issue) => setLintIssues(prev => prev.filter(i => i !== issue))} isFixing={isFixing} />
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-2 md:p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2 flex-wrap">
-                    {isEditing && (
-                        <>
-                            <select onChange={(e) => applyMarkdown(e.target.value, '', true)} className="px-2 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white dark:bg-slate-700"><option value="">Başlık...</option><option value="## ">Başlık 1</option><option value="### ">Başlık 2</option></select>
-                             <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
-                             <button onClick={() => applyMarkdown('**', '**')} title="Kalın" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"><Bold className="h-4 w-4" /></button>
-                             <button onClick={() => applyMarkdown('*', '*')} title="İtalik" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"><Italic className="h-4 w-4" /></button>
-                             <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
-                             <button onClick={() => applyMarkdown('- ', '', true)} title="Madde İşaretli Liste" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"><List className="h-4 w-4" /></button>
-                             <button onClick={() => applyMarkdown('1. ', '', true)} title="Numaralı Liste" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"><ListOrdered className="h-4 w-4" /></button>
-                             <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
-                        </>
-                    )}
                      <button onClick={() => setIsAiModalOpen(true)} disabled={!selection || (docKey !== 'analysisDoc' && docKey !== 'testScenarios')} title="AI ile düzenle" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1 text-indigo-600 dark:text-indigo-400 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed"><Sparkles className="h-4 w-4" /> <span className="text-sm font-semibold">Oluştur</span></button>
                 </div>
                 <div className="flex items-center gap-4">
@@ -271,13 +244,17 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                     <ExportDropdown content={displayContent} filename={filename} isTable={isTable} />
                 </div>
             </div>
-            <div className="flex-1 relative" onMouseUp={handleSelection}>
+            <div className="flex-1 relative min-h-0">
                 {isEditing ? (
-                    <textarea ref={textareaRef} value={localContent} onChange={(e) => setLocalContent(e.target.value)} className="w-full h-full p-6 bg-white dark:bg-slate-900 border-none focus:outline-none resize-none font-mono text-sm leading-relaxed" placeholder={placeholder} />
+                    <TiptapEditor
+                        content={localContent}
+                        onChange={setLocalContent}
+                        onSelectionUpdate={handleTiptapSelection}
+                    />
                 ) : parsedRequestDoc ? (
                     <RequestDocumentViewer document={parsedRequestDoc} />
                 ) : (
-                    <div className="h-full overflow-y-auto p-2 md:p-6">
+                    <div className="h-full overflow-y-auto p-2 md:p-6" onMouseUp={handleSelection}>
                         <MarkdownRenderer content={displayContent} rephrasingText={inlineModificationState?.docKey === docKey ? inlineModificationState.originalText : null} highlightedUserSelectionText={selection?.text || null} />
                     </div>
                 )}

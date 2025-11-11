@@ -179,8 +179,10 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         }
     }, [activeConversationId, triggerProfileSave, triggerSave]);
     
-    const saveDocumentVersion = useCallback(async (docKey: keyof GeneratedDocs, newContent: any, reason: string, templateId?: string | null) => {
-        if (!activeConversationId) return Promise.reject("No active conversation");
+    // FIX: Add optional `conversationIdOverride` parameter to handle new conversations correctly and prevent race conditions.
+    const saveDocumentVersion = useCallback(async (docKey: keyof GeneratedDocs, newContent: any, reason: string, templateId?: string | null, conversationIdOverride?: string) => {
+        const conversationId = conversationIdOverride || activeConversationId;
+        if (!conversationId) return Promise.reject("No active conversation");
 
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const validTemplateId = templateId && uuidRegex.test(templateId) ? templateId : null;
@@ -194,7 +196,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         const newContentString = typeof newContent === 'string' ? newContent : JSON.stringify(newContent);
         
         let newVersionNumber = 1;
-        const conv = conversations.find(c => c.id === activeConversationId);
+        const conv = conversations.find(c => c.id === conversationId);
         if (conv) {
             const versionsForDocType = (conv.documentVersions || []).filter(v => v.document_type === document_type);
             const latestVersion = versionsForDocType.reduce((max, v) => v.version_number > max ? v.version_number : max, 0);
@@ -202,7 +204,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         }
 
         const newVersionRecord: Omit<DocumentVersion, 'id' | 'created_at'> = {
-            conversation_id: activeConversationId, user_id: user.id, document_type,
+            conversation_id: conversationId, user_id: user.id, document_type,
             content: newContentString, version_number: newVersionNumber,
             reason_for_change: reason, template_id: validTemplateId
         };
@@ -211,14 +213,14 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         if (insertError || !newVersionDb) throw new Error("Doküman versiyonu kaydedilemedi: " + (insertError?.message || 'Bilinmeyen hata'));
         
         const { error: upsertError } = await supabase.from('documents').upsert({
-            conversation_id: activeConversationId, user_id: user.id, document_type: document_type,
+            conversation_id: conversationId, user_id: user.id, document_type: document_type,
             content: newContentString, current_version_id: newVersionDb.id, template_id: validTemplateId
         }, { onConflict: 'conversation_id, document_type' }).select().single();
         if (upsertError) throw new Error("Ana doküman kaydedilemedi: " + (upsertError?.message || 'Bilinmeyen hata'));
 
         // Optimistic update
         setConversations(prev => prev.map(c => {
-            if (c.id === activeConversationId) {
+            if (c.id === conversationId) {
                 const existingDoc = c.documents?.find(d => d.document_type === document_type);
                 const newDocOptimistic: Document = {
                     id: existingDoc?.id || `temp-doc-${document_type}`, conversation_id: c.id, user_id: user.id,
@@ -324,8 +326,8 @@ export const useConversationState = ({ user, initialData }: UseConversationState
                 if (m.id !== messageId) return m;
     
                 const newMessage = { ...m };
-                if (chunk.type === 'chat_stream_chunk') {
-                    newMessage.content = (newMessage.content || '') + chunk.chunk;
+                if (chunk.type === 'text_chunk') {
+                    newMessage.content = (newMessage.content || '') + chunk.text;
                 } else if (chunk.type === 'thought_chunk') {
                     newMessage.thought = chunk.payload;
                 } else if (chunk.type === 'expert_run_update') {
@@ -410,7 +412,6 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         traceabilityTemplates,
         updateConversationTitle,
         deleteConversation,
-        // FIX: Export missing methods
         streamDocument,
         updateStreamingMessage,
         getMessageById,

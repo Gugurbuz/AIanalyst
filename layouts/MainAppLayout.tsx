@@ -91,7 +91,7 @@ const AnalystWorkspace = () => {
             </div>
 
             {isWorkspaceVisible && (
-                 <div className="hidden lg:flex lg:col-span-3 bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 overflow-hidden relative">
+                 <div className="flex lg:col-span-3 bg-white dark:bg-slate-800 border-l border-slate-200 dark:border-slate-700 overflow-hidden relative">
                      <DocumentWorkspace 
                         conversation={activeConversation}
                         onUpdateConversation={context.updateConversation}
