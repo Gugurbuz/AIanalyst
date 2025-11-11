@@ -10,7 +10,6 @@ import { geminiService } from '../services/geminiService';
 import type { DocumentImpactAnalysis } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
 import { GanttChartSquare, Projector, RefreshCw, Check, FileText, Beaker, GitBranch, FileInput, CheckSquare } from 'lucide-react';
-import { RequestDocumentViewer } from './RequestDocumentViewer';
 import { isIsBirimiTalep } from '../types';
 
 

@@ -8,7 +8,6 @@ import { Template, DocumentVersion, LintingIssue, IsBirimiTalep, isIsBirimiTalep
 import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, Edit, Eye, Wrench, X, History } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 import { VersionHistoryModal } from './VersionHistoryModal';
-import { RequestDocumentViewer } from './RequestDocumentViewer';
 import { TiptapEditor } from './TiptapEditor';
 
 interface DocumentCanvasProps {
@@ -41,9 +40,9 @@ const jsonToMarkdownTable = (content: string): string => {
     if (!trimmedContent.startsWith('[') && !trimmedContent.startsWith('{')) return content;
     try {
         const cleanedJsonString = trimmedContent.replace(/^```json\s*|```\s*$/g, '').trim();
-        if (!cleanedJsonString) return "<!-- Boş JSON verisi -->";
+        if (!cleanedJsonString) return "";
         const data = JSON.parse(cleanedJsonString);
-        if (!Array.isArray(data) || data.length === 0) return "<!-- Geçerli bir tablo verisi bulunamadı -->";
+        if (!Array.isArray(data) || data.length === 0) return "";
         const headers = Object.keys(data[0]);
         const headerLine = `| ${headers.join(' | ')} |`;
         const separatorLine = `| ${headers.map(() => '---').join(' | ')} |`;
@@ -55,8 +54,8 @@ const jsonToMarkdownTable = (content: string): string => {
     }
 };
 
-function requestDocToMarkdown(doc: IsBirimiTalep): string {
-    if (!doc) return '';
+function requestDocToMarkdown(doc: IsBirimiTalep | null): string {
+    if (!doc) return 'Talep dokümanı yüklenemedi veya geçersiz formatta.';
     let md = `# ${doc.talepAdi}\n\n`;
     md += `**Doküman No:** ${doc.dokumanNo}  \n`;
     md += `**Revizyon:** ${doc.revizyon}  \n`;
@@ -133,7 +132,12 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const docNameMap: Record<string, string> = { analysisDoc: 'Analiz Dokümanı', requestDoc: 'Talep Dokümanı', testScenarios: 'Test Senaryoları', traceabilityMatrix: 'İzlenebilirlik Matrisi' };
     const documentName = docNameMap[docKey] || 'Doküman';
 
-    useEffect(() => { if (!isEditing) setLocalContent(content || ''); }, [content, isEditing]);
+    useEffect(() => { 
+        if (!isEditing) {
+            setLocalContent(content || ''); 
+        }
+    }, [content, isEditing]);
+
     useEffect(() => { setLintIssues([]); }, [content]);
 
     const handleToggleEditing = async () => {
@@ -159,7 +163,8 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                 }
             } catch (error) {
                 console.error("Failed to save/convert changes:", error);
-                onContentChange(localContent, "Manuel Düzenleme");
+                const reason = docKey === 'requestDoc' ? "Talep Dokümanı Manuel Düzenleme" : "Manuel Düzenleme";
+                onContentChange(localContent, reason);
             } finally {
                 setIsProcessingSave(false);
             }
@@ -168,24 +173,23 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
             if (docKey === 'requestDoc') {
                 try {
                     const parsed = JSON.parse(content);
-                    setLocalContent(isIsBirimiTalep(parsed) ? requestDocToMarkdown(parsed) : content);
-                } catch (e) { setLocalContent(content); }
-            } else { setLocalContent(content); }
+                    if (isIsBirimiTalep(parsed)) {
+                        setLocalContent(requestDocToMarkdown(parsed));
+                    } else {
+                         setLocalContent('**Hata:** Geçersiz talep dokümanı formatı.');
+                    }
+                } catch {
+                    setLocalContent('**Hata:** Talep dokümanı ayrıştırılamadı.');
+                }
+            } else {
+                setLocalContent(content); 
+            }
             setIsEditing(true);
         }
     };
     
-    const handleSelection = useCallback(() => {
-        const selectedText = window.getSelection()?.toString();
-        if (selectedText && selectedText.trim().length > 5) {
-            setSelection({ start: 0, end: 0, text: selectedText });
-        } else {
-            setSelection(null);
-        }
-    }, []);
-    
     const handleTiptapSelection = (text: string) => {
-        if (text && text.trim().length > 5) {
+        if (docKey !== 'requestDoc' && text && text.trim().length > 5) {
             setSelection({ start: 0, end: 0, text: text });
         } else {
             setSelection(null);
@@ -212,29 +216,36 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const filteredHistory = useMemo(() => (documentVersions || []).filter(v => v.document_type === currentDocType), [documentVersions, currentDocType]);
 
     const displayContent = useMemo(() => {
-        if (isEditing) return localContent;
-        if (isTable && !isStreaming) return jsonToMarkdownTable(localContent);
-        return localContent;
-    }, [isEditing, isStreaming, isTable, localContent]);
-    
-    const parsedRequestDoc = useMemo(() => {
+        const contentToDisplay = isEditing ? localContent : content;
+
         if (docKey === 'requestDoc' && !isEditing) {
             try {
-                const parsed = JSON.parse(content);
-                return isIsBirimiTalep(parsed) ? parsed : null;
-            } catch { return null; }
+                const parsed = JSON.parse(contentToDisplay);
+                if (isIsBirimiTalep(parsed)) {
+                    return requestDocToMarkdown(parsed);
+                }
+            } catch {
+                return '**Hata:** Talep dokümanı içeriği geçersiz.';
+            }
         }
-        return null;
-    }, [docKey, content, isEditing]);
 
+        if (isTable && !isStreaming) return jsonToMarkdownTable(contentToDisplay);
+        return contentToDisplay;
+    }, [isEditing, isStreaming, isTable, localContent, content, docKey]);
+    
     const currentVersion = filteredHistory.length > 0 ? Math.max(...filteredHistory.map(v => v.version_number)) : 0;
+    const showAiButton = (docKey === 'analysisDoc' || docKey === 'testScenarios');
 
     return (
         <div className="flex flex-col h-full relative">
             <LintingSuggestionsBar issues={lintIssues} onFix={handleFixIssue} onDismiss={(issue) => setLintIssues(prev => prev.filter(i => i !== issue))} isFixing={isFixing} />
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-2 md:p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
                 <div className="flex items-center gap-2 flex-wrap">
-                     <button onClick={() => setIsAiModalOpen(true)} disabled={!selection || (docKey !== 'analysisDoc' && docKey !== 'testScenarios')} title="AI ile düzenle" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1 text-indigo-600 dark:text-indigo-400 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed"><Sparkles className="h-4 w-4" /> <span className="text-sm font-semibold">Oluştur</span></button>
+                     {showAiButton && (
+                        <button onClick={() => setIsAiModalOpen(true)} disabled={!selection || !isEditing} title="AI ile düzenle" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1 text-indigo-600 dark:text-indigo-400 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed">
+                            <Sparkles className="h-4 w-4" /> <span className="text-sm font-semibold">Oluştur</span>
+                        </button>
+                     )}
                 </div>
                 <div className="flex items-center gap-4">
                      <div className="flex items-center gap-1"><span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded-md">v{currentVersion}</span><button onClick={() => setIsHistoryModalOpen(true)} title="Versiyon Geçmişi" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400" disabled={filteredHistory.length === 0}><History className="h-4 w-4"/></button></div>
@@ -244,21 +255,15 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                     <ExportDropdown content={displayContent} filename={filename} isTable={isTable} />
                 </div>
             </div>
-            <div className="flex-1 relative min-h-0">
-                {isEditing ? (
-                    <TiptapEditor
-                        content={localContent}
-                        onChange={setLocalContent}
-                        onSelectionUpdate={handleTiptapSelection}
-                    />
-                ) : parsedRequestDoc ? (
-                    <RequestDocumentViewer document={parsedRequestDoc} />
-                ) : (
-                    <div className="h-full overflow-y-auto p-2 md:p-6" onMouseUp={handleSelection}>
-                        <MarkdownRenderer content={displayContent} rephrasingText={inlineModificationState?.docKey === docKey ? inlineModificationState.originalText : null} highlightedUserSelectionText={selection?.text || null} />
-                    </div>
-                )}
-            </div>
+            
+            <TiptapEditor
+                content={displayContent}
+                onChange={setLocalContent}
+                onSelectionUpdate={handleTiptapSelection}
+                isEditable={isEditing}
+                onAiModifyClick={() => setIsAiModalOpen(true)}
+            />
+
              {isAiModalOpen && selection && <AiAssistantModal selectedText={selection.text} onGenerate={handleAiModify} onClose={() => { setIsAiModalOpen(false); setSelection(null); }} isLoading={!!inlineModificationState} />}
             {isHistoryModalOpen && <VersionHistoryModal isOpen={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)} versions={filteredHistory} documentName={documentName} onRestore={onRestoreVersion} />}
         </div>

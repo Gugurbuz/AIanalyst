@@ -1,5 +1,6 @@
 // hooks/useDocumentServices.ts
-import { useState, useCallback } from 'react';
+// FIX: Import React to fix "Cannot find namespace 'React'" error for React.ChangeEvent type.
+import React, { useState, useCallback } from 'react';
 import { geminiService } from '../services/geminiService';
 import { promptService } from '../services/promptService';
 import type { useConversationState } from './useConversationState';
