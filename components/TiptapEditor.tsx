@@ -21,9 +21,17 @@ import BubbleMenuExtension from '@tiptap/extension-bubble-menu';
 import { supabase } from '../services/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 
-// HATA DÜZELTMESİ: lowlight v3 import yapısı
-import { createLowlight } from "lowlight";
-import { common } from 'lowlight/common';
+// HATA DÜZELTMESİ: 'lowlight/common' paketinden kaynaklanan modül çözümleme hatasını gidermek için
+// 'lowlight' ve yaygın diller ayrı ayrı import edilip birleştirildi.
+import { createLowlight, common } from "lowlight";
+import xml from 'highlight.js/lib/languages/xml';
+import css from 'highlight.js/lib/languages/css';
+import javascript from 'highlight.js/lib/languages/javascript';
+import typescript from 'highlight.js/lib/languages/typescript';
+import sql from 'highlight.js/lib/languages/sql';
+import python from 'highlight.js/lib/languages/python';
+import java from 'highlight.js/lib/languages/java';
+
 
 import { marked } from 'marked';
 import TurndownService from 'turndown';
@@ -36,8 +44,16 @@ import {
     AlignLeft, AlignCenter, AlignRight, AlignJustify, Image as ImageIcon
 } from 'lucide-react';
 
-// HATA DÜZELTMESİ: lowlight v3 kullanımı
-const lowlight = createLowlight(common);
+// HATA DÜZELTMESİ: lowlight örneği oluşturulup diller manuel olarak kaydedildi.
+const lowlight = createLowlight();
+lowlight.register('xml', xml);
+lowlight.register('css', css);
+lowlight.register('javascript', javascript);
+lowlight.register('typescript', typescript);
+lowlight.register('sql', sql);
+lowlight.register('python', python);
+lowlight.register('java', java);
+
 
 interface TiptapEditorProps {
     content: string;
