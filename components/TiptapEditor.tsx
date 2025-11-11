@@ -43,7 +43,7 @@ interface TiptapEditorProps {
     content: string;
     onChange: (markdown: string) => void;
     onSelectionUpdate: (text: string) => void;
-    isEditable: boolean;
+    isEditable: boolean; // <-- GEREKLİ PROP EKLENDİ
     onAiModifyClick: () => void;
 }
 
@@ -194,10 +194,7 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
                 heading: { levels: [1, 2, 3] },
                 codeBlock: false,
             }),
-            // HATA DÜZELTMESİ: BubbleMenu eklentisini buraya ekle
-            BubbleMenuExtension.configure({
-                element: document.createElement('div'), // Gerçek elementi EditorBubbleMenu sağlar
-            }),
+            BubbleMenuExtension, // Eklentiyi buraya ekleyin
             Placeholder.configure({
                 placeholder: 'Doküman içeriğini buraya yazın...',
             }),
@@ -293,7 +290,7 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
             console.error("Resim yükleme hatası:", error);
             alert(`Resim yüklenirken bir hata oluştu: ${error instanceof Error ? error.message : String(error)}`);
         }
-    }, [editor]); // editor'ü bağımlılık listesine ekle
+    }, [editor]);
 
     React.useEffect(() => {
         const updateContent = async () => {
@@ -304,11 +301,9 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
                 
                 const currentContentAsMarkdown = turndownService.turndown(editor.getHTML());
                 if (currentContentAsMarkdown.trim() !== content.trim()) {
-                    // HATA DÜZELTMESİ: marked.parse asenkrondur (Promise döner)
-                    const html = await marked.parse(content || '');
+                    const html = await marked.parse(content || ''); // marked.parse asenkron
                     const sanitizedHtml = DOMPurify.sanitize(html, { ADD_TAGS: ['iframe'], ADD_ATTR: ['allow', 'allowfullscreen', 'frameborder', 'scrolling'] });
-                    // HATA DÜZELTMESİ: setContent'in 2. parametresi bir obje olmalı
-                    editor.commands.setContent(sanitizedHtml, { emitUpdate: false }); 
+                    editor.commands.setContent(sanitizedHtml, { emitUpdate: false }); // 2. parametre obje olmalı
                 }
             }
         };
