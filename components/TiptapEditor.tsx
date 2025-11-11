@@ -22,7 +22,7 @@ import { supabase } from '../services/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 
 // HATA DÜZELTMESİ: lowlight v3 import yapısı
-import { createLowlight } from 'lowlight/lib/core';
+import { createLowlight } from "lowlight";
 import { common } from 'lowlight/common';
 
 import { marked } from 'marked';
