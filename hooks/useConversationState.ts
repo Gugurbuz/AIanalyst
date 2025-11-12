@@ -26,7 +26,6 @@ const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs> = {
     analysis: 'analysisDoc',
     test: 'testScenarios',
     traceability: 'traceabilityMatrix',
-    mermaid: 'mermaidViz',
     bpmn: 'bpmnViz',
     maturity_report: 'maturityReport',
 };
@@ -36,7 +35,6 @@ const keyToDocumentTypeMap: Record<keyof GeneratedDocs, DocumentType | null> = {
     analysisDoc: 'analysis',
     testScenarios: 'test',
     traceabilityMatrix: 'traceability',
-    mermaidViz: 'mermaid',
     bpmnViz: 'bpmn',
     maturityReport: 'maturity_report',
     visualization: null,
@@ -56,7 +54,7 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
     for (const doc of documents) {
         const key = documentTypeToKeyMap[doc.document_type];
         if (key) {
-             if (key === 'mermaidViz' || key === 'bpmnViz' || key === 'maturityReport' || key === 'testScenarios' || key === 'traceabilityMatrix') {
+             if (key === 'bpmnViz' || key === 'maturityReport' || key === 'testScenarios' || key === 'traceabilityMatrix') {
                 try {
                     (docs as any)[key] = JSON.parse(doc.content);
                 } catch (e) {
@@ -79,7 +77,7 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
     }
     
     // Read staleness from the source of truth (the document objects)
-    docs.isVizStale = findDoc('mermaid')?.is_stale || findDoc('bpmn')?.is_stale || false;
+    docs.isVizStale = findDoc('bpmn')?.is_stale || false;
     docs.isTestStale = findDoc('test')?.is_stale || false;
     docs.isTraceabilityStale = findDoc('traceability')?.is_stale || false;
     

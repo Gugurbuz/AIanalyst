@@ -32,7 +32,7 @@ export const BPMNViewer: React.FC<BPMNViewerProps> = ({ xml, setSvgContentGetter
 
         const modeler = new window.BpmnJS({
             container: containerRef.current,
-            keyboard: { bindTo: window },
+            keyboard: { bindTo: containerRef.current },
         });
         modelerRef.current = modeler;
         
@@ -103,7 +103,11 @@ export const BPMNViewer: React.FC<BPMNViewerProps> = ({ xml, setSvgContentGetter
     }, [xml]);
 
     return (
-        <div className="w-full h-full relative" ref={containerRef}>
+        <div 
+            className="w-full h-full relative focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-md" 
+            ref={containerRef}
+            tabIndex={0}
+        >
             {isLoading && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/50 dark:bg-slate-800/50 z-10">
                     <LoaderCircle className="animate-spin h-8 w-8 text-indigo-500" />

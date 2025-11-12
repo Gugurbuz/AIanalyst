@@ -18,12 +18,12 @@ export const useUIState = () => {
     const [suggestionError, setSuggestionError] = useState<string | null>(null);
     const [isRegenerateModalOpen, setIsRegenerateModalOpen] = useState(false);
     const regenerateModalData = useRef<{ docType: 'analysis' | 'test' | 'traceability', newTemplateId: string } | null>(null);
-    const [activeDocTab, setActiveDocTab] = useState<'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation'>('analysis');
+    const [activeDocTab, setActiveDocTab] = useState<'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | 'overview'>('overview');
     const [isDeveloperPanelOpen, setIsDeveloperPanelOpen] = useState(false);
     const [isFeedbackDashboardOpen, setIsFeedbackDashboardOpen] = useState(false);
     const [isDeepAnalysisMode, setIsDeepAnalysisMode] = useState(false);
     const [isExpertMode, setIsExpertMode] = useState(false);
-    const [diagramType, setDiagramType] = useState<'mermaid' | 'bpmn'>('mermaid');
+    const [diagramType, setDiagramType] = useState<'mermaid' | 'bpmn'>('bpmn');
     const [displayedMaturityScore, setDisplayedMaturityScore] = useState<{ score: number; justification: string } | null>(null);
     const maturityScoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [longTextPrompt, setLongTextPrompt] = useState<{ content: string; callback: (choice: 'analyze' | 'save') => void } | null>(null);

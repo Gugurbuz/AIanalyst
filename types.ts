@@ -108,7 +108,7 @@ export interface MaturityReport {
     maturity_level: MaturityLevel; // Kalitatif değerlendirme
 }
 
-export type DocumentType = 'analysis' | 'test' | 'traceability' | 'mermaid' | 'bpmn' | 'maturity_report' | 'request';
+export type DocumentType = 'analysis' | 'test' | 'traceability' | 'bpmn' | 'maturity_report' | 'request';
 
 export interface DocumentVersion {
     id: string;
@@ -153,7 +153,6 @@ export interface GeneratedDocs {
     testScenarios: SourcedDocument | string;
     visualization: string; // Legacy, for backward compatibility
     visualizationType?: 'mermaid' | 'bpmn'; // Legacy
-    mermaidViz?: VizData;
     bpmnViz?: VizData;
     traceabilityMatrix: SourcedDocument | string;
     maturityReport?: MaturityReport | null;
@@ -216,7 +215,7 @@ export interface Template {
     id: string;
     user_id: string | null;
     name: string;
-    document_type: 'analysis' | 'test' | 'traceability' | 'mermaid' | 'bpmn';
+    document_type: 'analysis' | 'test' | 'traceability' | 'bpmn';
     prompt: string;
     is_system_template: boolean;
 }
@@ -291,7 +290,7 @@ export interface StructuredTestScenario {
     "Test Senaryo ID": string;
     "İlgili Gereksinim": string;
     "Senaryo Açıklaması": string;
-    "Test Adımları": string;
+    "Test Adımları": string[];
     "Beklenen Sonuç": string;
 }
 
@@ -300,4 +299,3 @@ export interface StructuredTraceabilityRow {
     "Gereksinim Açıklaması": string;
     "İlgili Test Senaryo ID'leri": string; // Comma separated string
 }
-// ... diğer tipler

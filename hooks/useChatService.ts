@@ -146,7 +146,10 @@ export const useChatService = ({
         if (!isRetry) {
             historyForApi = [...(currentConv?.messages || []), userMessage];
             conversationState.updateConversation(activeId, { messages: historyForApi });
-            supabase.from('conversation_details').insert(userMessage).then(({error}) => {
+            
+            // FIX: Create a plain object for insertion to avoid sending client-side only properties.
+            const { id, conversation_id, role, content, created_at } = userMessage;
+            supabase.from('conversation_details').insert({ id, conversation_id, role, content, created_at }).then(({error}) => {
                 if(error) uiState.setError(`Mesajınız kaydedilemedi: ${error.message}`);
             });
         } else {

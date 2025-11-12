@@ -317,7 +317,7 @@ export const geminiService = {
         }
     },
     
-    runExpertAnalysisStream: async function* (userMessage: Message, generatedDocs: GeneratedDocs, templates: { analysis: string; test: string; traceability: string; visualization: string; }, diagramType: 'mermaid' | 'bpmn'): AsyncGenerator<StreamChunk> {
+    runExpertAnalysisStream: async function* (userMessage: Message, generatedDocs: GeneratedDocs, templates: { analysis: string; test: string; traceability: string; visualization: string; }, diagramType: 'bpmn'): AsyncGenerator<StreamChunk> {
         let totalTokens = 0;
         
         const initialChecklist: ExpertStep[] = [
@@ -395,7 +395,7 @@ export const geminiService = {
                 yield { type: 'usage_update', tokens };
                 const sourceHash = uuidv4(); // Use a unique hash for expert mode runs
                 const vizData = { code, sourceHash };
-                const vizKey = diagramType === 'bpmn' ? 'bpmnViz' : 'mermaidViz';
+                const vizKey = diagramType === 'bpmn' ? 'bpmnViz' : 'bpmnViz';
                 yield { type: 'doc_stream_chunk', docKey: vizKey, chunk: vizData };
                 initialChecklist[2].status = 'completed';
                 initialChecklist[2].details = undefined;
@@ -703,18 +703,21 @@ export const geminiService = {
         }
     },
 
-    generateDiagram: async (analysisDoc: string, type: 'mermaid' | 'bpmn', template: string, model: GeminiModel): Promise<{ code: string, tokens: number }> => {
+    generateDiagram: async (analysisDoc: string, type: 'bpmn', template: string, model: GeminiModel): Promise<{ code: string, tokens: number }> => {
         const prompt = template.replace('{analysis_document_content}', analysisDoc);
         const { text, tokens } = await generateContent(prompt, model);
-        const codeBlockRegex = type === 'mermaid' ? /```mermaid\n([\s\S]*?)\n```/ : /```xml\n([\s\S]*?)\n```/;
+        const codeBlockRegex = /```xml\n([\s\S]*?)\n```/;
         const match = text.match(codeBlockRegex);
         return { code: match ? match[1].trim() : text, tokens };
     },
 
-    generateAnalysisDocument: async function* (requestDoc: string, history: Message[], template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
+    generateAnalysisDocument: async function* (requestDoc: string, history: Message[], templateContent: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
         const historyString = history.map(m => `${m.role}: ${m.content}`).join('\n');
         
-        const prompt = template
+        const basePrompt = promptService.getPrompt('generateAnalysisDocument');
+
+        const prompt = basePrompt
+            .replace('{template_content}', templateContent)
             .replace('{request_document_content}', requestDoc || "[Talep Dokümanı Yok]")
             .replace('{conversation_history}', historyString);
 
