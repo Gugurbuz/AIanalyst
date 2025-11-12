@@ -179,84 +179,83 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
         setIsSaving(true);
         setError(null);
 
-        const { data: existingTasks, error: fetchError } = await supabase
-            .from('tasks')
-            .select('task_key')
-            .eq('user_id', conversation.user_id);
+        try {
+            const { data: existingTasks, error: fetchError } = await supabase
+                .from('tasks')
+                .select('task_key')
+                .eq('user_id', conversation.user_id);
 
-        if (fetchError) {
-            setError(fetchError.message);
-            setIsSaving(false);
-            return;
-        }
+            if (fetchError) {
+                throw fetchError;
+            }
 
-        let maxKeyNum = 0;
-        if (existingTasks) {
-            for (const task of existingTasks) {
-                if (task.task_key && typeof task.task_key === 'string' && task.task_key.startsWith('TASK-')) {
-                    const numPart = parseInt(task.task_key.split('-')[1], 10);
-                    if (!isNaN(numPart) && numPart > maxKeyNum) {
-                        maxKeyNum = numPart;
+            let maxKeyNum = 0;
+            if (existingTasks) {
+                for (const task of existingTasks) {
+                    if (task.task_key && typeof task.task_key === 'string' && task.task_key.startsWith('TASK-')) {
+                        const numPart = parseInt(task.task_key.split('-')[1], 10);
+                        if (!isNaN(numPart) && numPart > maxKeyNum) {
+                            maxKeyNum = numPart;
+                        }
                     }
                 }
             }
-        }
 
-        const flatSelectedSuggestions: { suggestion: BacklogSuggestion, parentSuggestionId: string | null }[] = [];
-        const traverseAndCollect = (items: BacklogSuggestion[], parentId: string | null) => {
-            items.forEach(item => {
-                if (selectedIds.has(item.id)) {
-                    flatSelectedSuggestions.push({ suggestion: item, parentSuggestionId: parentId });
-                }
-                if (item.children) {
-                    traverseAndCollect(item.children, item.id);
+            const flatSelectedSuggestions: { suggestion: BacklogSuggestion, parentSuggestionId: string | null }[] = [];
+            const traverseAndCollect = (items: BacklogSuggestion[], parentId: string | null) => {
+                items.forEach(item => {
+                    if (selectedIds.has(item.id)) {
+                        flatSelectedSuggestions.push({ suggestion: item, parentSuggestionId: parentId });
+                    }
+                    if (item.children) {
+                        traverseAndCollect(item.children, item.id);
+                    }
+                });
+            };
+            traverseAndCollect(suggestions, null);
+            
+            if (flatSelectedSuggestions.length === 0) {
+                setError("Lütfen panoya eklemek için en az bir görev seçin.");
+                return;
+            }
+            
+            // Map old suggestion IDs to new database UUIDs to maintain hierarchy
+            const suggestionIdToDbId = new Map<string, string>();
+            
+            const tasksToInsert = flatSelectedSuggestions.map(({ suggestion }, index) => {
+                const newDbId = uuidv4();
+                suggestionIdToDbId.set(suggestion.id, newDbId);
+                const newKeyNum = maxKeyNum + index + 1;
+                
+                return {
+                    id: newDbId,
+                    task_key: `TASK-${newKeyNum}`,
+                    user_id: conversation.user_id,
+                    conversation_id: conversation.id,
+                    parent_id: null, // This will be updated in the next step
+                    title: suggestion.title,
+                    description: suggestion.description,
+                    priority: suggestion.priority,
+                    status: 'todo' as const,
+                    type: suggestion.type,
+                };
+            });
+            
+            // Now, set the correct parent_id using our map
+            // FIX: The `parentSuggestionId` is on the `item` object, not inside the `suggestion` object.
+            // The previous code `suggestion.parentSuggestionId` was incorrect. This is now corrected to `item.parentSuggestionId`.
+            flatSelectedSuggestions.forEach((item, index) => {
+                if (item.parentSuggestionId && suggestionIdToDbId.has(item.parentSuggestionId)) {
+                    tasksToInsert[index].parent_id = suggestionIdToDbId.get(item.parentSuggestionId)!;
                 }
             });
-        };
-        traverseAndCollect(suggestions, null);
-        
-        if (flatSelectedSuggestions.length === 0) {
-            setError("Lütfen panoya eklemek için en az bir görev seçin.");
-            setIsSaving(false);
-            return;
-        }
-        
-        // Map old suggestion IDs to new database UUIDs to maintain hierarchy
-        const suggestionIdToDbId = new Map<string, string>();
-        
-        const tasksToInsert = flatSelectedSuggestions.map(({ suggestion }, index) => {
-            const newDbId = uuidv4();
-            suggestionIdToDbId.set(suggestion.id, newDbId);
-            const newKeyNum = maxKeyNum + index + 1;
-            
-            return {
-                id: newDbId,
-                task_key: `TASK-${newKeyNum}`,
-                user_id: conversation.user_id,
-                conversation_id: conversation.id,
-                parent_id: null, // This will be updated in the next step
-                title: suggestion.title,
-                description: suggestion.description,
-                priority: suggestion.priority,
-                status: 'todo' as const,
-                type: suggestion.type,
-            };
-        });
-        
-        // Now, set the correct parent_id using our map
-        // FIX: The `parentSuggestionId` is on the `item` object, not inside the `suggestion` object.
-        // The previous code `suggestion.parentSuggestionId` was incorrect. This is now corrected to `item.parentSuggestionId`.
-        flatSelectedSuggestions.forEach((item, index) => {
-            if (item.parentSuggestionId && suggestionIdToDbId.has(item.parentSuggestionId)) {
-                tasksToInsert[index].parent_id = suggestionIdToDbId.get(item.parentSuggestionId)!;
+
+            const { error: insertError } = await supabase.from('tasks').insert(tasksToInsert);
+
+            if (insertError) {
+                throw insertError;
             }
-        });
 
-        const { error: insertError } = await supabase.from('tasks').insert(tasksToInsert);
-
-        if (insertError) {
-            setError(insertError.message);
-        } else {
             // Filter out added suggestions and their children from the UI
             const addedTopLevelIds = new Set(
                 suggestions.filter(s => selectedIds.has(s.id)).map(s => s.id)
@@ -268,8 +267,12 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
             });
             setSelectedIds(new Set());
             alert(`${tasksToInsert.length} madde başarıyla Backlog panosuna eklendi.`);
+
+        } catch (err: any) {
+            setError(err.message || 'Backlog maddeleri kaydedilirken bir hata oluştu.');
+        } finally {
+            setIsSaving(false);
         }
-        setIsSaving(false);
     };
 
     if (isGenerating) {

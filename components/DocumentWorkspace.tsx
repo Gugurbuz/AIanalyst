@@ -67,7 +67,8 @@ interface DocumentWorkspaceProps {
     diagramType: 'bpmn';
     setDiagramType: (type: 'bpmn') => void;
     onAddTokens: (tokens: number) => void;
-    onRestoreVersion: (version: DocumentVersion) => void;
+    // FIX: Changed the return type of onRestoreVersion to Promise<void> to match the async function it receives.
+    onRestoreVersion: (version: DocumentVersion) => Promise<void>;
 }
 
 const StaleIndicator: React.FC<{ isStale?: boolean; onUpdate: () => void }> = ({ isStale, onUpdate }) => {

@@ -31,7 +31,8 @@ interface DocumentCanvasProps {
     generationDisabledTooltip?: string;
     documentVersions: DocumentVersion[];
     onAddTokens: (tokens: number) => void;
-    onRestoreVersion: (version: DocumentVersion) => void;
+    // FIX: Changed onRestoreVersion to return a Promise to match the async function it receives.
+    onRestoreVersion: (version: DocumentVersion) => Promise<void>;
 }
 
 // --- Helper Functions for Structured Document Conversion ---

@@ -116,14 +116,15 @@ export const useConversationState = ({ user, initialData }: UseConversationState
 
     const saveConversation = useCallback(async (conv: Partial<Conversation> & { id: string }) => {
         setSaveStatus('saving');
-        const { messages, documentVersions, documents, backlogSuggestions, ...updatePayload } = conv;
-        const { error } = await supabase.from('conversations').update(updatePayload).eq('id', conv.id);
-        if (error) {
-            setSaveStatus('error');
-            console.error('Save error:', error);
-        } else {
+        try {
+            const { messages, documentVersions, documents, backlogSuggestions, ...updatePayload } = conv;
+            const { error } = await supabase.from('conversations').update(updatePayload).eq('id', conv.id);
+            if (error) throw error;
             setSaveStatus('saved');
             setTimeout(() => setSaveStatus('idle'), 2000);
+        } catch (error) {
+            setSaveStatus('error');
+            console.error('Save error:', error);
         }
     }, []);
 
@@ -135,8 +136,12 @@ export const useConversationState = ({ user, initialData }: UseConversationState
     }, [triggerSave]);
 
     const saveProfile = useCallback(async (profile: UserProfile) => {
-        const { error } = await supabase.from('user_profiles').update({ tokens_used: profile.tokens_used }).eq('id', profile.id);
-        if (error) console.error('Failed to update user profile:', error.message);
+        try {
+            const { error } = await supabase.from('user_profiles').update({ tokens_used: profile.tokens_used }).eq('id', profile.id);
+            if (error) throw error;
+        } catch (error: any) {
+            console.error('Failed to update user profile:', error.message);
+        }
     }, []);
 
     const triggerProfileSave = useDebounce(saveProfile, 2000);
@@ -344,44 +349,64 @@ export const useConversationState = ({ user, initialData }: UseConversationState
     
     const fetchAllFeedback = useCallback(async () => {
         setIsFetchingFeedback(true);
-        const { data, error } = await supabase.from('conversations').select('title, conversation_details(*)').eq('user_id', user.id);
-        if (error) {
+        try {
+            const { data, error } = await supabase.from('conversations').select('title, conversation_details(*)').eq('user_id', user.id);
+            if (error) throw error;
+            
+            if (data) {
+                const feedbackItems: FeedbackItem[] = data.flatMap(conv => 
+                    (conv.conversation_details || []).filter(msg => msg.role === 'assistant' && msg.feedback && (msg.feedback.rating || msg.feedback.comment))
+                                                    .map(msg => ({ message: msg, conversationTitle: conv.title || 'Başlıksız Analiz' }))
+                );
+                setAllFeedback(feedbackItems);
+            }
+             return null;
+        } catch (error: any) {
             console.error("Geri bildirim getirilirken hata:", error);
             setAllFeedback([]);
-        } else if (data) {
-            const feedbackItems: FeedbackItem[] = data.flatMap(conv => 
-                (conv.conversation_details || []).filter(msg => msg.role === 'assistant' && msg.feedback && (msg.feedback.rating || msg.feedback.comment))
-                                                .map(msg => ({ message: msg, conversationTitle: conv.title || 'Başlıksız Analiz' }))
-            );
-            setAllFeedback(feedbackItems);
+            return error;
+        } finally {
+            setIsFetchingFeedback(false);
         }
-        setIsFetchingFeedback(false);
-        return error;
     }, [user.id]);
 
     const updateConversationTitle = useCallback(async (id: string, title: string) => {
         updateConversation(id, { title });
-        const { error } = await supabase.from('conversations').update({ title }).eq('id', id);
-        if (error) {
+        try {
+            const { error } = await supabase.from('conversations').update({ title }).eq('id', id);
+            if (error) throw error;
+        } catch (error) {
             console.error("Failed to update title:", error);
-            // Optionally revert UI change
+            // Optionally revert or show an error to the user
         }
     }, [updateConversation]);
 
     const deleteConversation = useCallback(async (id: string) => {
-        // Optimistic UI update
         const originalConversations = conversations;
-        setConversations(prev => prev.filter(c => c.id !== id));
+        const originalActiveId = activeConversationId;
+        
+        const deletedIndex = originalConversations.findIndex(c => c.id === id);
+        if (deletedIndex === -1) return;
+
+        const newConversations = originalConversations.filter(c => c.id !== id);
+        setConversations(newConversations);
+        
         if (activeConversationId === id) {
-            setActiveConversationId(conversations.length > 1 ? conversations.filter(c => c.id !== id)[0].id : null);
+            let nextActiveId: string | null = null;
+            if (newConversations.length > 0) {
+                nextActiveId = newConversations[deletedIndex]?.id || newConversations[deletedIndex - 1]?.id || null;
+            }
+            setActiveConversationId(nextActiveId);
         }
 
-        const { error } = await supabase.from('conversations').delete().eq('id', id);
-
-        if (error) {
+        try {
+            const { error } = await supabase.from('conversations').delete().eq('id', id);
+            if (error) throw error;
+        } catch (error) {
             console.error("Failed to delete conversation:", error);
-            // Revert UI on error
             setConversations(originalConversations);
+            setActiveConversationId(originalActiveId);
+            // Optionally show an error to the user
         }
     }, [conversations, activeConversationId]);
     

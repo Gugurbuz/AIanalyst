@@ -1,5 +1,6 @@
-// FIX: Removed `type Commands` from import to fix module augmentation error.
-import { Node, mergeAttributes } from '@tiptap/core';
+// FIX: Changed 'type Commands' to a direct import to resolve module augmentation issues.
+// FIX: Import 'Commands' type to help TypeScript resolve the module for augmentation.
+import { Node, mergeAttributes, type Commands } from '@tiptap/core';
 
 export interface IframeOptions {
   allowFullscreen: boolean,
