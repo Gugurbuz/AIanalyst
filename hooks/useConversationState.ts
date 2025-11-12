@@ -215,11 +215,49 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         const { data: newVersionDb, error: insertError } = await supabase.from('document_versions').insert(newVersionRecord).select().single();
         if (insertError || !newVersionDb) throw new Error("Doküman versiyonu kaydedilemedi: " + (insertError?.message || 'Bilinmeyen hata'));
         
-        const { error: upsertError } = await supabase.from('documents').upsert({
-            conversation_id: conversationId, user_id: user.id, document_type: document_type,
-            content: newContentString, current_version_id: newVersionDb.id, template_id: validTemplateId
-        }, { onConflict: 'conversation_id, document_type' }).select().single();
-        if (upsertError) throw new Error("Ana doküman kaydedilemedi: " + (upsertError?.message || 'Bilinmeyen hata'));
+        // --- START OF FIX: Replaced 'upsert' with explicit 'select' then 'update'/'insert' ---
+        const payload = {
+            conversation_id: conversationId,
+            user_id: user.id,
+            document_type: document_type,
+            content: newContentString,
+            current_version_id: newVersionDb.id,
+            template_id: validTemplateId,
+            is_stale: false, // Explicitly set this on update
+        };
+
+        const { data: existingDoc, error: findError } = await supabase
+            .from('documents')
+            .select('id')
+            .eq('conversation_id', conversationId)
+            .eq('document_type', document_type)
+            .maybeSingle();
+
+        if (findError) {
+            throw new Error(`Doküman aranırken hata oluştu: ${findError.message}`);
+        }
+
+        if (existingDoc) {
+            // Update existing document by its primary key
+            const { error: updateError } = await supabase
+                .from('documents')
+                .update(payload)
+                .eq('id', existingDoc.id);
+
+            if (updateError) {
+                throw new Error(`Ana doküman güncellenemedi: ${updateError.message}`);
+            }
+        } else {
+            // Insert new document
+            const { error: mainInsertError } = await supabase
+                .from('documents')
+                .insert(payload);
+
+            if (mainInsertError) {
+                throw new Error(`Ana doküman kaydedilemedi: ${mainInsertError.message}`);
+            }
+        }
+        // --- END OF FIX ---
 
         // Optimistic update
         setConversations(prev => prev.map(c => {
@@ -245,13 +283,15 @@ export const useConversationState = ({ user, initialData }: UseConversationState
 
     const streamedDocsRef = useRef<Partial<Record<keyof GeneratedDocs, string>>>({});
 
-    const streamDocument = useCallback((docKey: keyof GeneratedDocs, newContent: string) => {
+    const streamDocument = useCallback((docKey: keyof GeneratedDocs, newContent: any) => {
         const document_type = keyToDocumentTypeMap[docKey];
         if (!document_type) {
             console.warn(`Unknown docKey "${String(docKey)}" passed to streamDocument. Skipping.`);
             return;
         }
     
+        const newContentString = typeof newContent === 'string' ? newContent : JSON.stringify(newContent);
+
         setConversations(prev => prev.map(c => {
             if (c.id !== activeConversationId) return c;
     
@@ -262,7 +302,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
                 if (doc.document_type === document_type) {
                     docFound = true;
                     // Always replace content for live streaming view
-                    return { ...doc, content: newContent, updated_at: new Date().toISOString() };
+                    return { ...doc, content: newContentString, updated_at: new Date().toISOString() };
                 }
                 return doc;
             });
@@ -275,7 +315,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                     document_type,
-                    content: newContent,
+                    content: newContentString,
                     current_version_id: null,
                     is_stale: false,
                 };
@@ -287,7 +327,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         }));
     
         // Update the ref for the final save operation at the end of the stream.
-        streamedDocsRef.current[docKey] = newContent;
+        streamedDocsRef.current[docKey] = newContentString;
     }, [activeConversationId, user.id]);
 
     const finalizeStreamedDocuments = useCallback(async (templateId?: string | null) => {

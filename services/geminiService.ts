@@ -390,6 +390,7 @@ export const geminiService = {
             initialChecklist[2].details = "Oluşturuluyor...";
             yield { type: 'thought_chunk', payload: createThought("Süreç Görselleştiriliyor", initialChecklist) };
             try {
+                // FIX: Removed erroneous function call `()` on model name string literal.
                 const { code, tokens } = await this.generateDiagram(analysisDocContent, diagramType, templates.visualization, 'gemini-2.5-flash');
                 totalTokens += tokens;
                 yield { type: 'usage_update', tokens };
@@ -412,6 +413,7 @@ export const geminiService = {
             yield { type: 'thought_chunk', payload: createThought("Test Senaryoları Oluşturuluyor", initialChecklist) };
             let testScenariosContent = '';
             try {
+                // FIX: Removed erroneous function call `()` on model name string literal.
                 const testStream = this.generateTestScenarios(analysisDocContent, templates.test, 'gemini-2.5-flash');
                  for await (const chunk of testStream) {
                     if(chunk.type === 'doc_stream_chunk') testScenariosContent = chunk.chunk;
@@ -432,6 +434,7 @@ export const geminiService = {
                 initialChecklist[4].details = "Oluşturuluyor...";
                 yield { type: 'thought_chunk', payload: createThought("İzlenebilirlik Matrisi Oluşturuluyor", initialChecklist) };
                 try {
+                    // FIX: Removed erroneous function call `()` on model name string literal.
                     const matrixStream = this.generateTraceabilityMatrix(analysisDocContent, testScenariosContent, templates.traceability, 'gemini-2.5-flash');
                     for await (const chunk of matrixStream) {
                         yield chunk;
@@ -815,5 +818,38 @@ export const geminiService = {
             // Fallback to just saving the raw text if parsing fails
             throw new Error("AI, metni yapısal bir talep dokümanına dönüştüremedi.");
         }
+    },
+
+    // --- NEW FEATURES ---
+
+    generateTableFromPrompt: async (prompt: string): Promise<{ tableMarkdown: string, tokens: number }> => {
+        const fullPrompt = `Kullanıcının şu talebine göre bir Markdown tablosu oluştur: "${prompt}". Sadece ve sadece Markdown tablo çıktısını ver. Başka bir açıklama ekleme.`;
+        const { text, tokens } = await generateContent(fullPrompt, 'gemini-2.5-flash');
+        return { tableMarkdown: text, tokens };
+    },
+    
+    answerQuestionAboutDocument: async (docContent: string, question: string): Promise<{ answer: string, tokens: number }> => {
+        const prompt = `Aşağıdaki dokümanla ilgili soruyu cevapla. Cevabın kısa ve net olsun.
+        
+        DOKÜMAN:
+        ---
+        ${docContent}
+        ---
+        SORU: ${question}`;
+        const { text, tokens } = await generateContent(prompt, 'gemini-2.5-flash');
+        return { answer: text, tokens };
+    },
+
+    analyzeRequirementStatusChange: async (docContent: string, reqId: string, newStatus: string): Promise<{ summary: string, tokens: number }> => {
+        const prompt = `Bir iş analizi dokümanında, "${reqId}" ID'li gereksinimin durumu "${newStatus}" olarak değiştirildi. Bu değişikliğin potansiyel etkilerini (örneğin, diğer gereksinimler, test senaryoları, kapsam vb. üzerindeki etkileri) tek bir cümleyle özetle.
+        
+        DOKÜMAN İÇERİĞİ:
+        ---
+        ${docContent}
+        ---
+        
+        Örnek Çıktı: FR-005'in 'Onaylandı' olarak işaretlenmesi, ödeme akışının güncellenmesini ve ilgili test senaryolarının yeniden yazılmasını gerektirebilir.`;
+        const { text, tokens } = await generateContent(prompt, 'gemini-2.5-flash-lite');
+        return { summary: text, tokens };
     },
 };

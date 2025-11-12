@@ -33,6 +33,7 @@ interface DocumentCanvasProps {
     onAddTokens: (tokens: number) => void;
     // FIX: Changed onRestoreVersion to return a Promise to match the async function it receives.
     onRestoreVersion: (version: DocumentVersion) => Promise<void>;
+    onRequirementStatusChange?: (reqId: string, newStatus: string) => void;
 }
 
 // --- Helper Functions for Structured Document Conversion ---
@@ -181,7 +182,7 @@ const LintingSuggestionsBar: React.FC<{ issues: LintingIssue[]; onFix: (issue: L
 };
 
 export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
-    const { content, onContentChange, docKey, onModifySelection, inlineModificationState, isGenerating, isStreaming = false, placeholder, templates, selectedTemplate, onTemplateChange, filename, isTable, onGenerate, generateButtonText, isGenerationDisabled, generationDisabledTooltip, documentVersions, onAddTokens, onRestoreVersion } = props;
+    const { content, onContentChange, docKey, onModifySelection, inlineModificationState, isGenerating, isStreaming = false, placeholder, templates, selectedTemplate, onTemplateChange, filename, isTable, onGenerate, generateButtonText, isGenerationDisabled, generationDisabledTooltip, documentVersions, onAddTokens, onRestoreVersion, onRequirementStatusChange } = props;
 
     const [isEditing, setIsEditing] = useState(false);
     const [selection, setSelection] = useState<{ start: number, end: number, text: string } | null>(null);
@@ -316,6 +317,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     
     const handleAiModifyFromModal = async (userPrompt: string) => {
         if (!selection) return;
+        // FIX: Removed erroneous function call `()` on type assertion.
         await onModifySelection(selection.text, userPrompt, docKey as 'analysisDoc' | 'testScenarios');
         setIsAiModalOpen(false); setSelection(null);
     };
@@ -386,6 +388,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                         isEditable={isEditing}
                         onAiAction={handleAiAction}
                         onCustomAiCommand={() => showAiButton && selection && setIsAiModalOpen(true)}
+                        onRequirementStatusChange={onRequirementStatusChange}
                     />
                 )}
             </div>

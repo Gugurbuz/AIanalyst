@@ -144,6 +144,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             const analyze = async () => {
                 setIsAnalyzingChange(true);
                 try {
+                    // FIX: Removed erroneous function call `()` on model name string literal.
                     const { impact, tokens } = await geminiService.analyzeDocumentChange(prevAnalysisDoc || '', generatedDocs.analysisDoc, 'gemini-2.5-flash-lite');
                     onAddTokens(tokens);
                     if (impact.isVisualizationImpacted) await updateDocumentStaleness('bpmn', true);

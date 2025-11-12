@@ -278,24 +278,42 @@ Conversation History:
                 document_type: 'bpmn',
                 versions: [{
                     versionId: 'default', name: 'Varsayılan v1', createdAt: new Date().toISOString(),
-                    prompt: `Sen uzman bir BPMN 2.0 diyagram oluşturucususun. Görevin, sağlanan iş analizi dokümanını geçerli bir BPMN 2.0 XML formatına dönüştürmektir.
+                    prompt: `Sen uzman bir BPMN 2.0 diyagram oluşturucususun. Görevin, sağlanan iş analizi dokümanını, render edilebilir, %100 geçerli bir BPMN 2.0 XML formatına dönüştürmektir. Oluşturulan XML'in geçerliliği en yüksek önceliktir.
 
-**GEÇERLİ BPMN XML İÇİN KRİİK KURALLAR:**
-1.  **EKSİKSİZ AKIŞLAR:** HER BİR \`<bpmn:sequenceFlow>\` elemanı, hem bir \`sourceRef\` (kaynak elemanın ID'sine işaret eden) hem de bir \`targetRef\` (hedef elemanın ID'sine işaret eden) özniteliğine sahip olmak ZORUNDADIR.
-2.  **BOŞTA KALAN AKIŞLAR KESİNLİKLE YASAK:** ASLA ve ASLA \`targetRef\` olmadan bir \`<bpmn:sequenceFlow>\` oluşturmamalısın. Bu, kaçınılması gereken en yaygın ve kritik hatadır. Bir akışın sonu olmalıdır.
-3.  **GEÇERLİ ID'LER:** Tüm \`sourceRef\` ve \`targetRef\` öznitelikleri, diyagramın başka bir yerinde tanımlanmış geçerli bir eleman ID'sine (örneğin, \`<bpmn:task id="...">\`, \`<bpmn:endEvent id="...">\`) işaret etmelidir.
-4.  **DİYAGRAM ELEMANLARI:** \`<bpmndi:BPMNDiagram>\` bölümünün, her görev/olay/geçit için bir \`<bpmndi:BPMNShape>\` ve her akış çizgisi için bir \`<bpmndi:BPMNEdge>\` içeren bir \`<bpmndi:BPMNPlane>\` içerdiğinden emin ol. Her bir kenar (\`BPMNEdge\`), akış çizgisinin ID'siyle eşleşen bir \`bpmnElement\` özniteliğine sahip olmalıdır.
+**ALTIN KURAL (EN ÖNEMLİ):**
+Her \`<bpmn:sequenceFlow>\` elemanı, **MUTLAKA** hem \`sourceRef\` hem de \`targetRef\` özniteliklerine sahip olmalıdır. Bu öznitelikler, diyagramdaki başka bir elemanın ID'sine işaret etmelidir. **EKSİK VEYA BOŞ \`sourceRef\` VEYA \`targetRef\` KESİNLİKLE KABUL EDİLEMEZ.** Kendi kendine kapanan \`<bpmn:sequenceFlow ... />\` etiketleri **YASAKTIR**.
 
-**DOĞRU bir sequenceFlow örneği:**
-<bpmn:sequenceFlow id="Flow_123" sourceRef="Task_A" targetRef="Task_B" />
+**KRİTİK BAŞARI FAKTÖRLERİ:**
+1.  **BAĞLANTI BÜTÜNLÜĞÜ:** Her akış bir yerden başlamalı ve bir yerde bitmelidir. Asla havada kalan oklar olmamalıdır.
+2.  **GEÇERLİ ID REFERANSLARI:** Tüm \`sourceRef\` ve \`targetRef\` değerleri, XML içinde tanımlanmış bir \`id\` ile eşleşmelidir.
+3.  **GÖRSEL TUTARLILIK:** \`<process>\` bölümünde tanımlanan her \`task\`, \`event\`, \`gateway\` ve \`sequenceFlow\` için, \`<bpmndi:BPMNPlane>\` içinde karşılık gelen bir \`<bpmndi:BPMNShape>\` (şekiller için) veya \`<bpmndi:BPMNEdge>\` (oklar/akışlar için) elemanı bulunmalıdır. Her \`BPMNEdge\`, \`bpmnElement\` özniteliği ile doğru \`sequenceFlow\` ID'sine bağlanmalıdır.
 
-**YANLIŞ (YASAKLANMIŞ) bir sequenceFlow örneği:**
-<bpmn:sequenceFlow id="Flow_456" sourceRef="Task_C" />  // <-- BUNU YAPMA. targetRef eksik.
+**ÖRNEK BİR GEÇERLİ YAPI:**
+\`\`\`xml
+<bpmn:definitions ...>
+  <bpmn:process id="Process_1" isExecutable="false">
+    <bpmn:startEvent id="StartEvent_1" />
+    <bpmn:task id="Task_1" name="Görevi Yap" />
+    <bpmn:endEvent id="EndEvent_1" />
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="Task_1" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_1" targetRef="EndEvent_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
+      <bpmndi:BPMNShape id="StartEvent_1_di" bpmnElement="StartEvent_1"> ... </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_1_di" bpmnElement="Task_1"> ... </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1"> ... </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1"> ... </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2"> ... </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
+\`\`\`
 
-**SON KONTROL (ÇOK ÖNEMLİ):**
-XML'i oluşturduktan sonra, göndermeden önce TÜM \`<bpmn:sequenceFlow>\` etiketlerini TEK TEK kontrol et. Her birinin bir \`targetRef\` özniteliği olduğundan %100 emin ol. Eğer bir tane bile eksik \`targetRef\` varsa, bu bir başarısızlıktır ve diyagram çalışmayacaktır. Akışların her zaman bir hedefe bağlanması gerekir.
+**SON KONTROL ADIMI:**
+Çıktıyı vermeden önce, oluşturduğun XML'i bu kurallara göre ZİHİNSEL OLARAK DOĞRULA. Özellikle her \`<bpmn:sequenceFlow>\` elemanını kontrol et.
 
-Şimdi, aşağıdaki iş analizi dokümanına dayanarak BPMN 2.0 XML kodunu oluştur. SADECE ve SADECE \`\`\`xml ... \`\`\` kod bloğu içindeki XML kodunu çıktı olarak ver.
+Şimdi, aşağıdaki iş analizi dokümanına dayanarak BPMN 2.0 XML kodunu oluştur. SADECE ve SADECE \`xml\` kod bloğu içindeki XML kodunu çıktı olarak ver. Başka hiçbir açıklama ekleme.
 
 **İş Analizi Dokümanı:**
 ---

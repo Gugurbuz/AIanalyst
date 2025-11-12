@@ -159,6 +159,47 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         }
     };
 
+    const handleRequirementStatusUpdate = async (reqId: string, newStatus: string) => {
+        const activeConv = conversationState.activeConversation;
+        if (!activeConv) return;
+    
+        try {
+            const { summary, tokens } = await geminiService.analyzeRequirementStatusChange(
+                activeConv.generatedDocs.analysisDoc,
+                reqId,
+                newStatus
+            );
+            conversationState.commitTokenUsage(tokens);
+    
+            const systemMessageContent = `[SİSTEM]: **${reqId}** durumu **'${newStatus}'** olarak güncellendi. AI Analizi: ${summary}`;
+            const systemMessage: Message = {
+                id: uuidv4(),
+                conversation_id: activeConv.id,
+                role: 'system',
+                content: systemMessageContent,
+                created_at: new Date().toISOString(),
+            };
+    
+            conversationState.updateConversation(activeConv.id, {
+                messages: [...activeConv.messages, systemMessage]
+            });
+    
+            const { error } = await supabase.from('conversation_details').insert({
+                id: systemMessage.id,
+                conversation_id: systemMessage.conversation_id,
+                role: systemMessage.role,
+                content: systemMessage.content,
+                created_at: systemMessage.created_at
+            });
+    
+            if (error) {
+                console.warn('Sistem mesajı veritabanına kaydedilemedi:', error);
+            }
+        } catch (e: any) {
+            uiState.setError(`Gereksinim durum analizi sırasında bir hata oluştu: ${e.message}`);
+        }
+    };
+    
     return {
         ...uiState,
         ...conversationState,
@@ -171,6 +212,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         handleFeedbackUpdate,
         handleSuggestNextFeature,
         handleDeepAnalysisModeChange: (isOn: boolean) => uiState.setIsDeepAnalysisMode(isOn),
+        handleRequirementStatusUpdate,
         
         // Stubs for props that need full implementation
         handleEditLastUserMessage: () => {
@@ -178,6 +220,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
              if (!activeConversation) return;
              const lastUserMessage = [...activeConversation.messages].reverse().find(m => m.role === 'user');
              if(lastUserMessage) {
+                // FIX: Corrected a method call on a string property. The 'content' property is a string, not a function.
                 chatService.setMessageToEdit(lastUserMessage.content);
              }
         },

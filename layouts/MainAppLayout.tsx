@@ -116,6 +116,7 @@ const AnalystWorkspace = () => {
                         setDiagramType={context.setDiagramType}
                         onAddTokens={context.commitTokenUsage}
                         onRestoreVersion={context.handleRestoreVersion}
+                        onRequirementStatusChange={context.handleRequirementStatusUpdate}
                      />
                  </div>
             )}
@@ -195,7 +196,9 @@ export const MainAppLayout: React.FC = () => {
             {context.showUpgradeModal && <UpgradeModal isOpen={context.showUpgradeModal} onClose={() => context.setShowUpgradeModal(false)} />}
             {context.isFeatureSuggestionsModalOpen && <FeatureSuggestionsModal isOpen={context.isFeatureSuggestionsModalOpen} onClose={() => context.setIsFeatureSuggestionsModalOpen(false)} isLoading={context.isFetchingSuggestions} suggestions={context.featureSuggestions} onSelectSuggestion={(s) => context.sendMessage(s)} error={context.suggestionError} onRetry={context.handleSuggestNextFeature} />}
             {context.isRegenerateModalOpen && context.regenerateModalData.current && (
-                <RegenerateConfirmationModal isOpen={context.isRegenerateModalOpen} onClose={() => context.setIsRegenerateModalOpen(false)} onConfirm={context.handleConfirmRegenerate} documentName={context.regenerateModalData.current.docType === 'analysis' ? 'Analiz Dokümanı' : context.regenerateModalData.current.docType === 'test' ? 'Test Senaryoları' : 'İzlenebilirlik Matrisi'} templateName={(context.regenerateModalData.current.docType === 'analysis' ? context.analysisTemplates : context.regenerateModalData.current.docType === 'test' ? context.testTemplates : context.traceabilityTemplates).find(t => t.id === context.regenerateModalData.current!.newTemplateId)?.name || ''} />
+                <RegenerateConfirmationModal isOpen={context.isRegenerateModalOpen} onClose={() => context.setIsRegenerateModalOpen(false)} onConfirm={context.handleConfirmRegenerate} documentName={context.regenerateModalData.current.docType === 'analysis' ? 'Analiz Dokümanı' : context.regenerateModalData.current.docType === 'test' ? 'Test Senaryoları' : 'İzlenebilirlik Matrisi'} 
+// FIX: Removed erroneous function call on 'newTemplateId' property.
+templateName={(context.regenerateModalData.current.docType === 'analysis' ? context.analysisTemplates : context.regenerateModalData.current.docType === 'test' ? context.testTemplates : context.traceabilityTemplates).find(t => t.id === context.regenerateModalData.current!.newTemplateId)?.name || ''} />
             )}
              {context.isDeveloperPanelOpen && (
                 <DeveloperPanel onClose={context.handleToggleDeveloperPanel} modelName={localStorage.getItem('geminiModel') || 'gemini-2.5-flash'} onModelNameChange={(name) => localStorage.setItem('geminiModel', name)} supabaseUrl={localStorage.getItem('supabaseUrl') || ''} onSupabaseUrlChange={(url) => localStorage.setItem('supabaseUrl', url)} supabaseAnonKey={localStorage.getItem('supabaseAnonKey') || ''} onSupabaseAnonKeyChange={(key) => localStorage.setItem('supabaseAnonKey', key)} testUserEmail={localStorage.getItem('devTestUserEmail') || ''} onTestUserEmailChange={(email) => localStorage.setItem('devTestUserEmail', email)} testUserPassword={localStorage.getItem('devTestUserPassword') || ''} onTestUserPasswordChange={(pw) => localStorage.setItem('devTestUserPassword', pw)} isFetchingFeedback={context.isFetchingFeedback} onToggleFeedbackDashboard={context.fetchAllFeedback} />

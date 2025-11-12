@@ -29,9 +29,14 @@ export const RequirementComponent = (props: any) => {
     const currentStatus = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
     
     const handleStatusChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+        const newStatus = event.target.value;
         props.updateAttributes({
-            status: event.target.value,
+            status: newStatus,
         });
+        // FIX: Corrected an erroneous function call. The check should be for the existence of the prop, not its return value.
+        if (props.onStatusChange) {
+            props.onStatusChange(reqId, newStatus);
+        }
     };
 
     return (

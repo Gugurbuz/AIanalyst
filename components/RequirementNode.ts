@@ -1,5 +1,5 @@
-// FIX: Removed the 'type' keyword from the 'Commands' import to resolve the module augmentation error.
-import { Node, mergeAttributes, Commands } from '@tiptap/core';
+// FIX: Importing 'Commands' is not needed for module augmentation and was causing a module resolution error. The 'commands' object type is inferred.
+import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import { RequirementComponent } from './RequirementComponent';
 
