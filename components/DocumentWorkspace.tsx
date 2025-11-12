@@ -40,7 +40,6 @@ interface DocumentWorkspaceProps {
     onUpdateConversation: (id: string, updates: Partial<Conversation>) => void;
     isProcessing: boolean; // This is now the GLOBAL processing state (e.g., for chat)
     generatingDocType: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | null;
-    // FIX: Changed return type to Promise<void> to match the async function it receives.
     onUpdateDocument: (docKey: keyof GeneratedDocs, newContent: string | SourcedDocument, reason: string) => Promise<void>;
     onModifySelection: (selectedText: string, userPrompt: string, docKey: 'analysisDoc' | 'testScenarios') => Promise<void>;
     onModifyDiagram: (userPrompt: string) => Promise<void>;
@@ -67,8 +66,7 @@ interface DocumentWorkspaceProps {
     diagramType: 'bpmn';
     setDiagramType: (type: 'bpmn') => void;
     onAddTokens: (tokens: number) => void;
-    // FIX: Changed the return type of onRestoreVersion to Promise<void> to match the async function it receives.
-    onRestoreVersion: (version: DocumentVersion) => Promise<void>;
+    onRestoreVersion: (version: DocumentVersion) => Promise<void>; // Bu prop async olmalı
 }
 
 const StaleIndicator: React.FC<{ isStale?: boolean; onUpdate: () => void }> = ({ isStale, onUpdate }) => {
@@ -153,16 +151,27 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                     if (impact.isTraceabilityImpacted) await updateDocumentStaleness('traceability', true);
                 } catch (error) {
                     console.error("Impact analysis failed:", error);
-                    await Promise.all([
-                        updateDocumentStaleness('bpmn', true),
-                        updateDocumentStaleness('test', true),
-                        updateDocumentStaleness('traceability', true)
-                    ]);
+                    
+                    // ******** HATA DÜZELTMESİ: BAŞLANGIÇ ********
+                    // Analiz başarısız olursa, bağımlı dokümanları "stale" olarak işaretlerken
+                    // bu çağrıların beklenmesi (await) gerekir. Aksi takdirde, bu
+                    // asenkron çağrılardan biri hata verirse "uncaught" hatası oluşur.
+                    try {
+                        await Promise.all([
+                            updateDocumentStaleness('bpmn', true),
+                            updateDocumentStaleness('test', true),
+                            updateDocumentStaleness('traceability', true)
+                        ]);
+                    } catch (stalenessError) {
+                        console.error("Failed to set documents as stale after impact analysis error:", stalenessError);
+                    }
+                    // ******** HATA DÜZELTMESİ: BİTİŞ ********
+
                 } finally {
                     setIsAnalyzingChange(false);
                 }
             };
-            analyze();
+            analyze(); // Bu fonksiyonu 'await' etmemize gerek yok, çünkü kendi içinde try/catch ile hata yönetimi yapıyor.
         }
     }, [generatedDocs.analysisDoc, prevAnalysisDoc, conversationId, isProcessing, onAddTokens]);
 
