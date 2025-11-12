@@ -1,12 +1,14 @@
 // hooks/useUIState.ts
 import { useState, useRef, useCallback } from 'react';
+// FIX: Add missing import for GeneratedDocs type.
 import type { Theme, GeminiModel, GeneratedDocs } from '../types';
 
 export const useUIState = () => {
     const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'light');
     const [appMode, setAppMode] = useState<'analyst' | 'backlog'>('analyst');
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [isConversationListOpen, setIsConversationListOpen] = useState(true);
     const [isWorkspaceVisible, setIsWorkspaceVisible] = useState(true);
+    // FIX: Add state for the NewAnalysisModal, which was missing.
     const [isNewAnalysisModalOpen, setIsNewAnalysisModalOpen] = useState(false);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -16,12 +18,12 @@ export const useUIState = () => {
     const [suggestionError, setSuggestionError] = useState<string | null>(null);
     const [isRegenerateModalOpen, setIsRegenerateModalOpen] = useState(false);
     const regenerateModalData = useRef<{ docType: 'analysis' | 'test' | 'traceability', newTemplateId: string } | null>(null);
-    const [activeDocTab, setActiveDocTab] = useState<'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | 'overview'>('overview');
+    const [activeDocTab, setActiveDocTab] = useState<'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation'>('analysis');
     const [isDeveloperPanelOpen, setIsDeveloperPanelOpen] = useState(false);
     const [isFeedbackDashboardOpen, setIsFeedbackDashboardOpen] = useState(false);
     const [isDeepAnalysisMode, setIsDeepAnalysisMode] = useState(false);
     const [isExpertMode, setIsExpertMode] = useState(false);
-    const [diagramType, setDiagramType] = useState<'bpmn'>('bpmn');
+    const [diagramType, setDiagramType] = useState<'mermaid' | 'bpmn'>('mermaid');
     const [displayedMaturityScore, setDisplayedMaturityScore] = useState<{ score: number; justification: string } | null>(null);
     const maturityScoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [longTextPrompt, setLongTextPrompt] = useState<{ content: string; callback: (choice: 'analyze' | 'save') => void } | null>(null);
@@ -52,8 +54,8 @@ export const useUIState = () => {
         setTheme: handleThemeChange,
         appMode,
         setAppMode,
-        isSidebarOpen,
-        setIsSidebarOpen,
+        isConversationListOpen,
+        setIsConversationListOpen,
         isWorkspaceVisible,
         setIsWorkspaceVisible,
         isNewAnalysisModalOpen,

@@ -7,7 +7,7 @@ interface VersionHistoryModalProps {
     onClose: () => void;
     versions: DocumentVersion[];
     documentName: string;
-    onRestore: (version: DocumentVersion) => Promise<void>;
+    onRestore: (version: DocumentVersion) => void;
 }
 
 export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
@@ -23,16 +23,10 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
     const sortedVersions = [...versions].sort((a, b) => b.version_number - a.version_number);
 
-    const handleRestore = async (version: DocumentVersion) => {
+    const handleRestore = (version: DocumentVersion) => {
         if (window.confirm(`"${documentName}" dokümanını v${version.version_number} versiyonuna geri yüklemek istediğinizden emin misiniz? Mevcut içerik üzerine yazılacak ve bu işlem yeni bir versiyon olarak kaydedilecektir.`)) {
-            try {
-                await onRestore(version);
-                onClose();
-            } catch (e) {
-                // Error is handled by the caller, but we log it here for debugging.
-                console.error("Failed to restore version:", e);
-                // The modal remains open so the user knows the action failed.
-            }
+            onRestore(version);
+            onClose();
         }
     };
 

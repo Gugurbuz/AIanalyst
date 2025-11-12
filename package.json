@@ -14,6 +14,7 @@
     "react-dom": "^19.2.0",
     "jspdf": "^2.5.1",
     "jspdf-autotable": "^3.8.2",
+    "mermaid": "^10.9.1",
     "react-zoom-pan-pinch": "^3.6.0",
     "@supabase/supabase-js": "^2.44.4",
     "uuid": "^13.0.0",

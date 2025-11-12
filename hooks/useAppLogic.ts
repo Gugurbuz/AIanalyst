@@ -140,16 +140,8 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
 
     const handleFeedbackUpdate = async (messageId: string, feedback: { rating: 'up' | 'down' | null; comment?: string }) => {
         conversationState.updateMessage(messageId, { feedback });
-        try {
-            const { error } = await supabase.from('conversation_details').update({ feedback }).eq('id', messageId);
-            if (error) {
-                console.error("Geri bildirim güncellenirken hata oluştu:", error);
-                uiState.setError("Geri bildirim kaydedilemedi.");
-            }
-        } catch (e: any) {
-            console.error("Geri bildirim güncellenirken ağ hatası:", e);
-            uiState.setError(`Geri bildirim kaydedilemedi: ${e.message}`);
-        }
+        const { error } = await supabase.from('conversation_details').update({ feedback }).eq('id', messageId);
+        if (error) uiState.setError("Geri bildirim kaydedilemedi.");
     };
 
     const handleNewConversationAndSend = async (content?: string, title?: string) => {
@@ -159,47 +151,6 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         }
     };
 
-    const handleRequirementStatusUpdate = async (reqId: string, newStatus: string) => {
-        const activeConv = conversationState.activeConversation;
-        if (!activeConv) return;
-    
-        try {
-            const { summary, tokens } = await geminiService.analyzeRequirementStatusChange(
-                activeConv.generatedDocs.analysisDoc,
-                reqId,
-                newStatus
-            );
-            conversationState.commitTokenUsage(tokens);
-    
-            const systemMessageContent = `[SİSTEM]: **${reqId}** durumu **'${newStatus}'** olarak güncellendi. AI Analizi: ${summary}`;
-            const systemMessage: Message = {
-                id: uuidv4(),
-                conversation_id: activeConv.id,
-                role: 'system',
-                content: systemMessageContent,
-                created_at: new Date().toISOString(),
-            };
-    
-            conversationState.updateConversation(activeConv.id, {
-                messages: [...activeConv.messages, systemMessage]
-            });
-    
-            const { error } = await supabase.from('conversation_details').insert({
-                id: systemMessage.id,
-                conversation_id: systemMessage.conversation_id,
-                role: systemMessage.role,
-                content: systemMessage.content,
-                created_at: systemMessage.created_at
-            });
-    
-            if (error) {
-                console.warn('Sistem mesajı veritabanına kaydedilemedi:', error);
-            }
-        } catch (e: any) {
-            uiState.setError(`Gereksinim durum analizi sırasında bir hata oluştu: ${e.message}`);
-        }
-    };
-    
     return {
         ...uiState,
         ...conversationState,
@@ -212,7 +163,6 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         handleFeedbackUpdate,
         handleSuggestNextFeature,
         handleDeepAnalysisModeChange: (isOn: boolean) => uiState.setIsDeepAnalysisMode(isOn),
-        handleRequirementStatusUpdate,
         
         // Stubs for props that need full implementation
         handleEditLastUserMessage: () => {

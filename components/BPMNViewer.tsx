@@ -32,11 +32,12 @@ export const BPMNViewer: React.FC<BPMNViewerProps> = ({ xml, setSvgContentGetter
 
         const modeler = new window.BpmnJS({
             container: containerRef.current,
-            keyboard: { bindTo: containerRef.current },
+            keyboard: { bindTo: window },
         });
         modelerRef.current = modeler;
         
         if (setSvgContentGetter) {
+            // FIX: Pass the async getter function directly, instead of a function that returns it.
             setSvgContentGetter(async () => {
                 if (!modelerRef.current) return null;
                 
@@ -102,11 +103,7 @@ export const BPMNViewer: React.FC<BPMNViewerProps> = ({ xml, setSvgContentGetter
     }, [xml]);
 
     return (
-        <div 
-            className="w-full h-full relative focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-md" 
-            ref={containerRef}
-            tabIndex={0}
-        >
+        <div className="w-full h-full relative" ref={containerRef}>
             {isLoading && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/50 dark:bg-slate-800/50 z-10">
                     <LoaderCircle className="animate-spin h-8 w-8 text-indigo-500" />

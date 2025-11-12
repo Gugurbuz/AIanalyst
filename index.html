@@ -183,177 +183,6 @@
         pointer-events: none;
         height: 0;
       }
-
-      /* === REFINED TABLE STYLES === */
-      .ProseMirror table {
-        border-collapse: separate; /* Required for border-radius on tables */
-        border-spacing: 0;
-        margin: 1.5rem 0;
-        width: auto;
-        max-width: 100%;
-        table-layout: auto;
-        border-radius: 0.5rem; /* rounded-lg */
-        overflow: hidden;
-        border: 1px solid #e2e8f0; /* slate-200 */
-      }
-      .dark .ProseMirror table {
-        border-color: #334155; /* slate-700 */
-      }
-
-      .ProseMirror th,
-      .ProseMirror td {
-        padding: 0.75rem 1rem; /* py-3 px-4 */
-        position: relative;
-        vertical-align: top;
-      }
-      
-      .ProseMirror th {
-        background-color: #f8fafc; /* slate-50 */
-        text-align: left;
-        font-weight: 600; /* semibold */
-        color: #475569; /* slate-600 */
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        font-size: 0.75rem; /* text-xs */
-        border-bottom: 1px solid #e2e8f0; /* slate-200 */
-      }
-      .dark .ProseMirror th {
-        background-color: #1e293b; /* slate-800 */
-        color: #94a3b8; /* slate-400 */
-        border-bottom-color: #334155; /* slate-700 */
-      }
-      
-      .ProseMirror td {
-        font-size: 0.875rem; /* text-sm */
-        color: #334155; /* slate-700 */
-      }
-      .dark .ProseMirror td {
-          color: #cbd5e1; /* slate-300 */
-      }
-
-      .ProseMirror tbody tr {
-        border-bottom: 1px solid #e2e8f0; /* slate-200 */
-      }
-      .dark .ProseMirror tbody tr {
-        border-bottom-color: #334155; /* slate-700 */
-      }
-
-      .ProseMirror tbody tr:last-child {
-        border-bottom: none;
-      }
-      
-      /* Zebra striping for tbody only */
-      .ProseMirror tbody tr:nth-of-type(even) {
-        background-color: #f8fafc; /* slate-50 */
-      }
-      .dark .ProseMirror tbody tr:nth-of-type(even) {
-        background-color: rgba(30, 41, 59, 0.5); /* slate-800/50 */
-      }
-
-      /* Hover effect for tbody only */
-      .ProseMirror tbody tr:hover {
-        background-color: #f1f5f9; /* slate-100 */
-      }
-      .dark .ProseMirror tbody tr:hover {
-        background-color: #334155; /* slate-700 */
-      }
-
-      .ProseMirror .column-resize-handle {
-        position: absolute;
-        right: -2px;
-        top: 0;
-        bottom: 0;
-        width: 4px;
-        background-color: #818cf8; /* indigo-400 */
-        cursor: col-resize;
-        z-index: 20;
-      }
-      
-      .ProseMirror .selectedCell:after {
-        z-index: 2;
-        position: absolute;
-        content: "";
-        left: 0; right: 0; top: 0; bottom: 0;
-        background: rgba(99, 102, 241, 0.15); /* indigo-500 with opacity */
-        pointer-events: none;
-      }
-       /* === END REFINED TABLE STYLES === */
-
-      /* Image and Iframe styles */
-      .ProseMirror img {
-        max-width: 100%;
-        height: auto;
-        border-radius: 0.5rem;
-        text-align: center; /* Center image within its container */
-      }
-      .ProseMirror .iframe-wrapper {
-        position: relative;
-        padding-bottom: 56.25%; /* 16:9 aspect ratio */
-        height: 0;
-        overflow: hidden;
-        max-width: 100%;
-        margin: 1rem 0;
-      }
-      .ProseMirror iframe {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        border: 0;
-        border-radius: 0.5rem;
-      }
-       /* Custom node for requirements */
-      .requirement-block {
-        border-left: 3px solid;
-        padding: 0.5rem 1rem;
-        margin: 1rem 0;
-        border-radius: 0.25rem;
-        position: relative;
-        transition: background-color 0.3s ease;
-      }
-      .requirement-block-pending {
-        border-color: #f59e0b; /* amber-500 */
-        background-color: #fffbeb; /* amber-50 */
-      }
-      .dark .requirement-block-pending {
-        background-color: #78350f20; /* amber-900 with opacity */
-      }
-       .requirement-block-approved {
-        border-color: #16a34a; /* green-600 */
-        background-color: #f0fdf4; /* green-50 */
-      }
-       .dark .requirement-block-approved {
-        background-color: #14532d20; /* green-900 with opacity */
-      }
-       .requirement-block-rejected {
-        border-color: #dc2626; /* red-600 */
-        background-color: #fef2f2; /* red-50 */
-      }
-       .dark .requirement-block-rejected {
-        background-color: #7f1d1d20; /* red-900 with opacity */
-      }
-
-      /* Highlight Styles */
-      .ProseMirror mark {
-        background-color: #fef08a; /* yellow-200 */
-        padding: 0.125em 0.25em;
-        border-radius: 0.25em;
-        box-decoration-break: clone;
-        -webkit-box-decoration-break: clone;
-      }
-      .dark .ProseMirror mark {
-        background-color: #facc15; /* yellow-400 */
-        color: #1e293b; /* slate-800 */
-      }
-
-      .bg-dots-pattern { 
-        background-image: radial-gradient(circle at 1px 1px, #cbd5e1 1px, transparent 0); 
-        background-size: 20px 20px; 
-      } 
-      .dark .bg-dots-pattern { 
-        background-image: radial-gradient(circle at 1px 1px, #334155 1px, transparent 0); 
-      }
     </style>
     <script>
       tailwind.config = {
@@ -424,22 +253,14 @@
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "jspdf": "https://aistudiocdn.com/jspdf@^2.5.1",
     "jspdf-autotable": "https://aistudiocdn.com/jspdf-autotable@^3.8.2",
+    "mermaid": "https://aistudiocdn.com/mermaid@^10.9.1",
     "react-zoom-pan-pinch": "https://aistudiocdn.com/react-zoom-pan-pinch@^3.6.0",
     "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.44.4",
     "uuid": "https://aistudiocdn.com/uuid@^13.0.0",
     "lucide-react": "https://aistudiocdn.com/lucide-react@^0.418.0",
     "docx": "https://aistudiocdn.com/docx@^8.5.0",
     "@tiptap/core": "https://aistudiocdn.com/@tiptap/core@^2.5.7",
-    "@tiptap/extension-color": "https://aistudiocdn.com/@tiptap/extension-color@^2.5.7",
-    "@tiptap/extension-highlight": "https://aistudiocdn.com/@tiptap/extension-highlight@^2.5.7",
-    "@tiptap/extension-image": "https://aistudiocdn.com/@tiptap/extension-image@^2.5.7",
     "@tiptap/extension-placeholder": "https://aistudiocdn.com/@tiptap/extension-placeholder@^2.5.7",
-    "@tiptap/extension-table": "https://aistudiocdn.com/@tiptap/extension-table@^2.5.7",
-    "@tiptap/extension-table-cell": "https://aistudiocdn.com/@tiptap/extension-table-cell@^2.5.7",
-    "@tiptap/extension-table-header": "https://aistudiocdn.com/@tiptap/extension-table-header@^2.5.7",
-    "@tiptap/extension-table-row": "https://aistudiocdn.com/@tiptap/extension-table-row@^2.5.7",
-    "@tiptap/extension-text-align": "https://aistudiocdn.com/@tiptap/extension-text-align@^2.5.7",
-    "@tiptap/extension-text-style": "https://aistudiocdn.com/@tiptap/extension-text-style@^2.5.7",
     "@tiptap/react": "https://aistudiocdn.com/@tiptap/react@^2.5.7",
     "@tiptap/starter-kit": "https://aistudiocdn.com/@tiptap/starter-kit@^2.5.7",
     "prosemirror-commands": "https://aistudiocdn.com/prosemirror-commands@^1.5.2",
@@ -450,7 +271,6 @@
     "prosemirror-model": "https://aistudiocdn.com/prosemirror-model@^1.22.0",
     "prosemirror-schema-list": "https://aistudiocdn.com/prosemirror-schema-list@^1.3.0",
     "prosemirror-state": "https://aistudiocdn.com/prosemirror-state@^1.4.3",
-    "prosemirror-tables": "https://aistudiocdn.com/prosemirror-tables@^1.3.0",
     "prosemirror-transform": "https://aistudiocdn.com/prosemirror-transform@^1.9.0",
     "prosemirror-view": "https://aistudiocdn.com/prosemirror-view@^1.33.6",
     "marked": "https://aistudiocdn.com/marked@^13.0.2",
@@ -466,6 +286,7 @@
 <!-- PrismJS for syntax highlighting -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-mermaid.min.js"></script>
 <!-- BPMN.io Modeler -->
 <script src="https://unpkg.com/bpmn-js@17.0.2/dist/bpmn-modeler.development.js"></script>
 </head>

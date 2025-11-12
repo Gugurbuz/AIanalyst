@@ -78,22 +78,19 @@ const Main = () => {
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const shareId = urlParams.get('share');
-        let isCancelled = false;
 
         const fetchData = async () => {
-            if (isCancelled) return;
+            // Reset previous results before fetching new ones
             setLoadResult({});
 
             if (shareId) {
-                if (!isCancelled) setIsLoading(true);
+                setIsLoading(true);
                 const { data, error } = await supabase
                     .from('conversations')
                     .select('*, conversation_details(*), documents(*), document_versions(*)')
                     .eq('share_id', shareId)
                     .eq('is_shared', true)
                     .single();
-
-                if (isCancelled) return;
 
                 if (error || !data) {
                     setLoadResult({ error: 'Bu analize erişilemiyor. Linkin doğru olduğundan emin olun veya paylaşım ayarları değiştirilmiş olabilir.' });
@@ -110,9 +107,9 @@ const Main = () => {
                     };
                     setLoadResult({ publicConversation: convWithDetails as Conversation });
                 }
-                if (!isCancelled) setIsLoading(false);
+                setIsLoading(false);
             } else if (session) {
-                if (!isCancelled) setIsLoading(true);
+                setIsLoading(true);
                 try {
                     const [profileResult, conversationsResult, templatesResult] = await Promise.all([
                         authService.getProfile(session.user.id),
@@ -124,8 +121,6 @@ const Main = () => {
                         authService.fetchTemplates(session.user.id)
                     ]);
                     
-                    if (isCancelled) return;
-
                     if (conversationsResult.error) {
                         throw new Error(`Sohbetler yüklenirken bir hata oluştu: ${conversationsResult.error.message}`);
                     }
@@ -177,34 +172,25 @@ const Main = () => {
                         };
                     });
 
-                    if (!isCancelled) {
-                        setLoadResult({
-                            appData: {
-                                conversations: conversationsWithDetails as Conversation[],
-                                profile: profileResult,
-                                templates: templatesResult,
-                            }
-                        });
-                    }
+
+                    setLoadResult({
+                        appData: {
+                            conversations: conversationsWithDetails as Conversation[],
+                            profile: profileResult,
+                            templates: templatesResult,
+                        }
+                    });
                 } catch (err: any) {
-                    if (!isCancelled) {
-                        setLoadResult({ error: err.message || 'Veri yüklenirken bilinmeyen bir hata oluştu.' });
-                    }
+                    setLoadResult({ error: err.message || 'Veri yüklenirken bilinmeyen bir hata oluştu.' });
                 } finally {
-                    if (!isCancelled) {
-                        setIsLoading(false);
-                    }
+                    setIsLoading(false);
                 }
             }
         };
 
         fetchData();
 
-        return () => {
-            isCancelled = true;
-        };
-
-    }, [session?.user.id]);
+    }, [session?.user.id]); // <-- *** THE FIX IS HERE *** Changed from [session]
 
 
     if (isLoading) {

@@ -26,6 +26,7 @@ const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs> = {
     analysis: 'analysisDoc',
     test: 'testScenarios',
     traceability: 'traceabilityMatrix',
+    mermaid: 'mermaidViz',
     bpmn: 'bpmnViz',
     maturity_report: 'maturityReport',
 };
@@ -37,7 +38,7 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
     for (const doc of documents) {
         const key = documentTypeToKeyMap[doc.document_type];
         if (key) {
-            if (key === 'bpmnViz' || key === 'maturityReport' || key === 'testScenarios' || key === 'traceabilityMatrix') {
+            if (key === 'mermaidViz' || key === 'bpmnViz' || key === 'maturityReport' || key === 'testScenarios' || key === 'traceabilityMatrix') {
                 try {
                     (docs as any)[key] = JSON.parse(doc.content);
                 } catch (e) {
@@ -103,14 +104,13 @@ export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
     const { title, messages } = conversation;
     const generatedDocs = buildGeneratedDocs(conversation.documents);
     
-    const diagramType = 'bpmn';
-    const vizContent = generatedDocs.bpmnViz?.code ?? '';
+    const diagramType = generatedDocs.bpmnViz?.code ? 'bpmn' : 'mermaid';
+    const vizContent = diagramType === 'bpmn' ? generatedDocs.bpmnViz?.code ?? '' : generatedDocs.mermaidViz?.code ?? '';
     const testScenariosContent = typeof generatedDocs.testScenarios === 'object' ? (generatedDocs.testScenarios as SourcedDocument).content : generatedDocs.testScenarios as string;
     const traceabilityMatrixContent = typeof generatedDocs.traceabilityMatrix === 'object' ? (generatedDocs.traceabilityMatrix as SourcedDocument).content : generatedDocs.traceabilityMatrix as string;
 
     const noOp = async () => {};
-    // FIX: Changed to async function to return a Promise<void>
-    const noOpWithArgs = async (...args: any[]) => {};
+    const noOpWithArgs = (...args: any[]) => {};
     
     const tabs = [
         { id: 'chat', name: 'Sohbet', icon: MessageSquare, content: messages.length > 0 },

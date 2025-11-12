@@ -61,7 +61,7 @@ const parseMarkdown = (text: string, highlightedLines: number[], rephrasingText:
             if (inTable) html += '</tbody></table></div>'; 
             
             const headers = line.split('|').slice(1, -1).map(h => h.trim());
-            html += `${startTag}<div class="overflow-x-auto my-5"><table class="text-sm border-collapse border border-slate-300 dark:border-slate-600">
+            html += `${startTag}<div class="overflow-x-auto my-5"><table class="w-full text-sm border-collapse border border-slate-300 dark:border-slate-600 table-fixed">
                         <thead class="bg-slate-100 dark:bg-slate-800">
                             <tr>${headers.map(h => `<th class="p-3 font-semibold text-left border border-slate-300 dark:border-slate-600">${h}</th>`).join('')}</tr>
                         </thead>

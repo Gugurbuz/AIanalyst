@@ -47,12 +47,8 @@ function createMockClient(): SupabaseClient {
                 data: { subscription: { unsubscribe: () => {} } },
             }),
         },
-        storage: {
-            from: (bucket: string) => ({
-                upload: () => Promise.resolve({ data: null, error: unconfiguredError }),
-                getPublicUrl: (path: string) => ({ data: { publicUrl: '#' }})
-            })
-        },
+        // Add other top-level properties to satisfy the SupabaseClient type.
+        storage: {},
         rpc: {},
         channel: () => ({
             subscribe: () => ({

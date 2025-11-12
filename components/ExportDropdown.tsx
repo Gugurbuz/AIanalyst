@@ -5,7 +5,7 @@ import { Download, ChevronDown } from 'lucide-react';
 interface ExportDropdownProps {
     content: string;
     filename: string;
-    diagramType?: 'bpmn' | null;
+    diagramType?: 'mermaid' | 'bpmn' | null;
     getSvgContent?: (() => Promise<string | null>) | null;
     isTable?: boolean;
 }
@@ -37,7 +37,9 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({ content, filenam
                 alert('Dışa aktarılacak SVG içeriği bulunamadı.');
             }
         } else if (format === 'html') {
-            if (diagramType === 'bpmn') {
+            if (diagramType === 'mermaid') {
+                exportService.exportAsHtml(content, filename);
+            } else if (diagramType === 'bpmn') {
                 exportService.exportBpmnAsHtml(content, filename);
             }
         } else if (format === 'bpmn') {
@@ -70,6 +72,24 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({ content, filenam
                          <span className="font-mono text-xs bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200 rounded px-1.5 py-0.5 mr-2">.bpmn</span> BPMN (XML)
                     </button>
                 </>
+            );
+        }
+        if (diagramType === 'mermaid') {
+             return (
+                 <>
+                    <button onClick={() => handleExport('png')} className="w-full text-left flex items-center px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" role="menuitem">
+                        <span className="font-mono text-xs bg-lime-100 text-lime-800 dark:bg-lime-900/50 dark:text-lime-200 rounded px-1.5 py-0.5 mr-2">.png</span> PNG Olarak
+                    </button>
+                    <button onClick={() => handleExport('svg')} className="w-full text-left flex items-center px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" role="menuitem">
+                         <span className="font-mono text-xs bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200 rounded px-1.5 py-0.5 mr-2">.svg</span> SVG Olarak
+                    </button>
+                     <button onClick={() => handleExport('html')} className="w-full text-left flex items-center px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" role="menuitem">
+                        <span className="font-mono text-xs bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200 rounded px-1.5 py-0.5 mr-2">.html</span> HTML Olarak
+                    </button>
+                    <button onClick={() => handleExport('md')} className="w-full text-left flex items-center px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" role="menuitem">
+                        <span className="font-mono text-xs bg-slate-200 dark:bg-slate-600 rounded px-1.5 py-0.5 mr-2">.md</span> Mermaid Kodu
+                    </button>
+                 </>
             );
         }
         // Default for non-viz documents

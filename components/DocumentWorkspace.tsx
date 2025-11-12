@@ -12,7 +12,6 @@ import { supabase } from '../services/supabaseClient';
 import { GanttChartSquare, Projector, RefreshCw, Check, FileText, Beaker, GitBranch, FileInput, CheckSquare } from 'lucide-react';
 import { RequestDocumentViewer } from './RequestDocumentViewer';
 import { isIsBirimiTalep } from '../types';
-import { ProjectMapView } from './ProjectMapView';
 
 
 function usePrevious<T>(value: T): T | undefined {
@@ -40,10 +39,10 @@ interface DocumentWorkspaceProps {
     onUpdateConversation: (id: string, updates: Partial<Conversation>) => void;
     isProcessing: boolean; // This is now the GLOBAL processing state (e.g., for chat)
     generatingDocType: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | null;
-    onUpdateDocument: (docKey: keyof GeneratedDocs, newContent: string | SourcedDocument, reason: string) => Promise<void>;
+    onUpdateDocument: (docKey: keyof GeneratedDocs, newContent: string | SourcedDocument, reason: string) => void;
     onModifySelection: (selectedText: string, userPrompt: string, docKey: 'analysisDoc' | 'testScenarios') => Promise<void>;
     onModifyDiagram: (userPrompt: string) => Promise<void>;
-    onGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string) => void;
+    onGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => void;
     inlineModificationState: { docKey: 'analysisDoc' | 'testScenarios'; originalText: string } | null;
     templates: {
         analysis: Template[];
@@ -60,13 +59,13 @@ interface DocumentWorkspaceProps {
         test: (event: React.ChangeEvent<HTMLSelectElement>) => void;
         traceability: (event: React.ChangeEvent<HTMLSelectElement>) => void;
     };
-    activeDocTab: 'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | 'overview';
-    setActiveDocTab: (tab: 'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | 'overview') => void;
+    activeDocTab: 'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation';
+    setActiveDocTab: (tab: 'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation') => void;
     onPrepareQuestionForAnswer: (question: string) => void;
-    diagramType: 'bpmn';
-    setDiagramType: (type: 'bpmn') => void;
+    diagramType: 'mermaid' | 'bpmn';
+    setDiagramType: (type: 'mermaid' | 'bpmn') => void;
     onAddTokens: (tokens: number) => void;
-    onRestoreVersion: (version: DocumentVersion) => Promise<void>; // Bu prop async olmalı
+    onRestoreVersion: (version: DocumentVersion) => void;
 }
 
 const StaleIndicator: React.FC<{ isStale?: boolean; onUpdate: () => void }> = ({ isStale, onUpdate }) => {
@@ -146,45 +145,44 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                 try {
                     const { impact, tokens } = await geminiService.analyzeDocumentChange(prevAnalysisDoc || '', generatedDocs.analysisDoc, 'gemini-2.5-flash-lite');
                     onAddTokens(tokens);
+                    if (impact.isVisualizationImpacted) await updateDocumentStaleness('mermaid', true);
                     if (impact.isVisualizationImpacted) await updateDocumentStaleness('bpmn', true);
                     if (impact.isTestScenariosImpacted) await updateDocumentStaleness('test', true);
                     if (impact.isTraceabilityImpacted) await updateDocumentStaleness('traceability', true);
                 } catch (error) {
                     console.error("Impact analysis failed:", error);
-                    
-                    try {
-                        await Promise.all([
-                            updateDocumentStaleness('bpmn', true),
-                            updateDocumentStaleness('test', true),
-                            updateDocumentStaleness('traceability', true)
-                        ]);
-                    } catch (stalenessError) {
-                        console.error("Failed to set documents as stale after impact analysis error:", stalenessError);
-                    }
-
+                    await Promise.all([
+                        updateDocumentStaleness('mermaid', true),
+                        updateDocumentStaleness('bpmn', true),
+                        updateDocumentStaleness('test', true),
+                        updateDocumentStaleness('traceability', true)
+                    ]);
                 } finally {
                     setIsAnalyzingChange(false);
                 }
             };
-            analyze(); // Bu fonksiyonu 'await' etmemize gerek yok, çünkü kendi içinde try/catch ile hata yönetimi yapıyor.
+            analyze();
         }
     }, [generatedDocs.analysisDoc, prevAnalysisDoc, conversationId, isProcessing, onAddTokens]);
 
-    const vizContent = generatedDocs.bpmnViz?.code ?? (generatedDocs.visualizationType === 'bpmn' ? generatedDocs.visualization : '');
+    const vizContent = diagramType === 'bpmn'
+        ? generatedDocs.bpmnViz?.code ?? (generatedDocs.visualizationType === 'bpmn' ? generatedDocs.visualization : '')
+        : generatedDocs.mermaidViz?.code ?? (generatedDocs.visualizationType !== 'bpmn' ? generatedDocs.visualization : '');
 
     const testScenariosContent = typeof generatedDocs.testScenarios === 'object' 
-        ? (generatedDocs.testScenarios as SourcedDocument).content 
-        : generatedDocs.testScenarios as string;
+        ? generatedDocs.testScenarios.content 
+        : generatedDocs.testScenarios;
         
     const traceabilityMatrixContent = typeof generatedDocs.traceabilityMatrix === 'object'
-        ? (generatedDocs.traceabilityMatrix as SourcedDocument).content 
-        : generatedDocs.traceabilityMatrix as string;
+        ? generatedDocs.traceabilityMatrix.content 
+        : generatedDocs.traceabilityMatrix;
 
     const isAnalysisDocReady = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
 
     const handleRegenerate = (docType: 'viz' | 'test' | 'traceability' | 'backlog-generation') => {
         if (docType === 'viz') {
-            const dbDocType = diagramType;
+            // Use the currently active diagram type for staleness update
+            const dbDocType = diagramType; // This will be 'mermaid' or 'bpmn'
             updateDocumentStaleness(dbDocType, false);
         } else {
             const typeMap: Record<string, DocumentType> = { test: 'test', traceability: 'traceability' };
@@ -195,7 +193,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     }
 
     const allTabs = [
-        { id: 'overview', name: 'Proje Haritası', icon: Projector, content: true, isStale: false, onUpdate: () => {} },
         { id: 'request', name: 'Talep', icon: FileInput, content: generatedDocs.requestDoc, isStale: false, onUpdate: () => {} },
         { id: 'analysis', name: 'İş Analizi', icon: FileText, content: generatedDocs.analysisDoc, isStale: false, onUpdate: () => {} },
         { id: 'viz', name: 'Görselleştirme', icon: GanttChartSquare, content: vizContent, isStale: generatedDocs.isVizStale, onUpdate: () => handleRegenerate('viz') },
@@ -210,11 +207,21 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
         setVizError(null);
         try {
             if (prompt) await onModifyDiagram(prompt);
-            else await onGenerateDoc('viz');
+            else await onGenerateDoc('viz', undefined, diagramType);
         } catch (e: any) {
             setVizError(e.message || "Diyagram oluşturulurken bilinmeyen bir hata oluştu.");
         } finally {
             setIsVisualizing(false);
+        }
+    };
+
+    const handleDiagramTypeChange = (newType: 'mermaid' | 'bpmn') => {
+        if (newType === diagramType) return;
+        setDiagramType(newType);
+        const analysisHash = simpleHash(conversation.generatedDocs.analysisDoc);
+        const targetVizData = newType === 'mermaid' ? conversation.generatedDocs.mermaidViz : conversation.generatedDocs.bpmnViz;
+        if (!targetVizData || targetVizData.sourceHash !== analysisHash) {
+            onGenerateDoc('viz', undefined, newType);
         }
     };
 
@@ -241,7 +248,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                                     : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 dark:hover:text-slate-200 dark:hover:border-slate-500'
                             }`}
                         >
-                            <tab.icon className="h-5 w-5 mr-2" />
                             {tab.name}
                             <StaleIndicator isStale={tab.isStale} onUpdate={tab.onUpdate} />
                         </button>
@@ -250,9 +256,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             </div>
             
             <div className="flex-1 overflow-y-auto relative min-h-0">
-                 {activeDocTab === 'overview' && (
-                    <ProjectMapView docs={generatedDocs} onNodeClick={setActiveDocTab} />
-                )}
                 {activeDocTab === 'request' && (
                     generatedDocs.requestDoc ? (
                         <DocumentCanvas
@@ -281,7 +284,11 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                     <div className="relative h-full flex flex-col">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
                             <div className="flex items-center gap-4">
-                                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Süreç Görselleştirmesi (BPMN)</h3>
+                                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Süreç Görselleştirmesi</h3>
+                                <div className="flex items-center p-1 bg-slate-200 dark:bg-slate-700 rounded-lg">
+                                    <button onClick={() => handleDiagramTypeChange('mermaid')} disabled={isVisualizing} className={`px-2 py-1 text-xs flex items-center gap-1.5 sm:px-3 sm:py-1 sm:text-sm font-semibold rounded-md transition-colors disabled:cursor-not-allowed ${diagramType === 'mermaid' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}><GanttChartSquare className="h-4 w-4" /> Mermaid</button>
+                                    <button onClick={() => handleDiagramTypeChange('bpmn')} disabled={isVisualizing} className={`px-2 py-1 text-xs flex items-center gap-1.5 sm:px-3 sm:py-1 sm:text-sm font-semibold rounded-md transition-colors disabled:cursor-not-allowed ${diagramType === 'bpmn' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}><Projector className="h-4 w-4" /> BPMN</button>
+                                </div>
                             </div>
                         </div>
                         <Visualizations content={vizContent} onModifyDiagram={(prompt) => handleGenerateOrModifyViz(prompt)} onGenerateDiagram={() => handleGenerateOrModifyViz()} isLoading={isVisualizing || generatingDocType === 'viz'} error={vizError} diagramType={diagramType} isAnalysisDocReady={isAnalysisDocReady}/>

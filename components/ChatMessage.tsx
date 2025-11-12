@@ -83,14 +83,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         className={`group/row flex items-end gap-2 animate-fade-in-up ${styles.container} ${isFirstInGroup ? 'mt-4' : 'mt-1'}`}
         style={{ animationDuration: '0.3s' }}
     >
-        {isUser && isLastInGroup && (
-            <div className="flex-shrink-0 self-end pb-1 pr-1 opacity-0 transition-opacity duration-200 group-hover/row:opacity-100">
-                <span className="text-xs text-slate-400 dark:text-slate-500">
-                    {new Date(message.created_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-            </div>
-        )}
-
         {/* Action Buttons: Positioned before the bubble. Flex alignment places them on the left for both user & assistant. */}
         <div className="flex-shrink-0 self-end opacity-0 group-hover/row:opacity-100 transition-opacity duration-200 pb-2">
             {isUser ? (
@@ -147,14 +139,6 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                 )}
              </div>
         </div>
-
-        {!isUser && isLastInGroup && (
-            <div className="flex-shrink-0 self-end pb-1 pl-1 opacity-0 transition-opacity duration-200 group-hover/row:opacity-100">
-                <span className="text-xs text-slate-400 dark:text-slate-500">
-                    {new Date(message.created_at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-            </div>
-        )}
     </div>
   );
 };

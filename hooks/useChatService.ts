@@ -146,19 +146,9 @@ export const useChatService = ({
         if (!isRetry) {
             historyForApi = [...(currentConv?.messages || []), userMessage];
             conversationState.updateConversation(activeId, { messages: historyForApi });
-            
-            const { id, conversation_id, role, content, created_at } = userMessage;
-            try {
-                const { error: insertError } = await supabase.from('conversation_details').insert({ id, conversation_id, role, content, created_at });
-                if (insertError) {
-                    console.warn('Kullanıcı mesajı veritabanına kaydedilemedi:', insertError);
-                    uiState.setError(`Mesajınız kaydedilemedi: ${insertError.message}`);
-                }
-            } catch (e: any) {
-                console.warn('Kullanıcı mesajı kaydedilirken ağ hatası:', e);
-                uiState.setError(`Mesajınız kaydedilirken bir ağ hatası oluştu: ${e.message}`);
-            }
-
+            supabase.from('conversation_details').insert(userMessage).then(({error}) => {
+                if(error) uiState.setError(`Mesajınız kaydedilemedi: ${error.message}`);
+            });
         } else {
             historyForApi = [...(currentConv?.messages || [])];
         }
@@ -244,43 +234,29 @@ export const useChatService = ({
             conversationState.updateMessage(assistantMessageId, { ...finalAssistantMessage });
             
             if (!finalAssistantMessage.error) {
-                 try {
-                    const { error: insertError } = await supabase.from('conversation_details').insert({
-                        id: finalAssistantMessage.id, conversation_id: finalAssistantMessage.conversation_id,
-                        role: finalAssistantMessage.role, content: finalAssistantMessage.content,
-                        created_at: finalAssistantMessage.created_at, thought: finalAssistantMessage.thought || null,
-                        feedback: finalAssistantMessage.feedback || null,
-                    });
-                    if (insertError) {
-                        console.error("Asistan yanıtı kaydedilemedi:", insertError);
-                        uiState.setError(`Asistan yanıtı kaydedilemedi: ${insertError.message}`);
-                    }
-                } catch (e: any) {
-                    console.error("Asistan yanıtı kaydedilirken ağ hatası:", e);
-                    uiState.setError(`Asistan yanıtı kaydedilirken bir ağ hatası oluştu: ${e.message}`);
-                }
+                await supabase.from('conversation_details').insert({
+                    id: finalAssistantMessage.id, conversation_id: finalAssistantMessage.conversation_id,
+                    role: finalAssistantMessage.role, content: finalAssistantMessage.content,
+                    created_at: finalAssistantMessage.created_at, thought: finalAssistantMessage.thought || null,
+                    feedback: finalAssistantMessage.feedback || null,
+                });
                 
-                try {
-                    await conversationState.finalizeStreamedDocuments();
-                    if (!uiState.isExpertMode) {
-                        const updatedConv = conversationState.conversations.find(c => c.id === activeId);
-                        if (updatedConv) {
-                            const currentDocs = buildGeneratedDocs(updatedConv.documents);
-                            const hasRealAnalysisDoc = !!currentDocs.analysisDoc && !currentDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
-                            if (hasRealAnalysisDoc) {
-                                 geminiService.checkAnalysisMaturity(updatedConv.messages, currentDocs, activeModel())
-                                    .then(({ report, tokens }) => {
-                                        conversationState.commitTokenUsage(tokens);
-                                        conversationState.saveDocumentVersion('maturityReport', report as any, 'AI tarafından olgunluk değerlendirmesi yapıldı');
-                                    }).catch(maturityError => {
-                                        console.warn("Maturity check failed in the background:", maturityError);
-                                    });
-                            }
+                await conversationState.finalizeStreamedDocuments();
+                if (!uiState.isExpertMode) {
+                    const updatedConv = conversationState.conversations.find(c => c.id === activeId);
+                    if (updatedConv) {
+                        const currentDocs = buildGeneratedDocs(updatedConv.documents);
+                        const hasRealAnalysisDoc = !!currentDocs.analysisDoc && !currentDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
+                        if (hasRealAnalysisDoc) {
+                             geminiService.checkAnalysisMaturity(updatedConv.messages, currentDocs, activeModel())
+                                .then(({ report, tokens }) => {
+                                    conversationState.commitTokenUsage(tokens);
+                                    conversationState.saveDocumentVersion('maturityReport', report as any, 'AI tarafından olgunluk değerlendirmesi yapıldı');
+                                }).catch(maturityError => {
+                                    console.warn("Maturity check failed in the background:", maturityError);
+                                });
                         }
                     }
-                } catch (e: any) {
-                    console.error("Error finalizing streamed documents or checking maturity:", e);
-                    uiState.setError(e.message || "Akış sonrası işlemler sırasında bir hata oluştu.");
                 }
             }
         }

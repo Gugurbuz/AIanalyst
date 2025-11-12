@@ -26,6 +26,7 @@ const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs> = {
     analysis: 'analysisDoc',
     test: 'testScenarios',
     traceability: 'traceabilityMatrix',
+    mermaid: 'mermaidViz',
     bpmn: 'bpmnViz',
     maturity_report: 'maturityReport',
 };
@@ -35,6 +36,7 @@ const keyToDocumentTypeMap: Record<keyof GeneratedDocs, DocumentType | null> = {
     analysisDoc: 'analysis',
     testScenarios: 'test',
     traceabilityMatrix: 'traceability',
+    mermaidViz: 'mermaid',
     bpmnViz: 'bpmn',
     maturityReport: 'maturity_report',
     visualization: null,
@@ -54,7 +56,7 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
     for (const doc of documents) {
         const key = documentTypeToKeyMap[doc.document_type];
         if (key) {
-             if (key === 'bpmnViz' || key === 'maturityReport' || key === 'testScenarios' || key === 'traceabilityMatrix') {
+             if (key === 'mermaidViz' || key === 'bpmnViz' || key === 'maturityReport' || key === 'testScenarios' || key === 'traceabilityMatrix') {
                 try {
                     (docs as any)[key] = JSON.parse(doc.content);
                 } catch (e) {
@@ -77,7 +79,7 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
     }
     
     // Read staleness from the source of truth (the document objects)
-    docs.isVizStale = findDoc('bpmn')?.is_stale || false;
+    docs.isVizStale = findDoc('mermaid')?.is_stale || findDoc('bpmn')?.is_stale || false;
     docs.isTestStale = findDoc('test')?.is_stale || false;
     docs.isTraceabilityStale = findDoc('traceability')?.is_stale || false;
     
@@ -116,15 +118,14 @@ export const useConversationState = ({ user, initialData }: UseConversationState
 
     const saveConversation = useCallback(async (conv: Partial<Conversation> & { id: string }) => {
         setSaveStatus('saving');
-        try {
-            const { messages, documentVersions, documents, backlogSuggestions, ...updatePayload } = conv;
-            const { error } = await supabase.from('conversations').update(updatePayload).eq('id', conv.id);
-            if (error) throw error;
-            setSaveStatus('saved');
-            setTimeout(() => setSaveStatus('idle'), 2000);
-        } catch (error) {
+        const { messages, documentVersions, documents, backlogSuggestions, ...updatePayload } = conv;
+        const { error } = await supabase.from('conversations').update(updatePayload).eq('id', conv.id);
+        if (error) {
             setSaveStatus('error');
             console.error('Save error:', error);
+        } else {
+            setSaveStatus('saved');
+            setTimeout(() => setSaveStatus('idle'), 2000);
         }
     }, []);
 
@@ -136,12 +137,8 @@ export const useConversationState = ({ user, initialData }: UseConversationState
     }, [triggerSave]);
 
     const saveProfile = useCallback(async (profile: UserProfile) => {
-        try {
-            const { error } = await supabase.from('user_profiles').update({ tokens_used: profile.tokens_used }).eq('id', profile.id);
-            if (error) throw error;
-        } catch (error: any) {
-            console.error('Failed to update user profile:', error.message);
-        }
+        const { error } = await supabase.from('user_profiles').update({ tokens_used: profile.tokens_used }).eq('id', profile.id);
+        if (error) console.error('Failed to update user profile:', error.message);
     }, []);
 
     const triggerProfileSave = useDebounce(saveProfile, 2000);
@@ -185,7 +182,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
     // FIX: Add optional `conversationIdOverride` parameter to handle new conversations correctly and prevent race conditions.
     const saveDocumentVersion = useCallback(async (docKey: keyof GeneratedDocs, newContent: any, reason: string, templateId?: string | null, conversationIdOverride?: string) => {
         const conversationId = conversationIdOverride || activeConversationId;
-        if (!conversationId) throw new Error("No active conversation");
+        if (!conversationId) return Promise.reject("No active conversation");
 
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const validTemplateId = templateId && uuidRegex.test(templateId) ? templateId : null;
@@ -193,7 +190,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         const document_type = keyToDocumentTypeMap[docKey];
         if (!document_type) {
             console.warn(`Unknown docKey "${String(docKey)}" passed to saveDocumentVersion. Skipping.`);
-            throw new Error(`Unknown docKey "${String(docKey)}"`);
+            return Promise.reject(`Unknown docKey "${String(docKey)}"`);
         }
         
         const newContentString = typeof newContent === 'string' ? newContent : JSON.stringify(newContent);
@@ -215,49 +212,11 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         const { data: newVersionDb, error: insertError } = await supabase.from('document_versions').insert(newVersionRecord).select().single();
         if (insertError || !newVersionDb) throw new Error("Doküman versiyonu kaydedilemedi: " + (insertError?.message || 'Bilinmeyen hata'));
         
-        // --- START OF FIX: Replaced 'upsert' with explicit 'select' then 'update'/'insert' ---
-        const payload = {
-            conversation_id: conversationId,
-            user_id: user.id,
-            document_type: document_type,
-            content: newContentString,
-            current_version_id: newVersionDb.id,
-            template_id: validTemplateId,
-            is_stale: false, // Explicitly set this on update
-        };
-
-        const { data: existingDoc, error: findError } = await supabase
-            .from('documents')
-            .select('id')
-            .eq('conversation_id', conversationId)
-            .eq('document_type', document_type)
-            .maybeSingle();
-
-        if (findError) {
-            throw new Error(`Doküman aranırken hata oluştu: ${findError.message}`);
-        }
-
-        if (existingDoc) {
-            // Update existing document by its primary key
-            const { error: updateError } = await supabase
-                .from('documents')
-                .update(payload)
-                .eq('id', existingDoc.id);
-
-            if (updateError) {
-                throw new Error(`Ana doküman güncellenemedi: ${updateError.message}`);
-            }
-        } else {
-            // Insert new document
-            const { error: mainInsertError } = await supabase
-                .from('documents')
-                .insert(payload);
-
-            if (mainInsertError) {
-                throw new Error(`Ana doküman kaydedilemedi: ${mainInsertError.message}`);
-            }
-        }
-        // --- END OF FIX ---
+        const { error: upsertError } = await supabase.from('documents').upsert({
+            conversation_id: conversationId, user_id: user.id, document_type: document_type,
+            content: newContentString, current_version_id: newVersionDb.id, template_id: validTemplateId
+        }, { onConflict: 'conversation_id, document_type' }).select().single();
+        if (upsertError) throw new Error("Ana doküman kaydedilemedi: " + (upsertError?.message || 'Bilinmeyen hata'));
 
         // Optimistic update
         setConversations(prev => prev.map(c => {
@@ -283,15 +242,13 @@ export const useConversationState = ({ user, initialData }: UseConversationState
 
     const streamedDocsRef = useRef<Partial<Record<keyof GeneratedDocs, string>>>({});
 
-    const streamDocument = useCallback((docKey: keyof GeneratedDocs, newContent: any) => {
+    const streamDocument = useCallback((docKey: keyof GeneratedDocs, newContent: string) => {
         const document_type = keyToDocumentTypeMap[docKey];
         if (!document_type) {
             console.warn(`Unknown docKey "${String(docKey)}" passed to streamDocument. Skipping.`);
             return;
         }
     
-        const newContentString = typeof newContent === 'string' ? newContent : JSON.stringify(newContent);
-
         setConversations(prev => prev.map(c => {
             if (c.id !== activeConversationId) return c;
     
@@ -302,7 +259,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
                 if (doc.document_type === document_type) {
                     docFound = true;
                     // Always replace content for live streaming view
-                    return { ...doc, content: newContentString, updated_at: new Date().toISOString() };
+                    return { ...doc, content: newContent, updated_at: new Date().toISOString() };
                 }
                 return doc;
             });
@@ -315,7 +272,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                     document_type,
-                    content: newContentString,
+                    content: newContent,
                     current_version_id: null,
                     is_stale: false,
                 };
@@ -327,7 +284,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         }));
     
         // Update the ref for the final save operation at the end of the stream.
-        streamedDocsRef.current[docKey] = newContentString;
+        streamedDocsRef.current[docKey] = newContent;
     }, [activeConversationId, user.id]);
 
     const finalizeStreamedDocuments = useCallback(async (templateId?: string | null) => {
@@ -389,64 +346,44 @@ export const useConversationState = ({ user, initialData }: UseConversationState
     
     const fetchAllFeedback = useCallback(async () => {
         setIsFetchingFeedback(true);
-        try {
-            const { data, error } = await supabase.from('conversations').select('title, conversation_details(*)').eq('user_id', user.id);
-            if (error) throw error;
-            
-            if (data) {
-                const feedbackItems: FeedbackItem[] = data.flatMap(conv => 
-                    (conv.conversation_details || []).filter(msg => msg.role === 'assistant' && msg.feedback && (msg.feedback.rating || msg.feedback.comment))
-                                                    .map(msg => ({ message: msg, conversationTitle: conv.title || 'Başlıksız Analiz' }))
-                );
-                setAllFeedback(feedbackItems);
-            }
-             return null;
-        } catch (error: any) {
+        const { data, error } = await supabase.from('conversations').select('title, conversation_details(*)').eq('user_id', user.id);
+        if (error) {
             console.error("Geri bildirim getirilirken hata:", error);
             setAllFeedback([]);
-            return error;
-        } finally {
-            setIsFetchingFeedback(false);
+        } else if (data) {
+            const feedbackItems: FeedbackItem[] = data.flatMap(conv => 
+                (conv.conversation_details || []).filter(msg => msg.role === 'assistant' && msg.feedback && (msg.feedback.rating || msg.feedback.comment))
+                                                .map(msg => ({ message: msg, conversationTitle: conv.title || 'Başlıksız Analiz' }))
+            );
+            setAllFeedback(feedbackItems);
         }
+        setIsFetchingFeedback(false);
+        return error;
     }, [user.id]);
 
     const updateConversationTitle = useCallback(async (id: string, title: string) => {
         updateConversation(id, { title });
-        try {
-            const { error } = await supabase.from('conversations').update({ title }).eq('id', id);
-            if (error) throw error;
-        } catch (error) {
+        const { error } = await supabase.from('conversations').update({ title }).eq('id', id);
+        if (error) {
             console.error("Failed to update title:", error);
-            // Optionally revert or show an error to the user
+            // Optionally revert UI change
         }
     }, [updateConversation]);
 
     const deleteConversation = useCallback(async (id: string) => {
+        // Optimistic UI update
         const originalConversations = conversations;
-        const originalActiveId = activeConversationId;
-        
-        const deletedIndex = originalConversations.findIndex(c => c.id === id);
-        if (deletedIndex === -1) return;
-
-        const newConversations = originalConversations.filter(c => c.id !== id);
-        setConversations(newConversations);
-        
+        setConversations(prev => prev.filter(c => c.id !== id));
         if (activeConversationId === id) {
-            let nextActiveId: string | null = null;
-            if (newConversations.length > 0) {
-                nextActiveId = newConversations[deletedIndex]?.id || newConversations[deletedIndex - 1]?.id || null;
-            }
-            setActiveConversationId(nextActiveId);
+            setActiveConversationId(conversations.length > 1 ? conversations.filter(c => c.id !== id)[0].id : null);
         }
 
-        try {
-            const { error } = await supabase.from('conversations').delete().eq('id', id);
-            if (error) throw error;
-        } catch (error) {
+        const { error } = await supabase.from('conversations').delete().eq('id', id);
+
+        if (error) {
             console.error("Failed to delete conversation:", error);
+            // Revert UI on error
             setConversations(originalConversations);
-            setActiveConversationId(originalActiveId);
-            // Optionally show an error to the user
         }
     }, [conversations, activeConversationId]);
     
