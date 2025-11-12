@@ -64,7 +64,7 @@ export const ProjectMapView: React.FC<ProjectMapViewProps> = ({ docs, onNodeClic
         traceability: typeof docs.traceabilityMatrix === 'object' ? !!(docs.traceabilityMatrix as SourcedDocument).content : !!docs.traceabilityMatrix,
     };
 
-    const status = {
+    const status: Record<NodeKey, 'complete' | 'pending' | 'stale'> = {
         request: has.request ? 'complete' : 'pending',
         analysis: has.analysis ? 'complete' : 'pending',
         viz: has.viz ? (docs.isVizStale ? 'stale' : 'complete') : 'pending',

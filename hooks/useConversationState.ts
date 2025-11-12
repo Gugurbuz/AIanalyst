@@ -180,7 +180,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
     // FIX: Add optional `conversationIdOverride` parameter to handle new conversations correctly and prevent race conditions.
     const saveDocumentVersion = useCallback(async (docKey: keyof GeneratedDocs, newContent: any, reason: string, templateId?: string | null, conversationIdOverride?: string) => {
         const conversationId = conversationIdOverride || activeConversationId;
-        if (!conversationId) return Promise.reject("No active conversation");
+        if (!conversationId) throw new Error("No active conversation");
 
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         const validTemplateId = templateId && uuidRegex.test(templateId) ? templateId : null;
@@ -188,7 +188,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         const document_type = keyToDocumentTypeMap[docKey];
         if (!document_type) {
             console.warn(`Unknown docKey "${String(docKey)}" passed to saveDocumentVersion. Skipping.`);
-            return Promise.reject(`Unknown docKey "${String(docKey)}"`);
+            throw new Error(`Unknown docKey "${String(docKey)}"`);
         }
         
         const newContentString = typeof newContent === 'string' ? newContent : JSON.stringify(newContent);

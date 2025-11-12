@@ -109,7 +109,8 @@ export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
     const traceabilityMatrixContent = typeof generatedDocs.traceabilityMatrix === 'object' ? (generatedDocs.traceabilityMatrix as SourcedDocument).content : generatedDocs.traceabilityMatrix as string;
 
     const noOp = async () => {};
-    const noOpWithArgs = (...args: any[]) => {};
+    // FIX: Changed to async function to return a Promise<void>
+    const noOpWithArgs = async (...args: any[]) => {};
     
     const tabs = [
         { id: 'chat', name: 'Sohbet', icon: MessageSquare, content: messages.length > 0 },

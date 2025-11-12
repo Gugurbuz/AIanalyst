@@ -140,8 +140,16 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
 
     const handleFeedbackUpdate = async (messageId: string, feedback: { rating: 'up' | 'down' | null; comment?: string }) => {
         conversationState.updateMessage(messageId, { feedback });
-        const { error } = await supabase.from('conversation_details').update({ feedback }).eq('id', messageId);
-        if (error) uiState.setError("Geri bildirim kaydedilemedi.");
+        try {
+            const { error } = await supabase.from('conversation_details').update({ feedback }).eq('id', messageId);
+            if (error) {
+                console.error("Geri bildirim güncellenirken hata oluştu:", error);
+                uiState.setError("Geri bildirim kaydedilemedi.");
+            }
+        } catch (e: any) {
+            console.error("Geri bildirim güncellenirken ağ hatası:", e);
+            uiState.setError(`Geri bildirim kaydedilemedi: ${e.message}`);
+        }
     };
 
     const handleNewConversationAndSend = async (content?: string, title?: string) => {

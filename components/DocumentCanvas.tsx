@@ -13,7 +13,7 @@ import { TiptapEditor } from './TiptapEditor';
 
 interface DocumentCanvasProps {
     content: string;
-    onContentChange: (newContent: string, reason: string) => void;
+    onContentChange: (newContent: string, reason: string) => Promise<void>; // <-- Düzeltme: Fonksiyonun async olduğunu belirtmek için Promise<void> eklendi
     docKey: 'analysisDoc' | 'testScenarios' | 'traceabilityMatrix' | 'requestDoc';
     onModifySelection: (selectedText: string, userPrompt: string, docKey: 'analysisDoc' | 'testScenarios') => void;
     inlineModificationState: { docKey: 'analysisDoc' | 'testScenarios'; originalText: string } | null;
@@ -180,7 +180,7 @@ const LintingSuggestionsBar: React.FC<{ issues: LintingIssue[]; onFix: (issue: L
 };
 
 export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
-    const { content, onContentChange, docKey, onModifySelection, inlineModificationState, isGenerating, isStreaming = false, placeholder, templates, selectedTemplate, onTemplateChange, filename, isTable, documentVersions, onAddTokens, onRestoreVersion } = props;
+    const { content, onContentChange, docKey, onModifySelection, inlineModificationState, isGenerating, isStreaming = false, placeholder, templates, selectedTemplate, onTemplateChange, filename, isTable, onGenerate, generateButtonText, isGenerationDisabled, generationDisabledTooltip, documentVersions, onAddTokens, onRestoreVersion } = props;
 
     const [isEditing, setIsEditing] = useState(false);
     const [selection, setSelection] = useState<{ start: number, end: number, text: string } | null>(null);
@@ -243,7 +243,12 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const parsedRequestDoc = useMemo(() => {
         if (docKey === 'requestDoc') {
             try {
-                const parsed = JSON.parse(content);
+                // Hata olasılığı olan içeriği `content` prop'undan al
+                const trimmedContent = (content || '').trim();
+                const cleanedJsonString = trimmedContent.replace(/^```json\s*|```\s*$/g, '').trim();
+                if (!cleanedJsonString) return null; // İçerik boşsa ayrıştırma
+                
+                const parsed = JSON.parse(cleanedJsonString);
                 return isIsBirimiTalep(parsed) ? parsed : null;
             } catch { return null; }
         }
@@ -273,7 +278,13 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                     finalContentToSave = reqJson;
                 }
                 
-                onContentChange(finalContentToSave, summary || "Manuel olarak düzenlendi.");
+                // ******** HATA DÜZELTMESİ: BAŞLANGIÇ ********
+                // onContentChange, saveDocumentVersion'ı çalıştıran asenkron bir fonksiyondur.
+                // Hata fırlatabilir (örn. Supabase hatası).
+                // `await` eklenmezse, bu fonksiyondaki hatalar yakalanamaz (uncaught rejection).
+                await onContentChange(finalContentToSave, summary || "Manuel olarak düzenlendi.");
+                // ******** HATA DÜZELTMESİ: BİTİŞ ********
+                
                 setIsEditing(false);
 
                 if (docKey === 'analysisDoc') {

@@ -1,6 +1,5 @@
+// FIX: Removed `type Commands` from import to fix module augmentation error.
 import { Node, mergeAttributes } from '@tiptap/core';
-// Fix: Add a type-only import to treat this file as a module, which is required for module augmentation to work correctly.
-import type {} from '@tiptap/core';
 
 export interface IframeOptions {
   allowFullscreen: boolean,

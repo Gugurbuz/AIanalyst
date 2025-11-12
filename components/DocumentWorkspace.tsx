@@ -40,7 +40,8 @@ interface DocumentWorkspaceProps {
     onUpdateConversation: (id: string, updates: Partial<Conversation>) => void;
     isProcessing: boolean; // This is now the GLOBAL processing state (e.g., for chat)
     generatingDocType: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | null;
-    onUpdateDocument: (docKey: keyof GeneratedDocs, newContent: string | SourcedDocument, reason: string) => void;
+    // FIX: Changed return type to Promise<void> to match the async function it receives.
+    onUpdateDocument: (docKey: keyof GeneratedDocs, newContent: string | SourcedDocument, reason: string) => Promise<void>;
     onModifySelection: (selectedText: string, userPrompt: string, docKey: 'analysisDoc' | 'testScenarios') => Promise<void>;
     onModifyDiagram: (userPrompt: string) => Promise<void>;
     onGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string) => void;

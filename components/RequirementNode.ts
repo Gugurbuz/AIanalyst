@@ -1,9 +1,7 @@
-// components/RequirementNode.ts
+// FIX: Removed `type Commands` from import to fix module augmentation error.
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import { RequirementComponent } from './RequirementComponent';
-// Fix: Add a type-only import to treat this file as a module, which is required for module augmentation to work correctly.
-import type {} from '@tiptap/core';
 
 export type RequirementStatus = 'pending' | 'approved' | 'rejected';
 

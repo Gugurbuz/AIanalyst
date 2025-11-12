@@ -1,6 +1,5 @@
 // hooks/useUIState.ts
 import { useState, useRef, useCallback } from 'react';
-// FIX: Add missing import for GeneratedDocs type.
 import type { Theme, GeminiModel, GeneratedDocs } from '../types';
 
 export const useUIState = () => {
@@ -8,7 +7,6 @@ export const useUIState = () => {
     const [appMode, setAppMode] = useState<'analyst' | 'backlog'>('analyst');
     const [isConversationListOpen, setIsConversationListOpen] = useState(true);
     const [isWorkspaceVisible, setIsWorkspaceVisible] = useState(true);
-    // FIX: Add state for the NewAnalysisModal, which was missing.
     const [isNewAnalysisModalOpen, setIsNewAnalysisModalOpen] = useState(false);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -23,7 +21,7 @@ export const useUIState = () => {
     const [isFeedbackDashboardOpen, setIsFeedbackDashboardOpen] = useState(false);
     const [isDeepAnalysisMode, setIsDeepAnalysisMode] = useState(false);
     const [isExpertMode, setIsExpertMode] = useState(false);
-    const [diagramType, setDiagramType] = useState<'mermaid' | 'bpmn'>('bpmn');
+    const [diagramType, setDiagramType] = useState<'bpmn'>('bpmn');
     const [displayedMaturityScore, setDisplayedMaturityScore] = useState<{ score: number; justification: string } | null>(null);
     const maturityScoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [longTextPrompt, setLongTextPrompt] = useState<{ content: string; callback: (choice: 'analyze' | 'save') => void } | null>(null);

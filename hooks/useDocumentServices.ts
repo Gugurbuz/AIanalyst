@@ -242,41 +242,54 @@ export const useDocumentServices = ({
         }
     }, [conversationState, uiState, handleGenerateDoc]);
 
-    const handleConfirmRegenerate = (saveCurrent: boolean) => {
+    const handleConfirmRegenerate = async (saveCurrent: boolean) => {
         const data = uiState.regenerateModalData.current;
         if (!data) return;
         const { docType, newTemplateId } = data;
-        
-        if (saveCurrent) {
-            const docKey = { analysis: 'analysisDoc', test: 'testScenarios', traceability: 'traceabilityMatrix' }[docType];
-            const content = conversationState.activeConversation?.generatedDocs[docKey as keyof GeneratedDocs];
-            if (content) {
-                conversationState.saveDocumentVersion(docKey as keyof GeneratedDocs, content, "Yeni şablon seçimi öncesi arşivlendi");
+    
+        try {
+            if (saveCurrent) {
+                const docKey = { analysis: 'analysisDoc', test: 'testScenarios', traceability: 'traceabilityMatrix' }[docType];
+                const content = conversationState.activeConversation?.generatedDocs[docKey as keyof GeneratedDocs];
+                if (content) {
+                    await conversationState.saveDocumentVersion(docKey as keyof GeneratedDocs, content, "Yeni şablon seçimi öncesi arşivlendi");
+                }
             }
+            
+            uiState.setIsRegenerateModalOpen(false);
+            conversationState.setSelectedTemplates(prev => ({ ...prev, [docType]: newTemplateId }));
+            handleGenerateDoc(docType, newTemplateId);
+    
+        } catch (error: any) {
+            uiState.setError(`Mevcut versiyon arşivlenirken bir hata oluştu: ${error.message}`);
+            uiState.setIsRegenerateModalOpen(false);
         }
-        uiState.setIsRegenerateModalOpen(false);
-        conversationState.setSelectedTemplates(prev => ({ ...prev, [docType]: newTemplateId }));
-        handleGenerateDoc(docType, newTemplateId);
     };
 
     const handleRestoreVersion = async (version: DocumentVersion) => {
         const activeConv = conversationState.activeConversation;
         if (!activeConv) return;
         
-        const docKey = documentTypeToKeyMap[version.document_type] as keyof GeneratedDocs;
-        if (!docKey) return;
-        
-        const reason = `v${version.version_number} versiyonuna geri dönüldü`;
-        await conversationState.saveDocumentVersion(docKey, version.content, reason, version.template_id);
-        
-        // YENİ: Geri yüklemeyi sohbet geçmişine ekle
-        const docNameMap: Record<string, string> = { analysisDoc: 'Analiz Dokümanı', requestDoc: 'Talep Dokümanı', testScenarios: 'Test Senaryoları', traceabilityMatrix: 'İzlenebilirlik Matrisi' };
-        const documentName = docNameMap[docKey] || docKey;
+        try {
+            const docKey = documentTypeToKeyMap[version.document_type] as keyof GeneratedDocs;
+            if (!docKey) {
+                throw new Error(`Bilinmeyen doküman tipi: ${version.document_type}`);
+            }
+            
+            const reason = `v${version.version_number} versiyonuna geri dönüldü`;
+            await conversationState.saveDocumentVersion(docKey, version.content, reason, version.template_id);
+            
+            // YENİ: Geri yüklemeyi sohbet geçmişine ekle
+            const docNameMap: Record<string, string> = { analysisDoc: 'Analiz Dokümanı', requestDoc: 'Talep Dokümanı', testScenarios: 'Test Senaryoları', traceabilityMatrix: 'İzlenebilirlik Matrisi' };
+            const documentName = docNameMap[docKey] || docKey;
 
-        await addMessagesForSilentAction(
-            `(Sistem) '${documentName}' dokümanı bir önceki versiyona geri yüklendi.`,
-            `'${documentName}' dokümanı, "${reason}" açıklamasıyla ${version.version_number} numaralı versiyona başarıyla geri yüklendi.`
-        );
+            await addMessagesForSilentAction(
+                `(Sistem) '${documentName}' dokümanı bir önceki versiyona geri yüklendi.`,
+                `'${documentName}' dokümanı, "${reason}" açıklamasıyla ${version.version_number} numaralı versiyona başarıyla geri yüklendi.`
+            );
+        } catch (error: any) {
+            uiState.setError(`Versiyon geri yüklenirken bir hata oluştu: ${error.message}`);
+        }
     };
 
     return {

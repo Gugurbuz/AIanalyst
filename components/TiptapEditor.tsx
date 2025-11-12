@@ -31,6 +31,7 @@ interface TiptapEditorProps {
     isEditable: boolean;
     onAiAction: (action: 'summarize' | 'expand' | 'rephrase' | 'fix_grammar') => void;
     onCustomAiCommand: () => void;
+    isStreaming?: boolean;
 }
 
 const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
@@ -162,7 +163,7 @@ const MenuBar = ({ editor, onImageUpload }: { editor: any; onImageUpload: (file:
 };
 
 
-export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, onSelectionUpdate, isEditable, onAiAction, onCustomAiCommand }) => {
+export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, onSelectionUpdate, isEditable, onAiAction, onCustomAiCommand, isStreaming }) => {
     const { user, activeConversation } = useAppContext();
     const [isAiMenuOpen, setIsAiMenuOpen] = useState(false);
     const aiMenuRef = useRef<HTMLDivElement>(null);
@@ -316,18 +317,34 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
         },
     });
 
+    useEffect(() => {
+        if (isStreaming && editor?.view.dom.parentElement) {
+            const container = editor.view.dom.parentElement;
+            container.scrollTop = container.scrollHeight;
+        }
+    }, [isStreaming, content, editor]);
+
     React.useEffect(() => {
         if (editor && !editor.isDestroyed) {
             if (editor.isEditable !== isEditable) editor.setEditable(isEditable);
             
             const currentContentAsMarkdown = turndownService.turndown(editor.getHTML());
-            if (currentContentAsMarkdown !== content) {
-                 const html = marked.parse(content || '', {
-                    gfm: true,
-                    breaks: true,
-                });
-                const sanitizedHtml = DOMPurify.sanitize(html, { ADD_TAGS: ["iframe", "mark", "span"], ADD_ATTR: ['allowfullscreen', 'frameborder', 'src', 'style'] });
-                editor.commands.setContent(sanitizedHtml, false); 
+            
+            const strippedContent = (content || '').replace(/^```(?:markdown|md)?\s*|```\s*$/g, '').trim();
+
+            if (currentContentAsMarkdown !== strippedContent) {
+                try {
+                    const html = marked.parse(strippedContent, {
+                        gfm: true,
+                        breaks: true,
+                    });
+                    const sanitizedHtml = DOMPurify.sanitize(html, { ADD_TAGS: ["iframe", "mark", "span"], ADD_ATTR: ['allowfullscreen', 'frameborder', 'src', 'style'] });
+                    editor.commands.setContent(sanitizedHtml, false);
+                } catch (e) {
+                    console.error("Markdown ayrıştırılırken hata oluştu:", e, "İçerik:", strippedContent);
+                    // Fallback to prevent crash, show raw text safely
+                    editor.commands.setContent(strippedContent.replace(/</g, "&lt;").replace(/>/g, "&gt;"), false);
+                }
             }
         }
     }, [content, isEditable, editor]);
