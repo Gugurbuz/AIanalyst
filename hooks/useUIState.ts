@@ -5,7 +5,7 @@ import type { Theme, GeminiModel, GeneratedDocs } from '../types';
 export const useUIState = () => {
     const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'light');
     const [appMode, setAppMode] = useState<'analyst' | 'backlog'>('analyst');
-    const [isConversationListOpen, setIsConversationListOpen] = useState(true);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isWorkspaceVisible, setIsWorkspaceVisible] = useState(true);
     const [isNewAnalysisModalOpen, setIsNewAnalysisModalOpen] = useState(false);
     const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -52,8 +52,8 @@ export const useUIState = () => {
         setTheme: handleThemeChange,
         appMode,
         setAppMode,
-        isConversationListOpen,
-        setIsConversationListOpen,
+        isSidebarOpen,
+        setIsSidebarOpen,
         isWorkspaceVisible,
         setIsWorkspaceVisible,
         isNewAnalysisModalOpen,

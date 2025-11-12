@@ -33,7 +33,6 @@ export const RequirementComponent = (props: any) => {
         props.updateAttributes({
             status: newStatus,
         });
-        // FIX: Corrected an erroneous function call. The check should be for the existence of the prop, not its return value.
         if (props.onStatusChange) {
             props.onStatusChange(reqId, newStatus);
         }

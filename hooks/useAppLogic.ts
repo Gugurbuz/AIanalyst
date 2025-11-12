@@ -220,7 +220,6 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
              if (!activeConversation) return;
              const lastUserMessage = [...activeConversation.messages].reverse().find(m => m.role === 'user');
              if(lastUserMessage) {
-                // FIX: Corrected a method call on a string property. The 'content' property is a string, not a function.
                 chatService.setMessageToEdit(lastUserMessage.content);
              }
         },

@@ -144,7 +144,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             const analyze = async () => {
                 setIsAnalyzingChange(true);
                 try {
-                    // FIX: Removed erroneous function call `()` on model name string literal.
                     const { impact, tokens } = await geminiService.analyzeDocumentChange(prevAnalysisDoc || '', generatedDocs.analysisDoc, 'gemini-2.5-flash-lite');
                     onAddTokens(tokens);
                     if (impact.isVisualizationImpacted) await updateDocumentStaleness('bpmn', true);
@@ -153,10 +152,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                 } catch (error) {
                     console.error("Impact analysis failed:", error);
                     
-                    // ******** HATA DÜZELTMESİ: BAŞLANGIÇ ********
-                    // Analiz başarısız olursa, bağımlı dokümanları "stale" olarak işaretlerken
-                    // bu çağrıların beklenmesi (await) gerekir. Aksi takdirde, bu
-                    // asenkron çağrılardan biri hata verirse "uncaught" hatası oluşur.
                     try {
                         await Promise.all([
                             updateDocumentStaleness('bpmn', true),
@@ -166,7 +161,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                     } catch (stalenessError) {
                         console.error("Failed to set documents as stale after impact analysis error:", stalenessError);
                     }
-                    // ******** HATA DÜZELTMESİ: BİTİŞ ********
 
                 } finally {
                     setIsAnalyzingChange(false);

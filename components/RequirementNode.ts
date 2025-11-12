@@ -1,4 +1,3 @@
-// FIX: Importing 'Commands' is not needed for module augmentation and was causing a module resolution error. The 'commands' object type is inferred.
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import { RequirementComponent } from './RequirementComponent';
@@ -7,14 +6,6 @@ export type RequirementStatus = 'pending' | 'approved' | 'rejected';
 
 export interface RequirementNodeOptions {
   HTMLAttributes: Record<string, any>;
-}
-
-declare module '@tiptap/core' {
-  interface Commands<ReturnType> {
-    requirementBlock: {
-      setRequirementBlock: (attributes: { reqId: string }) => ReturnType;
-    };
-  }
 }
 
 export const RequirementNode = Node.create<RequirementNodeOptions>({

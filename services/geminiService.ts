@@ -390,7 +390,6 @@ export const geminiService = {
             initialChecklist[2].details = "Oluşturuluyor...";
             yield { type: 'thought_chunk', payload: createThought("Süreç Görselleştiriliyor", initialChecklist) };
             try {
-                // FIX: Removed erroneous function call `()` on model name string literal.
                 const { code, tokens } = await this.generateDiagram(analysisDocContent, diagramType, templates.visualization, 'gemini-2.5-flash');
                 totalTokens += tokens;
                 yield { type: 'usage_update', tokens };
@@ -413,7 +412,6 @@ export const geminiService = {
             yield { type: 'thought_chunk', payload: createThought("Test Senaryoları Oluşturuluyor", initialChecklist) };
             let testScenariosContent = '';
             try {
-                // FIX: Removed erroneous function call `()` on model name string literal.
                 const testStream = this.generateTestScenarios(analysisDocContent, templates.test, 'gemini-2.5-flash');
                  for await (const chunk of testStream) {
                     if(chunk.type === 'doc_stream_chunk') testScenariosContent = chunk.chunk;
@@ -434,7 +432,6 @@ export const geminiService = {
                 initialChecklist[4].details = "Oluşturuluyor...";
                 yield { type: 'thought_chunk', payload: createThought("İzlenebilirlik Matrisi Oluşturuluyor", initialChecklist) };
                 try {
-                    // FIX: Removed erroneous function call `()` on model name string literal.
                     const matrixStream = this.generateTraceabilityMatrix(analysisDocContent, testScenariosContent, templates.traceability, 'gemini-2.5-flash');
                     for await (const chunk of matrixStream) {
                         yield chunk;

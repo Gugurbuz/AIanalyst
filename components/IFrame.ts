@@ -1,4 +1,3 @@
-// FIX: Importing 'Commands' is not needed for module augmentation and was causing a module resolution error.
 import { Node, mergeAttributes } from '@tiptap/core';
 
 export interface IframeOptions {
@@ -6,14 +5,6 @@ export interface IframeOptions {
   HTMLAttributes: {
     [key: string]: any,
   },
-}
-
-declare module '@tiptap/core' {
-  interface Commands<ReturnType> {
-    iframe: {
-      setIframe: (options: { src: string }) => ReturnType,
-    }
-  }
 }
 
 export default Node.create<IframeOptions>({
@@ -56,7 +47,7 @@ export default Node.create<IframeOptions>({
 
   addCommands() {
     return {
-      setIframe: (options) => ({ tr, dispatch }) => {
+      setIframe: (options: { src: string }) => ({ tr, dispatch }: any) => {
         const { selection } = tr;
         const node = this.type.create(options);
 

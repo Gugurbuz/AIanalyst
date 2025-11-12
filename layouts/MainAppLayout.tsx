@@ -197,7 +197,6 @@ export const MainAppLayout: React.FC = () => {
             {context.isFeatureSuggestionsModalOpen && <FeatureSuggestionsModal isOpen={context.isFeatureSuggestionsModalOpen} onClose={() => context.setIsFeatureSuggestionsModalOpen(false)} isLoading={context.isFetchingSuggestions} suggestions={context.featureSuggestions} onSelectSuggestion={(s) => context.sendMessage(s)} error={context.suggestionError} onRetry={context.handleSuggestNextFeature} />}
             {context.isRegenerateModalOpen && context.regenerateModalData.current && (
                 <RegenerateConfirmationModal isOpen={context.isRegenerateModalOpen} onClose={() => context.setIsRegenerateModalOpen(false)} onConfirm={context.handleConfirmRegenerate} documentName={context.regenerateModalData.current.docType === 'analysis' ? 'Analiz Dokümanı' : context.regenerateModalData.current.docType === 'test' ? 'Test Senaryoları' : 'İzlenebilirlik Matrisi'} 
-// FIX: Removed erroneous function call on 'newTemplateId' property.
 templateName={(context.regenerateModalData.current.docType === 'analysis' ? context.analysisTemplates : context.regenerateModalData.current.docType === 'test' ? context.testTemplates : context.traceabilityTemplates).find(t => t.id === context.regenerateModalData.current!.newTemplateId)?.name || ''} />
             )}
              {context.isDeveloperPanelOpen && (

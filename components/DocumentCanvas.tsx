@@ -280,12 +280,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                     finalContentToSave = reqJson;
                 }
                 
-                // ******** HATA DÜZELTMESİ: BAŞLANGIÇ ********
-                // onContentChange, saveDocumentVersion'ı çalıştıran asenkron bir fonksiyondur.
-                // Hata fırlatabilir (örn. Supabase hatası).
-                // `await` eklenmezse, bu fonksiyondaki hatalar yakalanamaz (uncaught rejection).
                 await onContentChange(finalContentToSave, summary || "Manuel olarak düzenlendi.");
-                // ******** HATA DÜZELTMESİ: BİTİŞ ********
                 
                 setIsEditing(false);
 
@@ -317,7 +312,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     
     const handleAiModifyFromModal = async (userPrompt: string) => {
         if (!selection) return;
-        // FIX: Removed erroneous function call `()` on type assertion.
         await onModifySelection(selection.text, userPrompt, docKey as 'analysisDoc' | 'testScenarios');
         setIsAiModalOpen(false); setSelection(null);
     };
