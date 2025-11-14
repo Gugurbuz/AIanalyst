@@ -230,16 +230,29 @@ const generateContentStream = async function* (
         let totalTextLength = 0;
 
         console.log("[STREAM DEBUG] Starting to read stream...");
+        console.log("[STREAM DEBUG] Reader object:", reader);
+        console.log("[STREAM DEBUG] Reader locked?:", data.locked);
 
-        while (!done) {
-            const { value, done: readerDone } = await reader.read();
-            console.log("[STREAM DEBUG] reader.read() returned:", { done: readerDone, hasValue: !!value, valueLength: value?.length });
-            done = readerDone;
+        try {
+            while (!done) {
+                console.log("[STREAM DEBUG] Calling reader.read()...");
+                const result = await reader.read();
+                chunkCount++;
+                console.log(`[STREAM DEBUG] reader.read() call #${chunkCount} returned:`, {
+                    done: result.done,
+                    hasValue: !!result.value,
+                    valueLength: result.value?.length,
+                    valueType: result.value?.constructor?.name,
+                    result: result
+                });
 
-            if (done && !value) {
-                console.log("[STREAM DEBUG] Stream ended (done=true, no value)");
-                break;
-            }
+                done = result.done;
+                const value = result.value;
+
+                if (done && !value) {
+                    console.log("[STREAM DEBUG] Stream ended (done=true, no value)");
+                    break;
+                }
 
             if (value) {
                 const decodedChunk = decoder.decode(value, { stream: true });
@@ -342,9 +355,15 @@ const generateContentStream = async function* (
             }
         }
 
+            console.log(`[STREAM DEBUG] Stream while-loop completed. Total chunks: ${chunkCount}, Total text length: ${totalTextLength}`);
+        } catch (error) {
+            console.error("[STREAM DEBUG] Error in while-loop:", error);
+            throw error;
+        }
+
         console.log(`[STREAM DEBUG] Stream completed. Total chunks: ${chunkCount}, Total text length: ${totalTextLength}`);
     } catch (error) {
-        console.error("[STREAM DEBUG] Stream error:", error);
+        console.error("[STREAM DEBUG] Stream error (outer catch):", error);
         console.error("Error details:", {
             message: error?.message,
             context: error?.context,
