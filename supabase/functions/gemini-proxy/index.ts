@@ -130,17 +130,15 @@ Deno.serve(async (req: Request) => {
 
     const { contents, config, stream = false } = body;
 
-    console.log("[EDGE] Request body parsed:", {
-      hasContents: !!contents,
+    console.log("[EDGE] Request received:", {
       contentsLength: contents?.length,
       hasConfig: !!config,
-      streamParam: stream,
-      streamType: typeof stream,
+      stream,
     });
 
     const apiKey = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GEMINI_APIKEY");
     if (!apiKey) {
-      console.error("GEMINI_API_KEY or GEMINI_APIKEY not found in environment");
+      console.error("GEMINI_API_KEY not found in environment");
       return new Response(
         JSON.stringify({ error: "GEMINI_API_KEY not configured" }),
         {
@@ -182,11 +180,9 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    console.log("[EDGE] Sending request to Gemini API:", {
+    console.log("[EDGE] Calling Gemini API:", {
       model,
       stream,
-      streamMode: stream ? 'streamGenerateContent' : 'generateContent',
-      apiUrl: apiUrl.substring(0, 100) + '...',
       hasTools: !!requestBody.tools,
       hasSystemInstruction: !!requestBody.systemInstruction,
     });
@@ -235,12 +231,10 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log("[EDGE] Checking stream mode:", { stream, hasResponseBody: !!response.body });
-
     if (stream) {
-      console.log("[EDGE] ENTERING STREAM MODE");
+      console.log("[EDGE] Stream mode enabled");
+
       if (!response.body) {
-        console.error("[EDGE] No response body from Gemini API in stream mode!");
         return new Response(
           JSON.stringify({ error: "No response body from Gemini API" }),
           {
@@ -259,112 +253,108 @@ Deno.serve(async (req: Request) => {
 
       const stream = new ReadableStream({
         async start(controller) {
-          let totalTokens = 0;
           let buffer = "";
-          let depth = 0;
-          let currentObject = "";
-          let chunkCount = 0;
-          let enqueuedCount = 0;
-
-          console.log("[EDGE STREAM] Starting stream processing...");
 
           try {
             while (true) {
               const { done, value } = await reader.read();
-              chunkCount++;
-              console.log(`[EDGE STREAM] reader.read() #${chunkCount}:`, { done, hasValue: !!value, valueLength: value?.length });
 
               if (done) {
-                console.log(`[EDGE STREAM] Stream ended. Total chunks: ${chunkCount}, Enqueued: ${enqueuedCount}`);
+                console.log("[EDGE STREAM] Stream ended");
                 break;
               }
 
-              const chunk = decoder.decode(value, { stream: true });
-              console.log(`[EDGE STREAM] Decoded chunk (first 200 chars):`, chunk.substring(0, 200));
-              buffer += chunk;
+              const decodedChunk = decoder.decode(value, { stream: true });
+              buffer += decodedChunk;
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
 
-              for (let i = 0; i < buffer.length; i++) {
-                const char = buffer[i];
+              for (const line of lines) {
+                if (!line.trim()) {
+                  continue;
+                }
 
-                if (char === '{') {
-                  depth++;
-                  currentObject += char;
-                } else if (char === '}') {
-                  currentObject += char;
-                  depth--;
+                try {
+                  const chunk = JSON.parse(line);
 
-                  if (depth === 0 && currentObject.trim()) {
-                    try {
-                      const parsedChunk = JSON.parse(currentObject);
-                      console.log("[EDGE STREAM] Parsed chunk:", JSON.stringify(parsedChunk).substring(0, 500));
+                  const streamChunk: StreamChunk = {};
 
-                      if (parsedChunk.candidates?.[0]?.finishReason) {
-                        console.log("[EDGE STREAM] ⚠️ FINISH REASON:", parsedChunk.candidates[0].finishReason);
-                      }
+                  if (chunk.candidates?.[0]?.content?.parts) {
+                    const parts = chunk.candidates[0].content.parts;
 
-                      const streamChunk: StreamChunk = {};
+                    const textParts = parts.filter((part: any) => part.text).map((part: any) => part.text);
+                    if (textParts.length > 0) {
+                      streamChunk.text = textParts.join('');
+                    }
 
-                      if (parsedChunk.candidates?.[0]?.content?.parts) {
-                        const parts = parsedChunk.candidates[0].content.parts;
-                        console.log("[EDGE STREAM] Found parts:", parts);
-                        const textParts = parts.filter((part: any) => part.text).map((part: any) => part.text);
-                        if (textParts.length > 0) {
-                          streamChunk.text = textParts.join('');
-                          console.log("[EDGE STREAM] Text extracted:", streamChunk.text.substring(0, 100));
-                        }
-
-                        const functionCalls = parts.filter((part: any) => part.functionCall);
-                        if (functionCalls.length > 0) {
-                          streamChunk.functionCalls = functionCalls.map((part: any) => part.functionCall);
-                          console.log("[EDGE STREAM] Function calls extracted:", streamChunk.functionCalls.length);
-                        }
-                      }
-
-                      if (parsedChunk.usageMetadata) {
-                        streamChunk.usageMetadata = {
-                          promptTokenCount: parsedChunk.usageMetadata.promptTokenCount || 0,
-                          candidatesTokenCount: parsedChunk.usageMetadata.candidatesTokenCount || parsedChunk.usageMetadata.totalTokenCount || 0,
-                          totalTokenCount: parsedChunk.usageMetadata.totalTokenCount || 0,
-                        };
-                        totalTokens = streamChunk.usageMetadata.totalTokenCount;
-                        console.log("[EDGE STREAM] Usage metadata extracted:", streamChunk.usageMetadata);
-                      }
-
-                      console.log("[EDGE STREAM] Stream chunk keys:", Object.keys(streamChunk));
-                      if (Object.keys(streamChunk).length > 0) {
-                        enqueuedCount++;
-                        const encodedChunk = JSON.stringify(streamChunk) + "\n";
-                        console.log(`[EDGE STREAM] Enqueueing chunk #${enqueuedCount}:`, encodedChunk.substring(0, 100));
-                        controller.enqueue(encoder.encode(encodedChunk));
-                      } else {
-                        console.log("[EDGE STREAM] Stream chunk is empty, skipping enqueue");
-                      }
-
-                      currentObject = "";
-                    } catch (e) {
-                      console.error("[EDGE STREAM] Failed to parse JSON object:", e, "Object:", currentObject);
-                      currentObject = "";
+                    const functionCalls = parts.filter((part: any) => part.functionCall);
+                    if (functionCalls.length > 0) {
+                      streamChunk.functionCalls = functionCalls.map((part: any) => part.functionCall);
                     }
                   }
-                } else if (depth > 0) {
-                  currentObject += char;
+
+                  if (chunk.usageMetadata) {
+                    streamChunk.usageMetadata = {
+                      promptTokenCount: chunk.usageMetadata.promptTokenCount || 0,
+                      candidatesTokenCount: chunk.usageMetadata.candidatesTokenCount || chunk.usageMetadata.totalTokenCount || 0,
+                      totalTokenCount: chunk.usageMetadata.totalTokenCount || 0,
+                    };
+                  }
+
+                  if (chunk.candidates?.[0]?.finishReason) {
+                    console.log("[EDGE STREAM] Finish reason:", chunk.candidates[0].finishReason);
+                  }
+
+                  if (Object.keys(streamChunk).length > 0) {
+                    controller.enqueue(encoder.encode(JSON.stringify(streamChunk) + "\n"));
+                  }
+                } catch (e) {
+                  console.error("[EDGE STREAM] Failed to parse line:", e);
                 }
               }
+            }
 
-              buffer = currentObject;
+            if (buffer.trim()) {
+              try {
+                const chunk = JSON.parse(buffer);
+                const streamChunk: StreamChunk = {};
+
+                if (chunk.candidates?.[0]?.content?.parts) {
+                  const parts = chunk.candidates[0].content.parts;
+
+                  const textParts = parts.filter((part: any) => part.text).map((part: any) => part.text);
+                  if (textParts.length > 0) {
+                    streamChunk.text = textParts.join('');
+                  }
+
+                  const functionCalls = parts.filter((part: any) => part.functionCall);
+                  if (functionCalls.length > 0) {
+                    streamChunk.functionCalls = functionCalls.map((part: any) => part.functionCall);
+                  }
+                }
+
+                if (chunk.usageMetadata) {
+                  streamChunk.usageMetadata = {
+                    promptTokenCount: chunk.usageMetadata.promptTokenCount || 0,
+                    candidatesTokenCount: chunk.usageMetadata.candidatesTokenCount || chunk.usageMetadata.totalTokenCount || 0,
+                    totalTokenCount: chunk.usageMetadata.totalTokenCount || 0,
+                  };
+                }
+
+                if (Object.keys(streamChunk).length > 0) {
+                  controller.enqueue(encoder.encode(JSON.stringify(streamChunk) + "\n"));
+                }
+              } catch (e) {
+                console.error("[EDGE STREAM] Failed to parse final buffer:", e);
+              }
             }
 
             controller.close();
           } catch (error) {
-            console.error("Stream processing error:", error);
+            console.error("[EDGE STREAM] Error:", error);
             controller.error(error);
           }
         },
-      });
-
-      console.log("[EDGE] Returning stream response with headers:", {
-        contentType: "application/x-ndjson",
-        transferEncoding: "chunked",
       });
 
       return new Response(stream, {
@@ -376,7 +366,6 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    console.log("[EDGE] NOT in stream mode, returning non-stream response");
     const data = await response.json();
 
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
@@ -410,17 +399,17 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error) {
-    console.error("Edge function error:", error);
+    console.error("[EDGE] Error:", error);
 
     let errorMessage = "Internal server error";
     let statusCode = 500;
 
     if (error instanceof Error) {
       if (error.name === "AbortError" || error.message.includes("timeout")) {
-        errorMessage = "Request timeout - the API took too long to respond";
+        errorMessage = "Request timeout";
         statusCode = 504;
       } else if (error.message.includes("fetch")) {
-        errorMessage = "Network error - unable to reach Gemini API";
+        errorMessage = "Network error";
         statusCode = 503;
       } else {
         errorMessage = error.message;
@@ -431,7 +420,6 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         error: errorMessage,
         details: error instanceof Error ? error.message : String(error),
-        type: error instanceof Error ? error.name : "UnknownError",
       }),
       {
         status: statusCode,
