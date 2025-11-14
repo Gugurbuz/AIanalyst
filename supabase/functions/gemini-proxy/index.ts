@@ -162,8 +162,7 @@ Deno.serve(async (req: Request) => {
           };
         } else {
           requestBody.systemInstruction = systemInstruction;
-        }
-      }
+        }      }
 
       if (tools) {
         requestBody.tools = tools;
@@ -249,13 +248,24 @@ Deno.serve(async (req: Request) => {
           let buffer = "";
           let depth = 0;
           let currentObject = "";
+          let chunkCount = 0;
+          let enqueuedCount = 0;
+
+          console.log("[EDGE STREAM] Starting stream processing...");
 
           try {
             while (true) {
               const { done, value } = await reader.read();
-              if (done) break;
+              chunkCount++;
+              console.log(`[EDGE STREAM] reader.read() #${chunkCount}:`, { done, hasValue: !!value, valueLength: value?.length });
+
+              if (done) {
+                console.log(`[EDGE STREAM] Stream ended. Total chunks: ${chunkCount}, Enqueued: ${enqueuedCount}`);
+                break;
+              }
 
               const chunk = decoder.decode(value, { stream: true });
+              console.log(`[EDGE STREAM] Decoded chunk (first 200 chars):`, chunk.substring(0, 200));
               buffer += chunk;
 
               for (let i = 0; i < buffer.length; i++) {
@@ -271,18 +281,22 @@ Deno.serve(async (req: Request) => {
                   if (depth === 0 && currentObject.trim()) {
                     try {
                       const parsedChunk = JSON.parse(currentObject);
+                      console.log("[EDGE STREAM] Parsed chunk:", parsedChunk);
                       const streamChunk: StreamChunk = {};
 
                       if (parsedChunk.candidates?.[0]?.content?.parts) {
                         const parts = parsedChunk.candidates[0].content.parts;
+                        console.log("[EDGE STREAM] Found parts:", parts);
                         const textParts = parts.filter((part: any) => part.text).map((part: any) => part.text);
                         if (textParts.length > 0) {
                           streamChunk.text = textParts.join('');
+                          console.log("[EDGE STREAM] Text extracted:", streamChunk.text.substring(0, 100));
                         }
 
                         const functionCalls = parts.filter((part: any) => part.functionCall);
                         if (functionCalls.length > 0) {
                           streamChunk.functionCalls = functionCalls.map((part: any) => part.functionCall);
+                          console.log("[EDGE STREAM] Function calls extracted:", streamChunk.functionCalls.length);
                         }
                       }
 
@@ -293,15 +307,22 @@ Deno.serve(async (req: Request) => {
                           totalTokenCount: parsedChunk.usageMetadata.totalTokenCount || 0,
                         };
                         totalTokens = streamChunk.usageMetadata.totalTokenCount;
+                        console.log("[EDGE STREAM] Usage metadata extracted:", streamChunk.usageMetadata);
                       }
 
+                      console.log("[EDGE STREAM] Stream chunk keys:", Object.keys(streamChunk));
                       if (Object.keys(streamChunk).length > 0) {
-                        controller.enqueue(encoder.encode(JSON.stringify(streamChunk) + "\n"));
+                        enqueuedCount++;
+                        const encodedChunk = JSON.stringify(streamChunk) + "\n";
+                        console.log(`[EDGE STREAM] Enqueueing chunk #${enqueuedCount}:`, encodedChunk.substring(0, 100));
+                        controller.enqueue(encoder.encode(encodedChunk));
+                      } else {
+                        console.log("[EDGE STREAM] Stream chunk is empty, skipping enqueue");
                       }
 
                       currentObject = "";
                     } catch (e) {
-                      console.error("Failed to parse JSON object:", e, "Object:", currentObject);
+                      console.error("[EDGE STREAM] Failed to parse JSON object:", e, "Object:", currentObject);
                       currentObject = "";
                     }
                   }
