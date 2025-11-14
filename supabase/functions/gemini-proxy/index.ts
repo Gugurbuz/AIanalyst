@@ -137,6 +137,12 @@ Deno.serve(async (req: Request) => {
     });
 
     const apiKey = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GEMINI_APIKEY");
+    console.log("[EDGE] API Key check:", {
+      hasGEMINI_API_KEY: !!Deno.env.get("GEMINI_API_KEY"),
+      hasGEMINI_APIKEY: !!Deno.env.get("GEMINI_APIKEY"),
+      finalKeyExists: !!apiKey,
+      keyLength: apiKey?.length || 0
+    });
     if (!apiKey) {
       console.error("GEMINI_API_KEY not found in environment");
       return new Response(
