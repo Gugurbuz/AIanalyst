@@ -1,9 +1,18 @@
+// components/ExportDropdown.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import { exportService } from '../services/exportService';
 import { Download, ChevronDown } from 'lucide-react';
+// YENİ IMPORTLAR (npm'den)
+import TurndownService from 'turndown';
+import { gfm } from 'turndown-plugin-gfm';
+
+// YENİ: Turndown servisini SADECE dışa aktarma için burada tanımlayın
+const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+turndownService.use(gfm);
+
 
 interface ExportDropdownProps {
-    content: string;
+    content: string; // BU PROP ARTIK HTML İÇERİYOR (veya diyagram kodu)
     filename: string;
     diagramType?: 'mermaid' | 'bpmn' | null;
     getSvgContent?: (() => Promise<string | null>) | null;
@@ -24,37 +33,56 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({ content, filenam
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    // GÜNCELLENMİŞ EXPORT FONKSİYONU
     const handleExport = async (format: 'pdf' | 'md' | 'svg' | 'png' | 'html' | 'bpmn' | 'docx') => {
-        if ((format === 'svg' || format === 'png') && getSvgContent) {
-            const svgContent = await getSvgContent();
-            if (svgContent) {
-                if (format === 'svg') {
-                    exportService.exportAsSvg(svgContent, `${filename}.svg`);
-                } else {
-                    exportService.exportAsPng(svgContent, `${filename}.png`);
-                }
-            } else {
-                alert('Dışa aktarılacak SVG içeriği bulunamadı.');
-            }
-        } else if (format === 'html') {
-            if (diagramType === 'mermaid') {
-                exportService.exportAsHtml(content, filename);
-            } else if (diagramType === 'bpmn') {
-                exportService.exportBpmnAsHtml(content, filename);
-            }
-        } else if (format === 'bpmn') {
-             exportService.exportAsMarkdown(content, `${filename}.bpmn`); // Uses same text export logic for the XML
-        } else if (format === 'md') {
-            exportService.exportAsMarkdown(content, `${filename}.md`);
-        } else if (format === 'docx') {
-             exportService.exportAsDocx(content, filename);
-        } else if (format === 'pdf') {
-            // For diagrams, we can try to export the SVG as part of the PDF, but for now, we'll just print text content
-            exportService.exportAsPdf(content, filename, !!isTable);
-        }
         setIsOpen(false);
+
+        // Diyagramlar (SVG/PNG/HTML/BPMN)
+        if (diagramType) {
+            if ((format === 'svg' || format === 'png') && getSvgContent) {
+                const svgContent = await getSvgContent();
+                if (svgContent) {
+                    if (format === 'svg') exportService.exportAsSvg(svgContent, `${filename}.svg`);
+                    else exportService.exportAsPng(svgContent, `${filename}.png`);
+                } else {
+                    alert('Dışa aktarılacak SVG içeriği bulunamadı.');
+                }
+            } else if (format === 'html') {
+                if (diagramType === 'mermaid') exportService.exportAsHtml(content, filename);
+                else if (diagramType === 'bpmn') exportService.exportBpmnAsHtml(content, filename);
+            } else if (format === 'bpmn') {
+                exportService.exportAsMarkdown(content, `${filename}.bpmn`); // XML'i metin olarak aktar
+            } else if (format === 'md' && diagramType === 'mermaid') {
+                 exportService.exportAsMarkdown(content, `${filename}.md`); // Mermaid kodunu metin olarak aktar
+            }
+            return; // Diyagram işlendiyse fonksiyonu bitir
+        }
+
+        // Tiptap Dokümanları (MD/DOCX/PDF)
+        // 'content' prop'u HTML olduğu için önce Markdown'a dönüştürmeliyiz.
+        let markdownContent = '';
+        try {
+            // !!!!!!!!!!!!!!! ÇÖZÜM - 3 (DIŞA AKTARMA) !!!!!!!!!!!!!!!
+            // "Uncaught" hatasının oluşabileceği tek yer burası
+            // ve artık bir try-catch bloğu içinde güvende.
+            markdownContent = turndownService.turndown(content);
+        } catch (e) {
+            console.error("Dışa aktarma sırasında dönüştürme hatası:", e);
+            alert("Hata: Doküman dışa aktarılamadı. Tablo yapısı çok karmaşık olabilir. Lütfen hücre birleştirmelerini kaldırıp tekrar deneyin.");
+            return; // Hata durumunda işlemi durdur
+        }
+
+        // Dönüştürme başarılıysa devam et
+        if (format === 'md') {
+            exportService.exportAsMarkdown(markdownContent, `${filename}.md`);
+        } else if (format === 'docx') {
+             exportService.exportAsDocx(markdownContent, filename); // exportService Markdown bekler
+        } else if (format === 'pdf') {
+            exportService.exportAsPdf(markdownContent, filename, !!isTable); // exportService Markdown bekler
+        }
     };
 
+    // ... (renderOptions ve return bloğu aynı, değişiklik yok) ...
     const renderOptions = () => {
         if (diagramType === 'bpmn') {
             return (
@@ -92,7 +120,7 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({ content, filenam
                  </>
             );
         }
-        // Default for non-viz documents
+        // Tiptap dokümanları (Analiz, Test, İzlenebilirlik) için
         return (
             <>
                 <button onClick={() => handleExport('docx')} className="w-full text-left flex items-center px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" role="menuitem">
@@ -100,6 +128,9 @@ export const ExportDropdown: React.FC<ExportDropdownProps> = ({ content, filenam
                 </button>
                 <button onClick={() => handleExport('md')} className="w-full text-left flex items-center px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" role="menuitem">
                     <span className="font-mono text-xs bg-slate-200 dark:bg-slate-600 rounded px-1.5 py-0.5 mr-2">.md</span> Markdown olarak
+                </button>
+                 <button onClick={() => handleExport('pdf')} className="w-full text-left flex items-center px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700" role="menuitem">
+                    <span className="font-mono text-xs bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200 rounded px-1.5 py-0.5 mr-2">.pdf</span> PDF olarak
                 </button>
             </>
         );

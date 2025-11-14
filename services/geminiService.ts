@@ -1,18 +1,10 @@
 // services/geminiService.ts
 
-import { GoogleGenAI, Type, Content, FunctionDeclaration, GenerateContentResponse, Modality } from "@google/genai";
-// FIX: Import StreamChunk from the central types file and remove the local definition.
+import { supabase } from './supabaseClient';
+import { Type, Content, FunctionDeclaration, GenerateContentResponse, Modality } from "@google/genai";
 import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep, GenerativeSuggestion, LintingIssue, SourcedDocument, VizData, ThoughtProcess, StreamChunk } from '../types';
 import { promptService } from './promptService';
 import { v4 as uuidv4 } from 'uuid';
-
-const getApiKey = (): string => {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) throw new Error("Gemini API Anahtarı ayarlanmamış.");
-    return apiKey;
-};
-
-// This type is now imported from types.ts to avoid duplication.
 
 export interface DocumentImpactAnalysis {
     changeType: 'minor' | 'major';
@@ -24,46 +16,178 @@ export interface DocumentImpactAnalysis {
 }
 
 function handleGeminiError(error: any): never {
-    console.error("Gemini API Hatası:", error);
+    console.error("Gemini/Supabase Function Hatası:", error);
+
+    if (error?.context) {
+        console.error("Hata Detayı:", error.context);
+    }
+
     const message = (error?.message || String(error)).toLowerCase();
     if (message.includes('429') || message.includes('quota')) throw new Error("API Kota Limiti Aşıldı.");
     if (message.includes('api key not valid')) throw new Error("Geçersiz API Anahtarı.");
     if (message.includes('internal error')) throw new Error("Gemini API'sinde geçici bir iç hata oluştu.");
     if (message.includes('network error')) throw new Error("Ağ bağlantı hatası.");
+    if (message.includes('non-2xx status code')) {
+        const details = error?.context?.error || error?.context?.details || 'Detay bulunamadı';
+        throw new Error(`Edge Function hatası: ${details}`);
+    }
     throw new Error(`Beklenmedik bir hata oluştu: ${error?.message || error}`);
 }
 
-const generateContent = async (prompt: string, model: GeminiModel, modelConfig?: any): Promise<{ text: string, tokens: number }> => {
+// ===================================================================
+// GÜVENLİ FONKSİYONLAR (SUPABASE EDGE FUNCTION KULLANAN)
+// ===================================================================
+
+const generateContent = async (
+  prompt: string | Content[], // DÜZELTME: Artık Content[] dizisini de kabul ediyor
+  model: GeminiModel,
+  modelConfig?: any
+): Promise<{ text: string, tokens: number }> => {
+    
+    // DÜZELTME: prompt string ise Content[] formatına çevir, değilse olduğu gibi kullan
+    const contents = typeof prompt === 'string' 
+        ? [{ role: 'user', parts: [{ text: prompt }] }] 
+        : prompt;
+
+    const { config } = {
+        config: modelConfig?.generationConfig || modelConfig,
+    };
+
     try {
-        const ai = new GoogleGenAI({ apiKey: getApiKey() });
-        const config = modelConfig?.generationConfig || modelConfig;
-        const response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-            config,
+        console.log("Calling gemini-proxy with:", { contents, config });
+
+        const { data, error } = await supabase.functions.invoke('gemini-proxy', {
+            body: { contents, config, stream: false },
         });
-        const text = response.text;
-        const tokens = response.usageMetadata?.totalTokenCount || 0;
-        return { text, tokens };
+
+        console.log("Response from gemini-proxy:", { data, error });
+
+        if (error) {
+            console.error("Supabase function error object:", JSON.stringify(error, null, 2));
+
+            if (error.context && error.context instanceof Response) {
+                const errorText = await error.context.text();
+                console.error("Error response body:", errorText);
+                try {
+                    const errorJson = JSON.parse(errorText);
+                    throw new Error(`Edge Function Error: ${errorJson.error || errorJson.details || errorText}`);
+                } catch (parseError) {
+                    throw new Error(`Edge Function Error: ${errorText}`);
+                }
+            }
+            throw error;
+        }
+
+        if (data && typeof data.text === 'string') {
+             return { text: data.text, tokens: data.tokens || 0 };
+        }
+
+        if (data instanceof ReadableStream) {
+             const reader = data.getReader();
+             const decoder = new TextDecoder();
+             let text = "";
+             let done = false;
+             while (!done) {
+                const { value, done: readerDone } = await reader.read();
+                done = readerDone;
+                if (value) {
+                    text += decoder.decode(value, { stream: true });
+                }
+             }
+             return { text: text, tokens: 0 };
+        }
+
+        console.error("Unexpected response format:", data);
+        throw new Error("Supabase Function'dan beklenmeyen yanıt formatı (JSON bekleniyordu).");
+
     } catch (error) {
+        console.error("Supabase Function Hatası (generateContent):", error);
+        console.error("Error details:", {
+            message: error?.message,
+            context: error?.context,
+            status: error?.status,
+            name: error?.name
+        });
         handleGeminiError(error);
     }
 };
 
-const generateContentStream = async function* (prompt: string, model: GeminiModel, modelConfig?: any): AsyncGenerator<GenerateContentResponse> {
+const generateContentStream = async function* (
+  prompt: string | Content[], // DÜZELTME: Artık Content[] dizisini de kabul ediyor
+  model: GeminiModel,
+  modelConfig?: any
+): AsyncGenerator<GenerateContentResponse> {
+    
+    // DÜZELTME: prompt string ise Content[] formatına çevir, değilse olduğu gibi kullan
+    const contents = typeof prompt === 'string' 
+        ? [{ role: 'user', parts: [{ text: prompt }] }] 
+        : prompt;
+
+    const { config } = {
+        config: modelConfig?.generationConfig || modelConfig,
+    };
+
     try {
-        const ai = new GoogleGenAI({ apiKey: getApiKey() });
-        const config = modelConfig?.generationConfig || modelConfig;
-        const responseStream = await ai.models.generateContentStream({
-            model,
-            contents: prompt,
-            config,
+        console.log("Calling gemini-proxy STREAM with:", { contents, config });
+
+        const { data, error } = await supabase.functions.invoke('gemini-proxy', {
+            body: { contents, config, stream: true },
         });
-        for await (const chunk of responseStream) yield chunk;
+
+        console.log("Response from gemini-proxy STREAM:", { data, error });
+
+        if (error) {
+            console.error("Supabase function STREAM error object:", JSON.stringify(error, null, 2));
+
+            if (error.context && error.context instanceof Response) {
+                const errorText = await error.context.text();
+                console.error("Error response body:", errorText);
+                try {
+                    const errorJson = JSON.parse(errorText);
+                    throw new Error(`Edge Function Error: ${errorJson.error || errorJson.details || errorText}`);
+                } catch (parseError) {
+                    throw new Error(`Edge Function Error: ${errorText}`);
+                }
+            }
+            throw error;
+        }
+
+        if (!data) throw new Error("No data received from stream");
+
+        if (data instanceof ReadableStream) {
+            const reader = data.getReader();
+            const decoder = new TextDecoder();
+            let done = false;
+
+            while (!done) {
+                const { value, done: readerDone } = await reader.read();
+                done = readerDone;
+                if (value) {
+                    const text = decoder.decode(value, { stream: true });
+                    yield {
+                        text: () => text,
+                    } as unknown as GenerateContentResponse;
+                }
+            }
+        } else {
+            throw new Error("Expected ReadableStream but got different type");
+        }
+
     } catch (error) {
+        console.error("Supabase Function Hatası (generateContentStream):", error);
+        console.error("Error details:", {
+            message: error?.message,
+            context: error?.context,
+            status: error?.status,
+            name: error?.name
+        });
         handleGeminiError(error);
     }
 };
+
+// ===================================================================
+// ESKİ KOD (DEĞİŞİKLİK GEREKTİRMEYEN)
+// ===================================================================
 
 const convertMessagesToGeminiFormat = (history: Message[]): Content[] => {
     const relevantMessages = history.filter(msg => (msg.role === 'user' || msg.role === 'assistant') && typeof msg.content === 'string' && msg.content.trim() !== '');
@@ -88,101 +212,76 @@ const tools: FunctionDeclaration[] = [
     {
         name: 'generateAnalysisDocument',
         description: 'Kullanıcı bir dokümanı "güncelle", "oluştur", "yeniden yaz" veya "yeniden oluştur" gibi bir komut verdiğinde BU ARACI KULLAN. Araç, mevcut konuşma geçmişini ve talebi kullanarak tam bir iş analizi dokümanı JSON nesnesi üretir.',
-        parameters: {
-            type: Type.OBJECT,
-            properties: {}, // No parameters needed, it uses context
-        },
+        parameters: { type: Type.OBJECT, properties: {} },
     },
     {
         name: 'saveRequestDocument',
         description: 'Kullanıcının ilk talebi netleştiğinde, bu talebi özetlemek ve "Talep Dokümanı" olarak OTOMATİK OLARAK KAYDETMEK için kullanılır. Kullanıcıdan onay isteme, doğrudan bu aracı çağır. Bu araç, sadece sohbetin başında, ilk talep oluşturulurken kullanılmalıdır.',
         parameters: {
             type: Type.OBJECT,
-            properties: {
-                request_summary: {
-                    type: Type.STRING,
-                    description: 'Kullanıcının ilk talebinin kısa ve net bir özeti.'
-                }
-            },
+            properties: { request_summary: { type: Type.STRING, description: 'Kullanıcının ilk talebinin kısa ve net bir özeti.' } },
             required: ['request_summary'],
         },
     },
     {
         name: 'generateTestScenarios',
         description: 'Kullanıcı test senaryoları oluşturulmasını istediğinde veya analiz dokümanı yeterince olgunlaştığında bu aracı kullan. Mevcut analiz dokümanından test senaryoları oluşturur.',
-        parameters: {
-            type: Type.OBJECT,
-            properties: {},
-        },
+        parameters: { type: Type.OBJECT, properties: {} },
     },
     {
         name: 'generateTraceabilityMatrix',
         description: 'Kullanıcı gereksinimler ve testler arasında bir izlenebilirlik matrisi istediğinde veya hem analiz hem de test dokümanları mevcut olduğunda bu aracı kullan.',
-        parameters: {
-            type: Type.OBJECT,
-            properties: {},
-        },
+        parameters: { type: Type.OBJECT, properties: {} },
     },
     {
         name: 'generateVisualization',
         description: 'Kullanıcı süreç akışını görselleştirmek istediğinde veya bir süreci "çiz", "görselleştir" veya "diyagramını yap" dediğinde bu aracı kullan.',
-        parameters: {
-            type: Type.OBJECT,
-            properties: {},
-        },
+        parameters: { type: Type.OBJECT, properties: {} },
     }
 ];
-
 
 export async function* parseStreamingResponse(stream: AsyncGenerator<GenerateContentResponse>): AsyncGenerator<StreamChunk> {
     let buffer = '';
     let thoughtYielded = false;
 
     for await (const chunk of stream) {
-        if (chunk.usageMetadata) {
-            yield { type: 'usage_update', tokens: chunk.usageMetadata.totalTokenCount };
-        }
-        if (!chunk.text) continue;
-
-        buffer += chunk.text;
+        // if (chunk.usageMetadata) ... // Token bilgisi stream'de gelmez
         
-        // If we haven't found the thought yet, keep looking.
+        const text = chunk.text ? chunk.text() : null;
+        if (!text) continue;
+
+        buffer += text;
+        
         if (!thoughtYielded) {
             const startTag = '<dusunce>';
             const endTag = '</dusunce>';
             const startIdx = buffer.indexOf(startTag);
             const endIdx = buffer.indexOf(endTag);
 
-            if (startIdx !== -1 && endIdx !== -1) {
+            if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
                 const jsonStr = buffer.substring(startIdx + startTag.length, endIdx);
                 try {
                     const thoughtPayload: ThoughtProcess = JSON.parse(jsonStr);
                     yield { type: 'thought_chunk', payload: thoughtPayload };
                     thoughtYielded = true;
-
-                    // Yield the text that came after the thought block
                     const remainingText = buffer.substring(endIdx + endTag.length);
                     if (remainingText) {
                         yield { type: 'text_chunk', text: remainingText };
                     }
-                    buffer = ''; // Clear buffer after processing
+                    buffer = ''; 
                 } catch (e) {
-                    // JSON might be incomplete, wait for more chunks
+                    // JSON yarım kalmış olabilir
                 }
             }
         } else {
-            // If thought was already yielded, everything else is a text chunk.
             yield { type: 'text_chunk', text: buffer };
-            buffer = ''; // Clear buffer
+            buffer = ''; 
         }
     }
-
-    // If stream ends and there's still content in buffer (e.g., no thought block was found)
     if (buffer) {
         yield { type: 'text_chunk', text: buffer };
     }
 }
-
 
 const isBirimiTalepSchema = {
     type: Type.OBJECT,
@@ -211,11 +310,13 @@ const isBirimiTalepSchema = {
     ]
 };
 
+// ===================================================================
+// ANA SERVİS OBJESİ
+// ===================================================================
 
 export const geminiService = {
     handleUserMessageStream: async function* (history: Message[], generatedDocs: GeneratedDocs, templates: { analysis: string; test: string; traceability: string; visualization: string; }, model: GeminiModel): AsyncGenerator<StreamChunk> {
         try {
-            const ai = new GoogleGenAI({ apiKey: getApiKey() });
             const hasRequestDoc = !!generatedDocs.requestDoc?.trim();
             const hasRealAnalysisDoc = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
             const isStartingConversation = !hasRequestDoc && !hasRealAnalysisDoc && history.filter(m => m.role !== 'system').length <= 1;
@@ -228,32 +329,28 @@ export const geminiService = {
             
             const geminiHistory = convertMessagesToGeminiFormat(history);
             
-            const responseStream = await ai.models.generateContentStream({
-                model,
-                contents: geminiHistory,
-                config: {
+            const responseStream = generateContentStream(
+                geminiHistory, // Artık Content[] dizisi gönderiyoruz
+                model, 
+                {
                     systemInstruction,
+                    // TODO: 'tools' desteğinin Edge Function'a eklenmesi gerekir.
                     tools: [{ functionDeclarations: tools }],
-                },
-            });
+                }
+            );
 
             let buffer = '';
             let thoughtYielded = false;
             
             for await (const chunk of responseStream) {
-                 if (chunk.usageMetadata) {
-                     yield { type: 'usage_update', tokens: chunk.usageMetadata.totalTokenCount };
-                }
-                if (chunk.functionCalls) {
-                    for (const fc of chunk.functionCalls) {
-                        yield { type: 'function_call', name: fc.name, args: fc.args };
-                    }
-                }
+                 // if (chunk.usageMetadata) ... // Token bilgisi stream'de gelmez
                 
-                const text = chunk.text;
+                // TODO: Edge Function 'functionCalls' döndürecek şekilde güncellenmeli
+                // if (chunk.functionCalls) ...
+                
+                const text = chunk.text ? chunk.text() : null;
                 if (text) {
                     buffer += text;
-
                     if (!thoughtYielded) {
                         const startTag = '<dusunce>';
                         const endTag = '</dusunce>';
@@ -266,33 +363,29 @@ export const geminiService = {
                                 const thoughtPayload: ThoughtProcess = JSON.parse(jsonStr);
                                 yield { type: 'thought_chunk', payload: thoughtPayload };
                                 thoughtYielded = true;
-
                                 const remainingText = buffer.substring(endIdx + endTag.length);
                                 if (remainingText) {
                                     yield { type: 'text_chunk', text: remainingText };
                                 }
-                                buffer = ''; // Clear buffer
+                                buffer = ''; 
                             } catch (e) {
-                                // Incomplete JSON, wait for more chunks
+                                // Incomplete JSON
                             }
                         }
                     } else {
                         yield { type: 'text_chunk', text: buffer };
-                        buffer = ''; // Clear buffer
+                        buffer = ''; 
                     }
                 }
             }
 
-            // After the loop, process any remaining content in the buffer
             if (buffer) {
-                if (!thoughtYielded) {
+                 if (!thoughtYielded) {
                      const startTag = '<dusunce>';
                     const endTag = '</dusunce>';
                     const startIdx = buffer.indexOf(startTag);
                     const endIdx = buffer.indexOf(endTag);
-
                      if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-                        // This logic is duplicated, but it's a safeguard for thoughts at the very end
                         const jsonStr = buffer.substring(startIdx + startTag.length, endIdx);
                         try {
                             const thoughtPayload: ThoughtProcess = JSON.parse(jsonStr);
@@ -311,7 +404,6 @@ export const geminiService = {
                     yield { type: 'text_chunk', text: buffer };
                 }
             }
-
         } catch (error) {
             yield { type: 'error', message: error instanceof Error ? error.message : "Bilinmeyen bir hata oluştu" };
         }
@@ -333,7 +425,7 @@ export const geminiService = {
         try {
             yield { type: 'thought_chunk', payload: createThought("Exper Modu Analiz Ediliyor...", initialChecklist) };
             
-            // Step 1: Generate Request Document
+            // Adım 1: Talep Dokümanı
             initialChecklist[0].status = 'in_progress';
             yield { type: 'thought_chunk', payload: createThought("Talep Dokümanı Oluşturuluyor", initialChecklist) };
             let requestDocContent = '';
@@ -353,7 +445,7 @@ export const geminiService = {
                 yield { type: 'thought_chunk', payload: createThought("Talep Dokümanı Hatası", initialChecklist) };
             }
     
-            // Step 2: Generate Analysis Document
+            // Adım 2: Analiz Dokümanı
             initialChecklist[1].status = 'in_progress';
             yield { type: 'thought_chunk', payload: createThought("Analiz Dokümanı Oluşturuluyor", initialChecklist) };
             let analysisDocContent = '';
@@ -385,7 +477,7 @@ export const geminiService = {
                 throw new Error(`Analiz dokümanı oluşturulurken hata: ${e.message}`);
             }
 
-            // Step 3: Generate Visualization
+            // Adım 3: Görselleştirme
             initialChecklist[2].status = 'in_progress';
             initialChecklist[2].details = "Oluşturuluyor...";
             yield { type: 'thought_chunk', payload: createThought("Süreç Görselleştiriliyor", initialChecklist) };
@@ -393,7 +485,7 @@ export const geminiService = {
                 const { code, tokens } = await this.generateDiagram(analysisDocContent, diagramType, templates.visualization, 'gemini-2.5-flash');
                 totalTokens += tokens;
                 yield { type: 'usage_update', tokens };
-                const sourceHash = uuidv4(); // Use a unique hash for expert mode runs
+                const sourceHash = uuidv4();
                 const vizData = { code, sourceHash };
                 const vizKey = diagramType === 'bpmn' ? 'bpmnViz' : 'mermaidViz';
                 yield { type: 'doc_stream_chunk', docKey: vizKey, chunk: vizData };
@@ -406,7 +498,7 @@ export const geminiService = {
                 yield { type: 'thought_chunk', payload: createThought("Görselleştirme Hatası", initialChecklist) };
             }
 
-            // Step 4: Generate Test Scenarios
+            // Adım 4: Test Senaryoları
             initialChecklist[3].status = 'in_progress';
             initialChecklist[3].details = "Oluşturuluyor...";
             yield { type: 'thought_chunk', payload: createThought("Test Senaryoları Oluşturuluyor", initialChecklist) };
@@ -426,7 +518,7 @@ export const geminiService = {
                 yield { type: 'thought_chunk', payload: createThought("Test Senaryosu Hatası", initialChecklist) };
             }
 
-             // Step 5: Generate Traceability Matrix
+             // Adım 5: İzlenebilirlik Matrisi
             if (testScenariosContent) {
                 initialChecklist[4].status = 'in_progress';
                 initialChecklist[4].details = "Oluşturuluyor...";
@@ -488,13 +580,13 @@ export const geminiService = {
         
         const basePrompt = promptService.getPrompt('checkAnalysisMaturity');
         
-        const testScenariosContent = typeof generatedDocs.testScenarios === 'object' 
-            ? generatedDocs.testScenarios.content 
-            : generatedDocs.testScenarios;
+        const testScenariosContent = (typeof generatedDocs.testScenarios === 'object' && generatedDocs.testScenarios)
+            ? (generatedDocs.testScenarios as SourcedDocument).content 
+            : generatedDocs.testScenarios as string;
 
-        const traceabilityMatrixContent = typeof generatedDocs.traceabilityMatrix === 'object'
-            ? generatedDocs.traceabilityMatrix.content
-            : generatedDocs.traceabilityMatrix;
+        const traceabilityMatrixContent = (typeof generatedDocs.traceabilityMatrix === 'object' && generatedDocs.traceabilityMatrix)
+            ? (generatedDocs.traceabilityMatrix as SourcedDocument).content
+            : generatedDocs.traceabilityMatrix as string;
             
         const documentsContext = `
             **Mevcut Proje Dokümanları:**
@@ -584,7 +676,7 @@ export const geminiService = {
                 suggestions: {
                     type: Type.ARRAY,
                     items: recursiveBacklogItemSchema
-                },
+                }, 
                 reasoning: { type: Type.STRING }
             },
             required: ['suggestions', 'reasoning']
@@ -624,13 +716,13 @@ export const geminiService = {
     },
 
     summarizeDocumentChange: async (oldContent: string, newContent: string): Promise<{ summary: string, tokens: number }> => {
-        const prompt = promptService.getPrompt('summarizeChange') + `\n\n**ESKİ:**\n${oldContent}\n\n**YENİ:**\n${newContent}`;
+        const prompt = promptService.getPrompt('summarizeChange') + `\n\n**ESKİ (HTML):**\n${oldContent}\n\n**YENİ (HTML):**\n${newContent}`;
         const { text, tokens } = await generateContent(prompt, 'gemini-2.5-flash-lite');
         return { summary: text, tokens };
     },
 
     lintDocument: async (content: string): Promise<{ issues: LintingIssue[], tokens: number }> => {
-        const prompt = promptService.getPrompt('lintDocument') + `\n\n**Doküman İçeriği:**\n${content}`;
+        const prompt = promptService.getPrompt('lintDocument') + `\n\n**Doküman İçeriği (HTML):**\n${content}`;
         const schema = {
             type: Type.ARRAY,
             items: {
@@ -649,15 +741,15 @@ export const geminiService = {
             return { issues: JSON.parse(jsonString) as LintingIssue[], tokens };
         } catch (e) {
             console.error("Failed to parse linter issues JSON:", e, "Received string:", jsonString);
-            return { issues: [], tokens }; // Return empty array on parse error
+            return { issues: [], tokens };
         }
     },
 
     fixDocumentLinterIssues: async (content: string, issue: LintingIssue): Promise<{ fixedContent: string, tokens: number }> => {
         const instruction = `Lütfen "${issue.section}" bölümündeki şu hatayı düzelt: ${issue.details}`;
-        const prompt = promptService.getPrompt('fixLinterIssues').replace('{instruction}', instruction) + `\n\n**Doküman İçeriği:**\n${content}`;
+        const prompt = promptService.getPrompt('fixLinterIssues').replace('{instruction}', instruction) + `\n\n**Doküman İçeriği (HTML):**\n${content}`;
         const { text, tokens } = await generateContent(prompt, 'gemini-2.5-flash');
-        return { fixedContent: text, tokens };
+        return { fixedContent: text, tokens }; // AI'nın HTML döndürdüğünü varsayıyoruz
     },
     
     analyzeDocumentChange: async (oldContent: string, newContent: string, model: GeminiModel): Promise<{ impact: DocumentImpactAnalysis, tokens: number }> => {
@@ -673,20 +765,20 @@ export const geminiService = {
             },
             required: ['changeType', 'summary', 'isVisualizationImpacted', 'isTestScenariosImpacted', 'isTraceabilityImpacted', 'isBacklogImpacted']
         };
-        const prompt = `Bir iş analizi dokümanının iki versiyonu aşağıdadır. Değişikliğin etkisini analiz et.
+        const prompt = `Bir iş analizi dokümanının (HTML formatında) iki versiyonu aşağıdadır. Değişikliğin etkisini analiz et.
         
         **DEĞİŞİKLİK ETKİ ANALİZİ KURALLARI:**
-        - Eğer sadece metinsel düzeltmeler, yeniden ifade etmeler veya küçük eklemeler yapıldıysa, bu 'minor' bir değişikliktir.
+        - Eğer sadece metinsel düzeltmeler (örn: <p> içindeki yazı), yeniden ifade etmeler veya küçük eklemeler yapıldıysa, bu 'minor' bir değişikliktir.
         - Eğer yeni bir fonksiyonel gereksinim (FR) eklendiyse, mevcut bir FR'nin mantığı tamamen değiştiyse veya bir bölüm silindiyse, bu 'major' bir değişikliktir.
         - 'major' bir değişiklik genellikle görselleştirmeyi, test senaryolarını ve izlenebilirliği etkiler.
         - 'summary' alanına değişikliği tek bir cümleyle özetle.
         
-        **ESKİ VERSİYON:**
+        **ESKİ VERSİYON (HTML):**
         ---
         ${oldContent}
         ---
         
-        **YENİ VERSİYON:**
+        **YENİ VERSİYON (HTML):**
         ---
         ${newContent}
         ---
@@ -704,6 +796,7 @@ export const geminiService = {
     },
 
     generateDiagram: async (analysisDoc: string, type: 'mermaid' | 'bpmn', template: string, model: GeminiModel): Promise<{ code: string, tokens: number }> => {
+        // 'analysisDoc' artık HTML. Prompt'un bunu işlemesi gerekiyor.
         const prompt = template.replace('{analysis_document_content}', analysisDoc);
         const { text, tokens } = await generateContent(prompt, model);
         const codeBlockRegex = type === 'mermaid' ? /```mermaid\n([\s\S]*?)\n```/ : /```xml\n([\s\S]*?)\n```/;
@@ -716,67 +809,63 @@ export const geminiService = {
         
         const prompt = template
             .replace('{request_document_content}', requestDoc || "[Talep Dokümanı Yok]")
-            .replace('{conversation_history}', historyString);
+            .replace('{conversation_history}', historyString)
+            + "\n\nÖNEMLİ NOT: Çıktıyı Markdown formatında değil, **doğrudan HTML formatında** oluştur."; // <-- GEÇİCİ ÇÖZÜM
 
         const stream = generateContentStream(prompt, model);
 
         let totalTokens = 0;
         let fullText = '';
         for await (const chunk of stream) {
-            if (chunk.usageMetadata) {
-                totalTokens = chunk.usageMetadata.totalTokenCount;
-            }
-            const text = chunk.text;
+            const text = chunk.text ? chunk.text() : null;
             if (text) {
                 fullText += text;
                 yield { type: 'doc_stream_chunk', docKey: 'analysisDoc', chunk: fullText };
             }
         }
-        
-        if (totalTokens > 0) yield { type: 'usage_update', tokens: totalTokens };
+        // Token'ları stream'den alamadığımız için 0 yolluyoruz
+        yield { type: 'usage_update', tokens: 0 };
     },
 
     generateTestScenarios: async function* (analysisDoc: string, template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
-        const prompt = template.replace('{analysis_document_content}', analysisDoc);
+        const prompt = template.replace('{analysis_document_content}', analysisDoc)
+            + "\n\nÖNEMLİ NOT: Çıktıyı Markdown tablosu yerine **doğrudan HTML <table>...</table> formatında** oluştur."; 
+
         const stream = generateContentStream(prompt, model);
         let totalTokens = 0;
         let fullText = '';
         for await (const chunk of stream) {
-            if (chunk.usageMetadata) {
-                totalTokens = chunk.usageMetadata.totalTokenCount;
-            }
-            const text = chunk.text;
+            const text = chunk.text ? chunk.text() : null;
             if (text) {
                 fullText += text;
                 yield { type: 'doc_stream_chunk', docKey: 'testScenarios', chunk: fullText };
             }
         }
-        if (totalTokens > 0) yield { type: 'usage_update', tokens: totalTokens };
+        yield { type: 'usage_update', tokens: 0 };
     },
 
     generateTraceabilityMatrix: async function* (analysisDoc: string, testScenarios: string, template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
         const prompt = template
-            .replace('{analysis_document_content}', analysisDoc)
-            .replace('{test_scenarios_content}', testScenarios);
+            .replace('{analysis_document_content}', analysisDoc) // Bu HTML
+            .replace('{test_scenarios_content}', testScenarios) // Bu da HTML
+            + "\n\nÖNEMLİ NOT: Çıktıyı Markdown tablosu yerine **doğrudan HTML <table>...</table> formatında** oluştur.";
+
         const stream = generateContentStream(prompt, model);
         let totalTokens = 0;
         let fullText = '';
         for await (const chunk of stream) {
-            if (chunk.usageMetadata) {
-                totalTokens = chunk.usageMetadata.totalTokenCount;
-            }
-            const text = chunk.text;
+            const text = chunk.text ? chunk.text() : null;
             if (text) {
                 fullText += text;
                 yield { type: 'doc_stream_chunk', docKey: 'traceabilityMatrix', chunk: fullText };
             }
         }
-        if (totalTokens > 0) yield { type: 'usage_update', tokens: totalTokens };
+        yield { type: 'usage_update', tokens: 0 };
     },
 
     suggestNextFeature: async (analysisDoc: string, history: Message[]): Promise<{ suggestions: string[], tokens: number }> => {
         const prompt = promptService.getPrompt('suggestNextFeature')
-            .replace('{analysis_document}', analysisDoc)
+            .replace('{analysis_document}', analysisDoc) // HTML
             .replace('{conversation_history}', JSON.stringify(history, null, 2));
         const schema = {
             type: Type.OBJECT,
@@ -804,51 +893,17 @@ export const geminiService = {
         const generationConfig = { responseMimeType: "application/json", responseSchema: isBirimiTalepSchema };
         const { text: jsonString, tokens } = await generateContent(prompt, 'gemini-2.5-flash', generationConfig);
         try {
-            // Validate that the output is valid JSON before returning
             JSON.parse(jsonString);
             return { jsonString, tokens };
         } catch (e) {
             console.error("Failed to parse IsBirimiTalep JSON:", e, "Received string:", jsonString);
-            // Fallback to just saving the raw text if parsing fails
             throw new Error("AI, metni yapısal bir talep dokümanına dönüştüremedi.");
         }
     },
 
     editImage: async (base64ImageData: string, mimeType: string, prompt: string): Promise<{ base64Image: string, tokens: number }> => {
-        try {
-            const ai = new GoogleGenAI({ apiKey: getApiKey() });
-            
-            const imagePart = {
-              inlineData: {
-                data: base64ImageData,
-                mimeType: mimeType,
-              },
-            };
-            const textPart = {
-              text: prompt,
-            };
-
-            const response = await ai.models.generateContent({
-              model: 'gemini-2.5-flash-image',
-              contents: {
-                parts: [imagePart, textPart],
-              },
-              config: {
-                  responseModalities: [Modality.IMAGE],
-              },
-            });
-
-            const imagePartResponse = response.candidates?.[0]?.content?.parts.find(part => part.inlineData);
-            if (!imagePartResponse || !imagePartResponse.inlineData) {
-                throw new Error("Görsel düzenlenirken bir hata oluştu: AI'dan geçerli bir görsel yanıtı alınamadı.");
-            }
-
-            const base64Image = imagePartResponse.inlineData.data;
-            const tokens = response.usageMetadata?.totalTokenCount || 0;
-            return { base64Image, tokens };
-
-        } catch (error) {
-            handleGeminiError(error);
-        }
+        // TODO: Bu fonksiyonun 'gemini-proxy' Edge Function'a yönlendirilmesi gerekir.
+        console.error("editImage fonksiyonu, Edge Function proxy'si ile henüz entegre edilmedi.");
+        throw new Error("Görsel düzenleme şu anda desteklenmiyor.");
     },
 };
