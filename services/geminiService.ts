@@ -192,6 +192,8 @@ const generateContentStream = async function* (
             statusText: response.statusText,
             hasBody: !!response.body,
             isReadableStream: response.body instanceof ReadableStream,
+            contentType: response.headers.get('content-type'),
+            headers: Object.fromEntries(response.headers.entries()),
         });
 
         if (!response.ok) {
@@ -231,7 +233,13 @@ const generateContentStream = async function* (
 
         while (!done) {
             const { value, done: readerDone } = await reader.read();
+            console.log("[STREAM DEBUG] reader.read() returned:", { done: readerDone, hasValue: !!value, valueLength: value?.length });
             done = readerDone;
+
+            if (done && !value) {
+                console.log("[STREAM DEBUG] Stream ended (done=true, no value)");
+                break;
+            }
 
             if (value) {
                 const decodedChunk = decoder.decode(value, { stream: true });
