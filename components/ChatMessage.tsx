@@ -28,6 +28,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const [copyText, setCopyText] = useState('');
+  const contentIsImage = message.content?.startsWith('data:image/');
 
   useEffect(() => {
     if (copyText) {
@@ -37,7 +38,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   }, [copyText]);
 
   const handleCopy = () => {
-      if (!message.content) return;
+      if (!message.content || contentIsImage) return;
       navigator.clipboard.writeText(message.content).then(() => {
           setCopyText('Kopyalandı!');
       }).catch(err => {
@@ -104,7 +105,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         </div>
         
         {/* Bubble Content */}
-        <div className={`group relative max-w-lg lg:max-w-2xl w-fit flex items-start ${!isUser ? 'border-l-4 border-indigo-500 pl-3' : ''}`}>
+        <div className={`group relative max-w-lg lg:max-w-2xl w-fit flex items-start ${!isUser && !contentIsImage ? 'border-l-4 border-indigo-500 pl-3' : ''}`}>
              <div className={`relative px-4 py-3 ${styles.bubble} ${styles.corners} shadow-sm`}>
                 {hasThought && (
                     <ThinkingProcess
@@ -132,10 +133,22 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                     </div>
                 )}
                 
-                {!message.error && message.content && (
-                    <div className={isUser ? "dark [--tw-prose-invert-body:theme(colors.white)] [--tw-prose-invert-headings:theme(colors.white)] [--tw-prose-invert-bold:theme(colors.white)]" : ""}>
-                        <MarkdownRenderer content={message.content} />
+                {message.imageUrl && (
+                    <div className="mb-2">
+                        <img src={message.imageUrl} alt="Kullanıcı tarafından yüklendi" className="max-w-xs rounded-lg border dark:border-slate-700" />
                     </div>
+                )}
+
+                {contentIsImage ? (
+                    <div className="p-1">
+                        <img src={message.content} alt="AI tarafından oluşturuldu" className="max-w-sm rounded-lg border dark:border-slate-700" />
+                    </div>
+                ) : (
+                    message.content && (
+                        <div className={isUser ? "dark [--tw-prose-invert-body:theme(colors.white)] [--tw-prose-invert-headings:theme(colors.white)] [--tw-prose-invert-bold:theme(colors.white)]" : ""}>
+                            <MarkdownRenderer content={message.content} />
+                        </div>
+                    )
                 )}
              </div>
         </div>

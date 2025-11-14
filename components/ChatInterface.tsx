@@ -64,7 +64,7 @@ interface NextAction {
 
 interface ChatInterfaceProps {
     isLoading: boolean;
-    onSendMessage: (reply: string) => void;
+    onSendMessage: (text: string, file: File | null) => void;
     activeConversationId: string | null;
     onStopGeneration: () => void;
     initialText?: string | null;
@@ -76,16 +76,6 @@ interface ChatInterfaceProps {
     isExpertMode: boolean;
     setIsExpertMode: (isOn: boolean) => void;
 }
-
-// Helper to read file content as a promise
-const readFileAsText = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = (error) => reject(error);
-        reader.readAsText(file);
-    });
-};
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
     isLoading, 
@@ -103,6 +93,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 }) => {
     const [input, setInput] = useState('');
     const [attachedFile, setAttachedFile] = useState<File | null>(null);
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
     
     // --- Speech Recognition State ---
     const [isListening, setIsListening] = useState(false);
@@ -191,7 +182,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     useEffect(() => {
         if (!initialText) {
             setInput('');
-            setAttachedFile(null);
+            handleRemoveFile(); // Use the new handler to clear all file-related state
         }
     }, [activeConversationId, initialText]);
 
@@ -210,33 +201,29 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         e.preventDefault();
         if ((!input.trim() && !attachedFile) || isLoading) return;
 
-        let messageToSend = input;
-
-        if (attachedFile) {
-            try {
-                const fileContent = await readFileAsText(attachedFile);
-                const fileInfo = `[EK DOSYA İÇERİĞİ: ${attachedFile.name}]\n\n---\n\n${fileContent}\n\n---\n\n`;
-                messageToSend = fileInfo + input;
-            } catch (error) {
-                console.error("Error reading file:", error);
-                // Optionally show an error to the user
-                return;
-            }
-        }
-
-        onSendMessage(messageToSend);
+        onSendMessage(input, attachedFile);
         setInput('');
-        setAttachedFile(null);
+        handleRemoveFile();
     };
     
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
-            setAttachedFile(e.target.files[0]);
+            const file = e.target.files[0];
+            setAttachedFile(file);
+            if (file.type.startsWith('image/')) {
+                setImagePreview(URL.createObjectURL(file));
+            } else {
+                setImagePreview(null);
+            }
         }
     };
 
     const handleRemoveFile = () => {
         setAttachedFile(null);
+        if (imagePreview) {
+            URL.revokeObjectURL(imagePreview);
+            setImagePreview(null);
+        }
         if (fileInputRef.current) {
             fileInputRef.current.value = ''; // Reset file input
         }
@@ -268,7 +255,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     ref={fileInputRef}
                     onChange={handleFileChange}
                     style={{ display: 'none' }}
-                    accept=".txt,.md"
+                    accept=".txt,.md,image/*"
                  />
                  <div className="flex-1 flex flex-col border border-slate-300 dark:border-slate-600 rounded-lg focus-within:ring-2 focus-within:ring-indigo-500 bg-slate-100 dark:bg-slate-700 transition-shadow">
                     
@@ -285,7 +272,21 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                             </button>
                         </div>
                     )}
-                    {attachedFile && (
+                    {imagePreview && (
+                         <div className="p-2">
+                            <div className="relative w-24 h-24 rounded-md overflow-hidden group">
+                                <img src={imagePreview} alt="Ekli görsel" className="w-full h-full object-cover"/>
+                                <button
+                                    onClick={handleRemoveFile}
+                                    className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                    aria-label="Görseli kaldır"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                    {attachedFile && !imagePreview && (
                         <div className="mx-2 mt-2 px-3 py-2 bg-slate-200 dark:bg-slate-600 rounded-md flex items-center justify-between text-sm">
                             <span className="font-medium text-slate-700 dark:text-slate-200 truncate pr-2">
                                 Ekli: {attachedFile.name}

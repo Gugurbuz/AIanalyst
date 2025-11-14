@@ -63,6 +63,7 @@ export interface Message {
     thought?: ThoughtProcess | null; // <-- YENİ ALAN (Veritabanıyla eşleşecek)
     feedback?: Feedback | null;
     documentType?: DocumentType | null;
+    imageUrl?: string; // To display user-uploaded images in chat history
     // DEPRECATED:
     timestamp?: string;
     expertRunChecklist?: ExpertStep[]; 

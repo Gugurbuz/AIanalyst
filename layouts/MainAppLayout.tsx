@@ -1,5 +1,5 @@
 // layouts/MainAppLayout.tsx
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { useAppContext } from '../contexts/AppContext';
 import { ChatInterface } from '../components/ChatInterface';
 import { ChatMessageHistory } from '../components/ChatMessageHistory';
@@ -14,7 +14,7 @@ import { UpgradeModal } from '../components/UpgradeModal';
 import { LongTextModal } from '../components/LongTextModal';
 import { ResetConfirmationModal } from '../components/ResetConfirmationModal';
 import { ProjectBoard } from '../components/ProjectBoard';
-import { AlertTriangle, FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, X, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { AlertTriangle, FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, X, PanelRightClose, PanelRightOpen, PanelLeft } from 'lucide-react';
 import { MainSidebar } from './MainSidebar';
 
 const AnalystWorkspace = () => {
@@ -152,6 +152,7 @@ const useNextBestAction = (conversation: any, callbacks: any) => {
 
 export const MainAppLayout: React.FC = () => {
     const context = useAppContext();
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
      useEffect(() => {
         const root = window.document.documentElement;
@@ -177,18 +178,28 @@ export const MainAppLayout: React.FC = () => {
                 </div>
             )}
             
-            <MainSidebar
-                user={context.user}
-                profile={context.userProfile}
-                theme={context.theme}
-                onThemeChange={context.setTheme}
-                onLogout={context.onLogout}
-                onOpenShareModal={() => context.setIsShareModalOpen(true)}
-            />
+            <div className={`flex-shrink-0 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
+                <MainSidebar
+                    user={context.user}
+                    profile={context.userProfile}
+                    theme={context.theme}
+                    onThemeChange={context.setTheme}
+                    onLogout={context.onLogout}
+                    onOpenShareModal={() => context.setIsShareModalOpen(true)}
+                />
+            </div>
             
-            <div className="flex-1 flex flex-col min-h-0">
-                 {context.appMode === 'analyst' && <AnalystWorkspace />}
-                 {context.appMode === 'backlog' && context.user && <ProjectBoard user={context.user} />}
+            <div className="flex-1 flex flex-col min-h-0 relative">
+                <button
+                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                    title={isSidebarOpen ? "Kenar çubuğunu gizle" : "Kenar çubuğunu göster"}
+                    className="absolute top-4 left-0 z-30 p-2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-r-lg shadow-md hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400"
+                >
+                    {isSidebarOpen ? <PanelLeft className="h-5 w-5" /> : <PanelRightOpen className="h-5 w-5" />}
+                </button>
+
+                {context.appMode === 'analyst' && <AnalystWorkspace />}
+                {context.appMode === 'backlog' && context.user && <ProjectBoard user={context.user} />}
             </div>
 
             {context.isShareModalOpen && context.activeConversation && <ShareModal isOpen={context.isShareModalOpen} onClose={() => context.setIsShareModalOpen(false)} conversation={context.activeConversation} onUpdateShareSettings={(id, updates) => context.updateConversation(id, updates)} />}

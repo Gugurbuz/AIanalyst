@@ -1,13 +1,13 @@
 // services/geminiService.ts
 
-import { GoogleGenAI, Type, Content, FunctionDeclaration, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, Type, Content, FunctionDeclaration, GenerateContentResponse, Modality } from "@google/genai";
 // FIX: Import StreamChunk from the central types file and remove the local definition.
 import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep, GenerativeSuggestion, LintingIssue, SourcedDocument, VizData, ThoughtProcess, StreamChunk } from '../types';
 import { promptService } from './promptService';
 import { v4 as uuidv4 } from 'uuid';
 
 const getApiKey = (): string => {
-    const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+    const apiKey = process.env.API_KEY;
     if (!apiKey) throw new Error("Gemini API Anahtarı ayarlanmamış.");
     return apiKey;
 };
@@ -811,6 +811,44 @@ export const geminiService = {
             console.error("Failed to parse IsBirimiTalep JSON:", e, "Received string:", jsonString);
             // Fallback to just saving the raw text if parsing fails
             throw new Error("AI, metni yapısal bir talep dokümanına dönüştüremedi.");
+        }
+    },
+
+    editImage: async (base64ImageData: string, mimeType: string, prompt: string): Promise<{ base64Image: string, tokens: number }> => {
+        try {
+            const ai = new GoogleGenAI({ apiKey: getApiKey() });
+            
+            const imagePart = {
+              inlineData: {
+                data: base64ImageData,
+                mimeType: mimeType,
+              },
+            };
+            const textPart = {
+              text: prompt,
+            };
+
+            const response = await ai.models.generateContent({
+              model: 'gemini-2.5-flash-image',
+              contents: {
+                parts: [imagePart, textPart],
+              },
+              config: {
+                  responseModalities: [Modality.IMAGE],
+              },
+            });
+
+            const imagePartResponse = response.candidates?.[0]?.content?.parts.find(part => part.inlineData);
+            if (!imagePartResponse || !imagePartResponse.inlineData) {
+                throw new Error("Görsel düzenlenirken bir hata oluştu: AI'dan geçerli bir görsel yanıtı alınamadı.");
+            }
+
+            const base64Image = imagePartResponse.inlineData.data;
+            const tokens = response.usageMetadata?.totalTokenCount || 0;
+            return { base64Image, tokens };
+
+        } catch (error) {
+            handleGeminiError(error);
         }
     },
 };

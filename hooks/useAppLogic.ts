@@ -65,7 +65,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
 
             if (convError || !convData) {
                 uiState.setError("Yeni sohbet oluşturulamadı.");
-                return { newConvId: null, initialContent: null };
+                return { newConvId: null, initialContent: null, initialFile: null };
             }
 
             const newConversation: Conversation = {
@@ -84,13 +84,13 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
                 conversationState.commitTokenUsage(tokens);
                 // FIX: Pass newConvId to saveDocumentVersion to prevent race condition
                 await conversationState.saveDocumentVersion('requestDoc', jsonString, "İlk doküman oluşturuldu", null, newConvId);
-                return { newConvId, initialContent: `Bu dokümanı analiz etmeye başla.` };
+                return { newConvId, initialContent: `Bu dokümanı analiz etmeye başla.`, initialFile: null };
             }
-            return { newConvId, initialContent: null };
+            return { newConvId, initialContent: null, initialFile: null };
 
         } catch (e: any) {
             uiState.setError(e.message);
-            return { newConvId: null, initialContent: null };
+            return { newConvId: null, initialContent: null, initialFile: null };
         } finally {
             setIsProcessing(false);
         }
@@ -144,13 +144,15 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         if (error) uiState.setError("Geri bildirim kaydedilemedi.");
     };
 
-    const handleNewConversationAndSend = async (content?: string, title?: string) => {
-        const { newConvId, initialContent } = await handleNewConversation(content, title);
+    const handleNewConversationAndSend = async (content?: string, file?: File | null) => {
+        const { newConvId, initialContent, initialFile } = await handleNewConversation(content);
         if (newConvId && initialContent) {
-            chatService.sendMessage(initialContent, false, newConvId);
+            chatService.sendMessage(initialContent, initialFile, false, newConvId);
+        } else if (newConvId && file) {
+             chatService.sendMessage(content || '', file, false, newConvId);
         }
     };
-
+    
     return {
         ...uiState,
         ...conversationState,
@@ -159,6 +161,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         isProcessing,
         generatingDocType,
         onLogout,
+        sendMessage: chatService.sendMessage,
         handleNewConversation: handleNewConversationAndSend,
         handleFeedbackUpdate,
         handleSuggestNextFeature,

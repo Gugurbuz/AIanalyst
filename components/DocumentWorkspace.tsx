@@ -248,6 +248,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                                     : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 dark:hover:text-slate-200 dark:hover:border-slate-500'
                             }`}
                         >
+                            <tab.icon className="h-5 w-5 mr-2" />
                             {tab.name}
                             <StaleIndicator isStale={tab.isStale} onUpdate={tab.onUpdate} />
                         </button>

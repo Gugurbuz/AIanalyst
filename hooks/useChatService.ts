@@ -49,6 +49,26 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
     return docs;
 };
 
+// Helper to read file content as a promise
+const readFileAsText = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (error) => reject(error);
+        reader.readAsText(file);
+    });
+};
+
+const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = error => reject(error);
+    });
+};
+
+
 interface ChatServiceProps {
     conversationState: ReturnType<typeof useConversationState>;
     uiState: ReturnType<typeof useUIState>;
@@ -57,7 +77,7 @@ interface ChatServiceProps {
     setGeneratingDocType: (type: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | null) => void;
     activeModel: () => GeminiModel;
     checkTokenLimit: () => boolean;
-    handleNewConversation: (content?: string, title?: string) => Promise<{newConvId: string | null, initialContent: string | null}>;
+    handleNewConversation: (content?: string, title?: string) => Promise<{newConvId: string | null, initialContent: string | null, initialFile: File | null}>;
     handleGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => Promise<void>;
 }
 
@@ -124,13 +144,13 @@ export const useChatService = ({
         return null;
     }, [conversationState, handleGenerateDoc]);
     
-    const sendMessage = useCallback(async (text: string, isRetry = false, forceConversationId?: string) => {
+    const sendMessage = useCallback(async (text: string, file: File | null = null, isRetry = false, forceConversationId?: string) => {
         if (!checkTokenLimit()) return;
         
         let activeId = forceConversationId || conversationState.activeConversationId;
 
         if (!activeId) {
-             const { newConvId } = await handleNewConversation(undefined);
+             const { newConvId } = await handleNewConversation(text);
              if (!newConvId) return;
              activeId = newConvId;
         }
@@ -139,7 +159,49 @@ export const useChatService = ({
         setMessageToEdit(null);
         generationController.current = new AbortController();
 
-        const userMessage: Message = { id: uuidv4(), conversation_id: activeId, role: 'user', content: text, created_at: new Date().toISOString() };
+        const isImageMessage = file && file.type.startsWith('image/');
+        
+        // --- IMAGE MESSAGE LOGIC ---
+        if (isImageMessage) {
+            const userImageUrl = URL.createObjectURL(file);
+            const userMessage: Message = { id: uuidv4(), conversation_id: activeId, role: 'user', content: text, imageUrl: userImageUrl, created_at: new Date().toISOString() };
+            conversationState.updateConversation(activeId, { messages: [...(conversationState.activeConversation?.messages || []), userMessage] });
+            supabase.from('conversation_details').insert(userMessage).then(({error}) => { if(error) uiState.setError(`Mesajınız kaydedilemedi: ${error.message}`); });
+
+            const assistantMessageId = uuidv4();
+            const assistantMessage: Message = { id: assistantMessageId, conversation_id: activeId, role: 'assistant', content: '', created_at: new Date().toISOString(), isStreaming: true };
+            conversationState.updateConversation(activeId, { messages: [...(conversationState.activeConversation?.messages || []), assistantMessage] });
+            
+            try {
+                const base64Data = await fileToBase64(file);
+                const { base64Image, tokens } = await geminiService.editImage(base64Data, file.type, text);
+                conversationState.commitTokenUsage(tokens);
+
+                const finalAssistantMessage: Partial<Message> = { content: `data:image/png;base64,${base64Image}`, isStreaming: false };
+                conversationState.updateMessage(assistantMessageId, finalAssistantMessage);
+                supabase.from('conversation_details').insert({ ...assistantMessage, ...finalAssistantMessage }).then(({error}) => { if(error) uiState.setError(`AI yanıtı kaydedilemedi: ${error.message}`); });
+            } catch (e: any) {
+                 conversationState.updateMessage(assistantMessageId, { error: { name: 'ImageGenerationError', message: e.message }, isStreaming: false });
+            } finally {
+                setIsProcessing(false);
+            }
+            return;
+        }
+
+        // --- TEXT MESSAGE LOGIC ---
+        let messageContent = text;
+        if (file) { // It's a text file
+            try {
+                const fileContent = await readFileAsText(file);
+                messageContent = `[EK DOSYA İÇERİĞİ: ${file.name}]\n\n---\n\n${fileContent}\n\n---\n\n${text}`;
+            } catch (error) {
+                uiState.setError("Dosya okunurken hata oluştu.");
+                setIsProcessing(false);
+                return;
+            }
+        }
+        
+        const userMessage: Message = { id: uuidv4(), conversation_id: activeId, role: 'user', content: messageContent, created_at: new Date().toISOString() };
         let historyForApi: Message[];
         
         const currentConv = conversationState.conversations.find(c => c.id === activeId);
@@ -272,7 +334,7 @@ export const useChatService = ({
                 conversationState.updateConversation(activeConv.id, {
                     messages: activeConv.messages.filter(m => m.id !== failedAssistantMessageId)
                 });
-                sendMessage(userMessageToRetry.content, true);
+                sendMessage(userMessageToRetry.content, undefined, true);
             }
         }
     };
