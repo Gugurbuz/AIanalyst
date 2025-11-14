@@ -110,7 +110,12 @@ const generateContent = async (
         }
 
         if (typeof data === 'object' && 'text' in data && typeof data.text === 'string') {
-             return { text: data.text, tokens: data.tokens || 0 };
+             return {
+                 text: data.text,
+                 tokens: data.tokens || data.usageMetadata?.totalTokenCount || 0,
+                 functionCalls: data.functionCalls,
+                 usageMetadata: data.usageMetadata
+             };
         }
 
         if (data instanceof ReadableStream) {
@@ -218,22 +223,82 @@ const generateContentStream = async function* (
         const reader = data.getReader();
         const decoder = new TextDecoder();
         let done = false;
+        let buffer = '';
 
         while (!done) {
             const { value, done: readerDone } = await reader.read();
             done = readerDone;
             if (value) {
-                const textContent = decoder.decode(value, { stream: true });
-                if (textContent) {
-                    yield {
-                        text: textContent,
-                        candidates: [{
-                            content: {
-                                parts: [{ text: textContent }]
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+
+                    try {
+                        const chunk = JSON.parse(line);
+
+                        const responseChunk: any = {
+                            candidates: [{
+                                content: {
+                                    parts: []
+                                }
+                            }]
+                        };
+
+                        if (chunk.text) {
+                            responseChunk.text = chunk.text;
+                            responseChunk.candidates[0].content.parts.push({ text: chunk.text });
+                        }
+
+                        if (chunk.functionCalls) {
+                            for (const fc of chunk.functionCalls) {
+                                responseChunk.candidates[0].content.parts.push({ functionCall: fc });
                             }
-                        }]
-                    } as unknown as GenerateContentResponse;
+                        }
+
+                        if (chunk.usageMetadata) {
+                            responseChunk.usageMetadata = chunk.usageMetadata;
+                        }
+
+                        yield responseChunk as GenerateContentResponse;
+                    } catch (e) {
+                        console.error("Failed to parse stream line:", e, "Line:", line);
+                    }
                 }
+            }
+        }
+
+        if (buffer.trim()) {
+            try {
+                const chunk = JSON.parse(buffer);
+                const responseChunk: any = {
+                    candidates: [{
+                        content: {
+                            parts: []
+                        }
+                    }]
+                };
+
+                if (chunk.text) {
+                    responseChunk.text = chunk.text;
+                    responseChunk.candidates[0].content.parts.push({ text: chunk.text });
+                }
+
+                if (chunk.functionCalls) {
+                    for (const fc of chunk.functionCalls) {
+                        responseChunk.candidates[0].content.parts.push({ functionCall: fc });
+                    }
+                }
+
+                if (chunk.usageMetadata) {
+                    responseChunk.usageMetadata = chunk.usageMetadata;
+                }
+
+                yield responseChunk as GenerateContentResponse;
+            } catch (e) {
+                console.error("Failed to parse final buffer:", e, "Buffer:", buffer);
             }
         }
 
