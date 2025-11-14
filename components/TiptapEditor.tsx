@@ -76,6 +76,8 @@ const MenuBar = ({ editor }: { editor: any }) => {
 
 
 export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, onSelectionUpdate, isEditable }) => {
+    const isUpdatingRef = React.useRef(false);
+
     const editor = useEditor({
         extensions: [
             StarterKit.configure({
@@ -84,7 +86,6 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
             Placeholder.configure({
                 placeholder: 'Doküman içeriğini buraya yazın...',
             }),
-            // YENİ EKLENEN TABLO EKLENTİLERİ
             Table.configure({
                 resizable: true,
                 cellMinWidth: 50,
@@ -94,14 +95,12 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
             TableCell,
         ],
         editable: isEditable,
-        content: '', // Başlangıçta boş, useEffect ile dolacak
-        
-        // !!!!!!!!!!!!!!! ÇÖZÜM - 1 (KAYDETME) !!!!!!!!!!!!!!!
-        // 'onUpdate' artık 'turndown' KULLANMIYOR.
+        content: '',
+
         onUpdate: ({ editor }) => {
-            if (isEditable) {
-                const html = editor.getHTML(); // Doğrudan HTML al
-                onChange(html);                // Doğrudan HTML'i kaydet (Markdown'a dönüştürme YOK)
+            if (isEditable && !isUpdatingRef.current) {
+                const html = editor.getHTML();
+                onChange(html);
             }
         },
         onSelectionUpdate: ({ editor }) => {
@@ -118,27 +117,35 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
         },
     });
 
-    // !!!!!!!!!!!!!!! ÇÖZÜM - 2 (YÜKLEME) !!!!!!!!!!!!!!!
-    // 'useEffect' artık 'marked.parse' KULLANMIYOR.
     React.useEffect(() => {
-        if (editor && !editor.isDestroyed) {
-            if (editor.isEditable !== isEditable) {
-                editor.setEditable(isEditable);
-            }
-            
-            const currentContentAsHTML = editor.getHTML();
-            
-            // 'content' prop'u artık HTML. 'marked.parse' KULLANMIYORUZ.
-            if (currentContentAsHTML !== content) {
-                const sanitizedHtml = DOMPurify.sanitize(content || '', { 
-                    // Sanitize ederken tablo etiketlerine ve birleştirme özelliklerine izin ver
-                    ADD_TAGS: ["table", "thead", "tbody", "tr", "th", "td", "col", "colgroup"], 
-                    ADD_ATTR: ["colspan", "rowspan", "colwidth"] 
-                });
-                editor.commands.setContent(sanitizedHtml, false); 
-            }
+        if (!editor || editor.isDestroyed) return;
+
+        if (editor.isEditable !== isEditable) {
+            editor.setEditable(isEditable);
+        }
+
+        const currentContentAsHTML = editor.getHTML();
+
+        if (currentContentAsHTML !== content) {
+            isUpdatingRef.current = true;
+            const sanitizedHtml = DOMPurify.sanitize(content || '', {
+                ADD_TAGS: ["table", "thead", "tbody", "tr", "th", "td", "col", "colgroup"],
+                ADD_ATTR: ["colspan", "rowspan", "colwidth"]
+            });
+            editor.commands.setContent(sanitizedHtml, false);
+            setTimeout(() => {
+                isUpdatingRef.current = false;
+            }, 0);
         }
     }, [content, isEditable, editor]);
+
+    React.useEffect(() => {
+        return () => {
+            if (editor && !editor.isDestroyed) {
+                editor.destroy();
+            }
+        };
+    }, [editor]);
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-slate-900">
