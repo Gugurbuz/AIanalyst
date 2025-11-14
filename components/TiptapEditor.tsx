@@ -9,6 +9,7 @@ import TableHeader from '@tiptap/extension-table-header';
 import TableRow from '@tiptap/extension-table-row';
 import { marked } from 'marked';
 import TurndownService from 'turndown';
+import { gfm } from 'turndown-plugin-gfm';
 import DOMPurify from 'dompurify';
 import { 
     Bold, Italic, Heading2, Heading3, List, ListOrdered, Table as TableIcon,
@@ -25,60 +26,7 @@ interface TiptapEditorProps {
 }
 
 const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
-
-// FIX: Replaced the fragile table conversion rule with a robust version
-// that correctly handles various table structures produced by Tiptap,
-// preventing "Uncaught" errors when converting HTML back to Markdown.
-turndownService.addRule('tables', {
-    filter: ['table'],
-    replacement: function(content, node) {
-        if (!(node instanceof HTMLElement)) return content;
-
-        const rows = Array.from(node.querySelectorAll('tr'));
-        if (rows.length === 0) return '';
-
-        // The header row is the first row that contains at least one `th`.
-        let headerRowIndex = rows.findIndex(row => row.querySelector('th'));
-        // If no `th` is found, the first row is the header.
-        if (headerRowIndex === -1) {
-            headerRowIndex = 0;
-        }
-        
-        const headerRow = rows[headerRowIndex];
-        const bodyRows = rows.filter((_, index) => index !== headerRowIndex);
-
-        const headerCells = Array.from(headerRow.children);
-        const headerTexts = headerCells.map(cell => (cell.textContent || '').trim());
-        
-        // If the table is empty (e.g., just a header with no text and no body), return empty string.
-        if (headerTexts.every(text => text === '') && bodyRows.length === 0) {
-            return '';
-        }
-        
-        const separator = `| ${headerCells.map(() => '---').join(' | ')} |`;
-        
-        const bodyTexts = bodyRows.map(row => {
-            const cells = Array.from(row.children);
-            const rowTexts = [];
-            // Use header length to determine number of columns
-            for (let i = 0; i < headerCells.length; i++) {
-                const cell = cells[i];
-                // Replace newlines inside a cell with <br> to preserve them in Markdown
-                const cellText = (cell?.textContent || '').trim().replace(/\n+/g, '<br>');
-                rowTexts.push(cellText);
-            }
-            return `| ${rowTexts.join(' | ')} |`;
-        }).join('\n');
-
-        let markdown = `| ${headerTexts.join(' | ')} |\n`;
-        markdown += separator + '\n';
-        if (bodyTexts) {
-            markdown += bodyTexts;
-        }
-
-        return '\n\n' + markdown + '\n\n';
-    }
-});
+turndownService.use(gfm);
 
 
 const MenuBar = ({ editor }: { editor: any }) => {
