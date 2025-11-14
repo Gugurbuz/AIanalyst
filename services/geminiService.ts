@@ -567,27 +567,31 @@ export const geminiService = {
                     buffer += text;
                     console.log(`[HANDLER DEBUG] Added text to buffer. Buffer length: ${buffer.length}, Total text received: ${totalTextReceived}`);
                     if (!thoughtYielded) {
-                        const startTag = '<dusunce>';
-                        const endTag = '</dusunce>';
-                        const startIdx = buffer.indexOf(startTag);
-                        const endIdx = buffer.indexOf(endTag);
+                        const startMarker = '```thinking';
+                        const endMarker = '```';
+                        const startIdx = buffer.indexOf(startMarker);
 
-                        if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-                            const jsonStr = buffer.substring(startIdx + startTag.length, endIdx);
-                            console.log("[HANDLER DEBUG] Found thought tags, parsing JSON:", jsonStr.substring(0, 100));
-                            try {
-                                const thoughtPayload: ThoughtProcess = JSON.parse(jsonStr);
-                                console.log("[HANDLER DEBUG] Successfully parsed thought, yielding thought_chunk");
-                                yield { type: 'thought_chunk', payload: thoughtPayload };
-                                thoughtYielded = true;
-                                const remainingText = buffer.substring(endIdx + endTag.length);
-                                if (remainingText) {
-                                    console.log("[HANDLER DEBUG] Yielding remaining text after thought:", remainingText.substring(0, 50));
-                                    yield { type: 'text_chunk', text: remainingText };
+                        if (startIdx !== -1) {
+                            const searchStart = startIdx + startMarker.length;
+                            const endIdx = buffer.indexOf(endMarker, searchStart);
+
+                            if (endIdx !== -1) {
+                                const jsonStr = buffer.substring(searchStart, endIdx).trim();
+                                console.log("[HANDLER DEBUG] Found thinking code block, parsing JSON:", jsonStr.substring(0, 100));
+                                try {
+                                    const thoughtPayload: ThoughtProcess = JSON.parse(jsonStr);
+                                    console.log("[HANDLER DEBUG] Successfully parsed thought, yielding thought_chunk");
+                                    yield { type: 'thought_chunk', payload: thoughtPayload };
+                                    thoughtYielded = true;
+                                    const remainingText = buffer.substring(endIdx + endMarker.length);
+                                    if (remainingText.trim()) {
+                                        console.log("[HANDLER DEBUG] Yielding remaining text after thought:", remainingText.substring(0, 50));
+                                        yield { type: 'text_chunk', text: remainingText };
+                                    }
+                                    buffer = '';
+                                } catch (e) {
+                                    console.log("[HANDLER DEBUG] Failed to parse thought JSON (incomplete):", e);
                                 }
-                                buffer = '';
-                            } catch (e) {
-                                console.log("[HANDLER DEBUG] Failed to parse thought JSON (incomplete):", e);
                             }
                         }
                     } else {
@@ -602,30 +606,38 @@ export const geminiService = {
 
             if (buffer) {
                 console.log("[HANDLER DEBUG] Processing final buffer:", buffer.substring(0, 100));
-                 if (!thoughtYielded) {
-                     const startTag = '<dusunce>';
-                    const endTag = '</dusunce>';
-                    const startIdx = buffer.indexOf(startTag);
-                    const endIdx = buffer.indexOf(endTag);
-                     if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-                        const jsonStr = buffer.substring(startIdx + startTag.length, endIdx);
-                        console.log("[HANDLER DEBUG] Final buffer - Found thought tags, parsing JSON");
-                        try {
-                            const thoughtPayload: ThoughtProcess = JSON.parse(jsonStr);
-                            console.log("[HANDLER DEBUG] Final buffer - Successfully parsed thought");
-                            yield { type: 'thought_chunk', payload: thoughtPayload };
-                            const remainingText = buffer.substring(endIdx + endTag.length);
-                            if (remainingText) {
-                                console.log("[HANDLER DEBUG] Final buffer - Yielding remaining text:", remainingText.substring(0, 50));
-                                yield { type: 'text_chunk', text: remainingText };
+                if (!thoughtYielded) {
+                    const startMarker = '```thinking';
+                    const endMarker = '```';
+                    const startIdx = buffer.indexOf(startMarker);
+
+                    if (startIdx !== -1) {
+                        const searchStart = startIdx + startMarker.length;
+                        const endIdx = buffer.indexOf(endMarker, searchStart);
+
+                        if (endIdx !== -1) {
+                            const jsonStr = buffer.substring(searchStart, endIdx).trim();
+                            console.log("[HANDLER DEBUG] Final buffer - Found thinking code block, parsing JSON");
+                            try {
+                                const thoughtPayload: ThoughtProcess = JSON.parse(jsonStr);
+                                console.log("[HANDLER DEBUG] Final buffer - Successfully parsed thought");
+                                yield { type: 'thought_chunk', payload: thoughtPayload };
+                                const remainingText = buffer.substring(endIdx + endMarker.length).trim();
+                                if (remainingText) {
+                                    console.log("[HANDLER DEBUG] Final buffer - Yielding remaining text:", remainingText.substring(0, 50));
+                                    yield { type: 'text_chunk', text: remainingText };
+                                }
+                            } catch(e) {
+                                console.log("[HANDLER DEBUG] Final buffer - Failed to parse thought, yielding all as text");
+                                yield { type: 'text_chunk', text: buffer };
                             }
-                        } catch(e) {
-                            console.log("[HANDLER DEBUG] Final buffer - Failed to parse thought, yielding text after end tag");
-                             yield { type: 'text_chunk', text: buffer.substring(endIdx + endTag.length) };
+                        } else {
+                            console.log("[HANDLER DEBUG] Final buffer - Incomplete thinking block, yielding as text_chunk");
+                            yield { type: 'text_chunk', text: buffer };
                         }
                     } else {
-                        console.log("[HANDLER DEBUG] Final buffer - No thought tags, yielding as text_chunk");
-                         yield { type: 'text_chunk', text: buffer };
+                        console.log("[HANDLER DEBUG] Final buffer - No thinking block, yielding as text_chunk");
+                        yield { type: 'text_chunk', text: buffer };
                     }
                 } else {
                     console.log("[HANDLER DEBUG] Final buffer - Thought already yielded, yielding as text_chunk");
