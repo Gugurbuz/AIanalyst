@@ -64,6 +64,17 @@ const generateContent = async (
 
         if (error) {
             console.error("Supabase function error object:", JSON.stringify(error, null, 2));
+
+            if (error.context && error.context instanceof Response) {
+                const errorText = await error.context.text();
+                console.error("Error response body:", errorText);
+                try {
+                    const errorJson = JSON.parse(errorText);
+                    throw new Error(`Edge Function Error: ${errorJson.error || errorJson.details || errorText}`);
+                } catch (parseError) {
+                    throw new Error(`Edge Function Error: ${errorText}`);
+                }
+            }
             throw error;
         }
 
@@ -117,31 +128,59 @@ const generateContentStream = async function* (
     };
 
     try {
+        console.log("Calling gemini-proxy STREAM with:", { contents, config });
+
         const { data, error } = await supabase.functions.invoke('gemini-proxy', {
-            body: { contents, config, stream: true }, // Stream istediğimizi belirt
-            responseType: 'stream',
+            body: { contents, config, stream: true },
         });
 
-        if (error) throw error;
-        if (!data.body) throw new Error("Stream body bulunamadı.");
+        console.log("Response from gemini-proxy STREAM:", { data, error });
 
-        const reader = data.body.getReader();
-        const decoder = new TextDecoder();
-        let done = false;
+        if (error) {
+            console.error("Supabase function STREAM error object:", JSON.stringify(error, null, 2));
 
-        while (!done) {
-            const { value, done: readerDone } = await reader.read();
-            done = readerDone;
-            if (value) {
-                const text = decoder.decode(value, { stream: true });
-                yield {
-                    text: () => text,
-                } as unknown as GenerateContentResponse;
+            if (error.context && error.context instanceof Response) {
+                const errorText = await error.context.text();
+                console.error("Error response body:", errorText);
+                try {
+                    const errorJson = JSON.parse(errorText);
+                    throw new Error(`Edge Function Error: ${errorJson.error || errorJson.details || errorText}`);
+                } catch (parseError) {
+                    throw new Error(`Edge Function Error: ${errorText}`);
+                }
             }
+            throw error;
+        }
+
+        if (!data) throw new Error("No data received from stream");
+
+        if (data instanceof ReadableStream) {
+            const reader = data.getReader();
+            const decoder = new TextDecoder();
+            let done = false;
+
+            while (!done) {
+                const { value, done: readerDone } = await reader.read();
+                done = readerDone;
+                if (value) {
+                    const text = decoder.decode(value, { stream: true });
+                    yield {
+                        text: () => text,
+                    } as unknown as GenerateContentResponse;
+                }
+            }
+        } else {
+            throw new Error("Expected ReadableStream but got different type");
         }
 
     } catch (error) {
         console.error("Supabase Function Hatası (generateContentStream):", error);
+        console.error("Error details:", {
+            message: error?.message,
+            context: error?.context,
+            status: error?.status,
+            name: error?.name
+        });
         handleGeminiError(error);
     }
 };
