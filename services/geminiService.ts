@@ -243,8 +243,12 @@ const generateContentStream = async function* (
                     hasValue: !!result.value,
                     valueLength: result.value?.length,
                     valueType: result.value?.constructor?.name,
-                    result: result
                 });
+
+                if (chunkCount === 1 && result.value) {
+                    const firstChunkPreview = decoder.decode(result.value.slice(0, Math.min(500, result.value.length)), { stream: false });
+                    console.log("[STREAM DEBUG] FIRST CHUNK RAW:", firstChunkPreview);
+                }
 
                 done = result.done;
                 const value = result.value;
