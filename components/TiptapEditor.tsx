@@ -77,6 +77,15 @@ const MenuBar = ({ editor }: { editor: any }) => {
 
 export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, onSelectionUpdate, isEditable }) => {
     const isUpdatingRef = React.useRef(false);
+    const [sanitizedContent, setSanitizedContent] = React.useState('');
+
+    React.useEffect(() => {
+        const sanitized = DOMPurify.sanitize(content || '', {
+            ADD_TAGS: ["table", "thead", "tbody", "tr", "th", "td", "col", "colgroup"],
+            ADD_ATTR: ["colspan", "rowspan", "colwidth"]
+        });
+        setSanitizedContent(sanitized);
+    }, [content]);
 
     const editor = useEditor({
         extensions: [
@@ -95,7 +104,7 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
             TableCell,
         ],
         editable: isEditable,
-        content: '',
+        content: sanitizedContent,
 
         onUpdate: ({ editor }) => {
             if (isEditable && !isUpdatingRef.current) {
@@ -115,37 +124,23 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
                 class: `prose prose-slate dark:prose-invert max-w-none focus:outline-none p-4 md:p-6 h-full ${isEditable ? '' : 'cursor-text'}`,
             },
         },
-    });
+    }, [sanitizedContent, isEditable]);
 
     React.useEffect(() => {
         if (!editor || editor.isDestroyed) return;
 
-        if (editor.isEditable !== isEditable) {
-            editor.setEditable(isEditable);
-        }
-
         const currentContentAsHTML = editor.getHTML();
 
-        if (currentContentAsHTML !== content) {
+        if (currentContentAsHTML !== sanitizedContent && sanitizedContent) {
             isUpdatingRef.current = true;
-            const sanitizedHtml = DOMPurify.sanitize(content || '', {
-                ADD_TAGS: ["table", "thead", "tbody", "tr", "th", "td", "col", "colgroup"],
-                ADD_ATTR: ["colspan", "rowspan", "colwidth"]
-            });
-            editor.commands.setContent(sanitizedHtml, false);
-            setTimeout(() => {
+            requestAnimationFrame(() => {
+                if (editor && !editor.isDestroyed) {
+                    editor.commands.setContent(sanitizedContent, false);
+                }
                 isUpdatingRef.current = false;
-            }, 0);
+            });
         }
-    }, [content, isEditable, editor]);
-
-    React.useEffect(() => {
-        return () => {
-            if (editor && !editor.isDestroyed) {
-                editor.destroy();
-            }
-        };
-    }, [editor]);
+    }, [sanitizedContent, editor]);
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-slate-900">

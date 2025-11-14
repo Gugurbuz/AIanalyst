@@ -262,11 +262,9 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                          <div className="p-6 text-slate-500">{isStreaming ? 'Talep dokümanı oluşturuluyor...' : 'Talep dokümanı yüklenemedi veya geçersiz formatta.'}</div>
                     )
                 ) : (
-                    // !!!!!!!!!!!!!!! ÇÖZÜM - 4 (RENDER) !!!!!!!!!!!!!!!
-                    // Diğer Tüm Dokümanlar (Analiz, Test, İzlenebilirlik):
-                    // Artık 'MarkdownRenderer' yerine 'TiptapEditor' kullanılıyor.
                     <TiptapEditor
-                        content={displayContent} // 'displayContent' artık HTML veya (streaming ise) Markdown içeriyor
+                        key={`${docKey}-${isEditing ? 'edit' : 'view'}`}
+                        content={displayContent}
                         onChange={setLocalContent}
                         onSelectionUpdate={handleTiptapSelection}
                         isEditable={isEditing}
