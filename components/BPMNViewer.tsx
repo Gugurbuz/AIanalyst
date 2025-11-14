@@ -56,8 +56,9 @@ export const BPMNViewer: React.FC<BPMNViewerProps> = ({ xml, setSvgContentGetter
         return () => {
             modeler.destroy();
         };
-    }, [setSvgContentGetter]); // BpmnJS bağımlılıktan kaldırıldı
+    }, [setSvgContentGetter]);
 
+    // ... (dosyanın geri kalanı aynı) ...
     useEffect(() => {
         if (modelerRef.current) {
             const palette = modelerRef.current.get('palette');
