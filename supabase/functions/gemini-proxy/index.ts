@@ -49,9 +49,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    const apiKey = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GEMINI_APIKEY");
     if (!apiKey) {
-      console.error("GEMINI_API_KEY not found in environment");
+      console.error("GEMINI_API_KEY or GEMINI_APIKEY not found in environment");
       return new Response(
         JSON.stringify({ error: "GEMINI_API_KEY not configured" }),
         {

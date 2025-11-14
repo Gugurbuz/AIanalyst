@@ -54,19 +54,23 @@ const generateContent = async (
     };
 
     try {
+        console.log("Calling gemini-proxy with:", { contents, config });
+
         const { data, error } = await supabase.functions.invoke('gemini-proxy', {
-            body: { contents, config, stream: false }, // Stream olmadığını belirt
+            body: { contents, config, stream: false },
         });
 
-        if (error) throw error;
+        console.log("Response from gemini-proxy:", { data, error });
 
-        // Edge function stream=false ise doğrudan JSON döner
+        if (error) {
+            console.error("Supabase function error object:", JSON.stringify(error, null, 2));
+            throw error;
+        }
+
         if (data && typeof data.text === 'string') {
-             // Edge function'dan token bilgisi gelmiyorsa 0 varsay
              return { text: data.text, tokens: data.tokens || 0 };
         }
-        
-        // Edge function stream=true cevabı döndürürse (hata)
+
         if (data instanceof ReadableStream) {
              const reader = data.getReader();
              const decoder = new TextDecoder();
@@ -79,13 +83,20 @@ const generateContent = async (
                     text += decoder.decode(value, { stream: true });
                 }
              }
-             return { text: text, tokens: 0 }; 
+             return { text: text, tokens: 0 };
         }
 
+        console.error("Unexpected response format:", data);
         throw new Error("Supabase Function'dan beklenmeyen yanıt formatı (JSON bekleniyordu).");
 
     } catch (error) {
         console.error("Supabase Function Hatası (generateContent):", error);
+        console.error("Error details:", {
+            message: error?.message,
+            context: error?.context,
+            status: error?.status,
+            name: error?.name
+        });
         handleGeminiError(error);
     }
 };
