@@ -1,3 +1,4 @@
+// index.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
@@ -8,7 +9,7 @@ import type { User, Conversation, Document, DocumentVersion, Message, UserProfil
 import type { Session } from '@supabase/supabase-js';
 import { PublicView } from './components/PublicView';
 import { LandingPage } from './components/LandingPage';
-
+import './index.css'; // YENİ EKLENEN ANA CSS IMPORTU
 
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900">
@@ -54,14 +55,10 @@ const Main = () => {
         supabase.auth.getSession().then(({ data: { session }, error }) => {
             if (error) {
                 console.warn('Error fetching session on initial load:', error.message);
-                // If there's an error (like an invalid refresh token), treat it as logged out.
-                // The Supabase client should also fire a SIGNED_OUT event, but this is a safeguard.
                 setSession(null);
             } else {
                 setSession(session);
             }
-            // Now we know the auth status, we can stop the initial loading.
-            // Data loading will be handled by the next effect based on the session.
             setIsLoading(false); 
         });
 
@@ -80,7 +77,6 @@ const Main = () => {
         const shareId = urlParams.get('share');
 
         const fetchData = async () => {
-            // Reset previous results before fetching new ones
             setLoadResult({});
 
             if (shareId) {
@@ -129,19 +125,17 @@ const Main = () => {
                         const messagesWithThoughts = (conv.conversation_details || [])
                             .map((msg: any) => {
                                 let thought: ThoughtProcess | null = null;
-                                // Handle both old 'thoughts' (string) and new 'thought' (jsonb)
                                 const thoughtSource = msg.thought || msg.thoughts;
                                 
                                 if (thoughtSource && typeof thoughtSource === 'string') {
                                     try {
                                         const parsed = JSON.parse(thoughtSource);
-                                        // Check if it's the old ExpertStep[] format
                                         if (Array.isArray(parsed)) {
                                             thought = {
                                                 title: "Düşünce Akışı",
                                                 steps: parsed as ThinkingStep[]
                                             };
-                                        } else { // Assume it's the new ThoughtProcess format
+                                        } else {
                                             thought = parsed as ThoughtProcess;
                                         }
                                     } catch (e) {
@@ -149,7 +143,6 @@ const Main = () => {
                                         thought = { title: 'Düşünce Akışı (Hata)', steps: [{ id: 'db_parse_error', name: 'Veritabanından gelen düşünce verisi ayrıştırılamadı.', status: 'error' }] };
                                     }
                                 } else if (thoughtSource && typeof thoughtSource === 'object') {
-                                    // It's already a JSONB object, use it directly
                                     thought = thoughtSource as ThoughtProcess;
                                 }
                                 
@@ -190,7 +183,7 @@ const Main = () => {
 
         fetchData();
 
-    }, [session?.user.id]); // <-- *** THE FIX IS HERE *** Changed from [session]
+    }, [session?.user.id]); 
 
 
     if (isLoading) {
