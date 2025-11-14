@@ -1,6 +1,7 @@
 // components/DocumentCanvas.tsx
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { MarkdownRenderer } from './MarkdownRenderer'; // Bu artık sadece 'Dışa Aktar' için kullanılacak
+// MarkdownRenderer'ı SİLİN
+// import { MarkdownRenderer } from './MarkdownRenderer';
 import { StreamingIndicator } from './StreamingIndicator';
 import { TemplateSelector } from './TemplateSelector';
 import { ExportDropdown } from './ExportDropdown';
@@ -35,7 +36,7 @@ interface DocumentCanvasProps {
     onRestoreVersion: (version: DocumentVersion) => void;
 }
 
-// jsonToMarkdownTable ve requestDocToMarkdown fonksiyonları SİLİNDİ (artık gereksizler)
+// jsonToMarkdownTable ve requestDocToMarkdown fonksiyonları SİLİNDİ
 
 const AiAssistantModal: React.FC<{ 
     selectedText: string; 
@@ -43,7 +44,6 @@ const AiAssistantModal: React.FC<{
     onClose: () => void; 
     isLoading: boolean; 
 }> = ({ selectedText, onGenerate, onClose, isLoading }) => {
-    // ... (içerik aynı, değişiklik yok) ...
     const [prompt, setPrompt] = useState('');
     const modalRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
@@ -75,7 +75,6 @@ const LintingSuggestionsBar: React.FC<{
     onDismiss: (issue: LintingIssue) => void; 
     isFixing: boolean; 
 }> = ({ issues, onFix, onDismiss, isFixing }) => {
-    // ... (içerik aynı, değişiklik yok) ...
     if (issues.length === 0) return null;
     const issue = issues[0];
     return (
@@ -124,7 +123,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         if (docKey === 'requestDoc') {
             try {
                 const contentToParse = isEditing ? localContent : content;
-                if (!contentToParse) return null; // Boşsa ayrıştırmayı deneme
+                 if (!contentToParse) return null; // Boşsa ayrıştırmayı deneme
                 const parsed = JSON.parse(contentToParse);
                 return isIsBirimiTalep(parsed) ? parsed : null;
             } catch { return null; }
@@ -142,23 +141,21 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
             setIsProcessingSave(true);
             try {
                 if (docKey === 'requestDoc') {
-                    // Talep dokümanı (JSON) için özetlemeye gerek yok
+                    // Talep dokümanı (JSON)
                     onContentChange(localContent, "Talep dokümanı manuel olarak düzenlendi.");
                 } else {
-                    // Diğer dokümanlar (ARTIK HTML) için özetleme
-                    // Not: Bu özetleme HTML tag'lerini de içerebilir, bu normaldir.
-                    // İstenirse, özetleme için AI'a göndermeden önce metni temizleyebilirsiniz
-                    // ancak şu anki hali en basit ve sağlam olanıdır.
+                    // Diğer dokümanlar (ARTIK HTML)
+                    // Not: Özetleme servisi HTML tag'lerini de görecek.
                     const { summary, tokens } = await geminiService.summarizeDocumentChange(originalContentRef.current, localContent);
                     onAddTokens(tokens);
                     onContentChange(localContent, summary); // localContent HTML'dir
                     
-                    if (docKey === 'analysisDoc') {
-                        // Linting servisi artık HTML alacak, bunu işleyebilmesi gerekir.
-                        // Şimdilik, linting'i basitleştirmek için devredışı bırakabilir veya
-                        // geminiService.lintDocument'in HTML'i işlemesini sağlayabilirsiniz.
-                        // setLintIssues(issues);
-                    }
+                    // Linter'ın HTML'i işlemesi gerekir, bu şimdilik devre dışı bırakılabilir
+                    // if (docKey === 'analysisDoc') {
+                    //     const { issues, tokens: lintTokens } = await geminiService.lintDocument(localContent);
+                    //     onAddTokens(lintTokens);
+                    //     setLintIssues(issues);
+                    // }
                 }
             } catch (error) {
                 console.error("Failed to save/convert changes:", error);
@@ -213,17 +210,17 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         // 'content' (veya düzenleniyorsa 'localContent') artık HTML'dir.
         const contentToDisplay = isEditing ? localContent : content;
         
-        // AI'dan streaming geliyorsa, bu hâlâ Markdown'dur.
-        // Tiptap'in bunu işlemesi gerekir. (Bu senaryo Tiptap'in HTML'i
-        // anlık olarak ayrıştırmasına dayanır, bu da sorun çıkarabilir.
-        // İdeal olan, AI'nın da HTML stream etmesidir, ancak şimdilik böyle bırakalım)
+        // ÖNEMLİ: AI'dan stream edilen veri HALA MARKDOWN OLABİLİR.
+        // Tiptap'in bunu işlemesi gerekir. En ideali AI'nın da HTML stream etmesidir,
+        // ancak bu daha büyük bir değişiklik gerektirir.
+        // Şimdilik, Tiptap'in stream'i işlemesini bekleyeceğiz.
         if (isStreaming) {
-             return contentToDisplay;
+             return contentToDisplay; // TODO: Bu akış Markdown ise Tiptap'e HTML'e çevirip vermeliyiz
         }
 
         // isTable kontrolü artık gereksiz, Tiptap tabloları kendi içinde halleder.
         return contentToDisplay;
-    }, [isEditing, isStreaming, isTable, localContent, content, docKey]);
+    }, [isEditing, isStreaming, localContent, content, docKey]);
     
     const currentVersion = filteredHistory.length > 0 ? Math.max(...filteredHistory.map(v => v.version_number)) : 0;
     const showAiButton = (docKey === 'analysisDoc' || docKey === 'testScenarios');
@@ -245,7 +242,7 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                      {isStreaming && <div className="flex items-center gap-2"><LoaderCircle className="animate-spin h-5 w-5 text-indigo-500" /><span className="text-sm font-medium text-slate-600 dark:text-slate-400">Oluşturuluyor</span></div>}
                      <button onClick={handleToggleEditing} disabled={isProcessingSave || isStreaming} className="px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-2 disabled:opacity-50">{isProcessingSave ? <><LoaderCircle className="h-4 w-4 animate-spin" /> Kaydediliyor...</> : isEditing ? <><Eye className="h-4 w-4" /> Görünüm</> : <><Edit className="h-4 w-4" /> Düzenle</>}</button>
                     {/* 'displayContent' artık HTML içeriyor. 'ExportDropdown' bunu işleyebilmeli. */}
-                    <ExportDropdown content={displayContent} filename={filename} isTable={isTable} />
+                    <ExportDropdown content={displayContent} filename={filename} isTable={isTable} diagramType={null} />
                 </div>
             </div>
             
@@ -262,14 +259,14 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                             <RequestDocumentViewer document={parsedRequestDoc} />
                         )
                     ) : (
-                        <div className="p-6 text-slate-500">Talep dokümanı yüklenemedi veya geçersiz formatta.</div>
+                         <div className="p-6 text-slate-500">{isStreaming ? 'Talep dokümanı oluşturuluyor...' : 'Talep dokümanı yüklenemedi veya geçersiz formatta.'}</div>
                     )
                 ) : (
                     // !!!!!!!!!!!!!!! ÇÖZÜM - 4 (RENDER) !!!!!!!!!!!!!!!
                     // Diğer Tüm Dokümanlar (Analiz, Test, İzlenebilirlik):
                     // Artık 'MarkdownRenderer' yerine 'TiptapEditor' kullanılıyor.
                     <TiptapEditor
-                        content={displayContent} // 'displayContent' artık HTML içeriyor
+                        content={displayContent} // 'displayContent' artık HTML veya (streaming ise) Markdown içeriyor
                         onChange={setLocalContent}
                         onSelectionUpdate={handleTiptapSelection}
                         isEditable={isEditing}
