@@ -522,9 +522,14 @@ export const geminiService = {
             required: requiredFields
         };
 
-        const schema = {
+const schema = {
             type: Type.OBJECT,
             properties: {
                 suggestions: {
                     type: Type.ARRAY,
                     items: recursiveBacklogItemSchema
+                }, // <-- EKLENEN VİRGÜL
+                reasoning: { type: Type.STRING }
+            },
+            required: ['suggestions', 'reasoning']
+        };
