@@ -156,6 +156,7 @@ Deno.serve(async (req: Request) => {
                     try {
                       const chunk = JSON.parse(dataLine);
                       const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                      console.log('Edge Function extracted text:', { length: text.length, preview: text.substring(0, 50) });
                       if (text) {
                         controller.enqueue(encoder.encode(text));
                       }
@@ -171,6 +172,7 @@ Deno.serve(async (req: Request) => {
               try {
                 const chunk = JSON.parse(buffer);
                 const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                console.log('Edge Function final buffer text:', { length: text.length, preview: text.substring(0, 50) });
                 if (text) {
                   controller.enqueue(encoder.encode(text));
                 }
