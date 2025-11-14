@@ -120,12 +120,78 @@ Deno.serve(async (req: Request) => {
     }
 
     if (stream) {
-      return new Response(response.body, {
+      if (!response.body) {
+        return new Response(
+          JSON.stringify({ error: "No response body from Gemini API" }),
+          {
+            status: 500,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      const encoder = new TextEncoder();
+
+      const stream = new ReadableStream({
+        async start(controller) {
+          try {
+            let buffer = "";
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              buffer = lines.pop() || "";
+
+              for (const line of lines) {
+                if (line.trim() === "" || line.startsWith("data: ")) {
+                  const dataLine = line.startsWith("data: ") ? line.slice(6) : line;
+                  if (dataLine.trim()) {
+                    try {
+                      const chunk = JSON.parse(dataLine);
+                      const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                      if (text) {
+                        controller.enqueue(encoder.encode(text));
+                      }
+                    } catch (e) {
+                      console.error("Failed to parse chunk:", e, dataLine);
+                    }
+                  }
+                }
+              }
+            }
+
+            if (buffer.trim()) {
+              try {
+                const chunk = JSON.parse(buffer);
+                const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                if (text) {
+                  controller.enqueue(encoder.encode(text));
+                }
+              } catch (e) {
+                console.error("Failed to parse final buffer:", e);
+              }
+            }
+
+            controller.close();
+          } catch (error) {
+            console.error("Stream processing error:", error);
+            controller.error(error);
+          }
+        },
+      });
+
+      return new Response(stream, {
         headers: {
           ...corsHeaders,
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          "Connection": "keep-alive",
+          "Content-Type": "application/octet-stream",
+          "Transfer-Encoding": "chunked",
         },
       });
     }

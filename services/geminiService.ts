@@ -23,15 +23,37 @@ function handleGeminiError(error: any): never {
     }
 
     const message = (error?.message || String(error)).toLowerCase();
-    if (message.includes('429') || message.includes('quota')) throw new Error("API Kota Limiti Aşıldı.");
-    if (message.includes('api key not valid')) throw new Error("Geçersiz API Anahtarı.");
-    if (message.includes('internal error')) throw new Error("Gemini API'sinde geçici bir iç hata oluştu.");
-    if (message.includes('network error')) throw new Error("Ağ bağlantı hatası.");
+
+    if (message.includes('429') || message.includes('quota')) {
+        throw new Error("API Kota Limiti Aşıldı. Lütfen daha sonra tekrar deneyin.");
+    }
+
+    if (message.includes('api key not valid') || message.includes('api key')) {
+        throw new Error("Geçersiz API Anahtarı. Lütfen ayarları kontrol edin.");
+    }
+
+    if (message.includes('internal error') || message.includes('internal server error')) {
+        throw new Error("Gemini API'sinde geçici bir iç hata oluştu. Lütfen tekrar deneyin.");
+    }
+
+    if (message.includes('network error') || message.includes('fetch')) {
+        throw new Error("Ağ bağlantı hatası. İnternet bağlantınızı kontrol edin.");
+    }
+
     if (message.includes('non-2xx status code')) {
         const details = error?.context?.error || error?.context?.details || 'Detay bulunamadı';
         throw new Error(`Edge Function hatası: ${details}`);
     }
-    throw new Error(`Beklenmedik bir hata oluştu: ${error?.message || error}`);
+
+    if (message.includes('readablestream') || message.includes('stream')) {
+        throw new Error("Streaming yanıt işlenirken hata oluştu. Lütfen tekrar deneyin.");
+    }
+
+    if (message.includes('no data')) {
+        throw new Error("API'den yanıt alınamadı. Lütfen tekrar deneyin.");
+    }
+
+    throw new Error(`Beklenmedik bir hata oluştu: ${error?.message || String(error)}`);
 }
 
 // ===================================================================
@@ -39,14 +61,13 @@ function handleGeminiError(error: any): never {
 // ===================================================================
 
 const generateContent = async (
-  prompt: string | Content[], // DÜZELTME: Artık Content[] dizisini de kabul ediyor
+  prompt: string | Content[],
   model: GeminiModel,
   modelConfig?: any
 ): Promise<{ text: string, tokens: number }> => {
-    
-    // DÜZELTME: prompt string ise Content[] formatına çevir, değilse olduğu gibi kullan
-    const contents = typeof prompt === 'string' 
-        ? [{ role: 'user', parts: [{ text: prompt }] }] 
+
+    const contents = typeof prompt === 'string'
+        ? [{ role: 'user', parts: [{ text: prompt }] }]
         : prompt;
 
     const { config } = {
@@ -60,7 +81,12 @@ const generateContent = async (
             body: { contents, config, stream: false },
         });
 
-        console.log("Response from gemini-proxy:", { data, error });
+        console.log("Response from gemini-proxy:", {
+            hasData: !!data,
+            dataType: typeof data,
+            hasText: data && 'text' in data,
+            error
+        });
 
         if (error) {
             console.error("Supabase function error object:", JSON.stringify(error, null, 2));
@@ -78,11 +104,17 @@ const generateContent = async (
             throw error;
         }
 
-        if (data && typeof data.text === 'string') {
+        if (!data) {
+            console.error("No data received from Edge Function");
+            throw new Error("No response data from Gemini API");
+        }
+
+        if (typeof data === 'object' && 'text' in data && typeof data.text === 'string') {
              return { text: data.text, tokens: data.tokens || 0 };
         }
 
         if (data instanceof ReadableStream) {
+             console.warn("Received ReadableStream for non-streaming request, reading fully");
              const reader = data.getReader();
              const decoder = new TextDecoder();
              let text = "";
@@ -97,7 +129,12 @@ const generateContent = async (
              return { text: text, tokens: 0 };
         }
 
-        console.error("Unexpected response format:", data);
+        console.error("Unexpected response format:", {
+            dataType: typeof data,
+            dataConstructor: data?.constructor?.name,
+            dataKeys: Object.keys(data || {}),
+            dataSample: JSON.stringify(data)?.substring(0, 200)
+        });
         throw new Error("Supabase Function'dan beklenmeyen yanıt formatı (JSON bekleniyordu).");
 
     } catch (error) {
@@ -113,14 +150,13 @@ const generateContent = async (
 };
 
 const generateContentStream = async function* (
-  prompt: string | Content[], // DÜZELTME: Artık Content[] dizisini de kabul ediyor
+  prompt: string | Content[],
   model: GeminiModel,
   modelConfig?: any
 ): AsyncGenerator<GenerateContentResponse> {
-    
-    // DÜZELTME: prompt string ise Content[] formatına çevir, değilse olduğu gibi kullan
-    const contents = typeof prompt === 'string' 
-        ? [{ role: 'user', parts: [{ text: prompt }] }] 
+
+    const contents = typeof prompt === 'string'
+        ? [{ role: 'user', parts: [{ text: prompt }] }]
         : prompt;
 
     const { config } = {
@@ -134,7 +170,12 @@ const generateContentStream = async function* (
             body: { contents, config, stream: true },
         });
 
-        console.log("Response from gemini-proxy STREAM:", { data, error });
+        console.log("Response from gemini-proxy STREAM:", {
+            hasData: !!data,
+            dataType: data?.constructor?.name,
+            isReadableStream: data instanceof ReadableStream,
+            error
+        });
 
         if (error) {
             console.error("Supabase function STREAM error object:", JSON.stringify(error, null, 2));
@@ -152,25 +193,45 @@ const generateContentStream = async function* (
             throw error;
         }
 
-        if (!data) throw new Error("No data received from stream");
+        if (!data) {
+            console.error("No data received from Edge Function");
+            throw new Error("No data received from stream");
+        }
 
-        if (data instanceof ReadableStream) {
-            const reader = data.getReader();
-            const decoder = new TextDecoder();
-            let done = false;
+        if (!(data instanceof ReadableStream)) {
+            console.error("Data is not a ReadableStream:", {
+                dataType: typeof data,
+                dataConstructor: data?.constructor?.name,
+                dataKeys: Object.keys(data || {}),
+                dataSample: JSON.stringify(data)?.substring(0, 200)
+            });
 
-            while (!done) {
-                const { value, done: readerDone } = await reader.read();
-                done = readerDone;
-                if (value) {
-                    const text = decoder.decode(value, { stream: true });
+            if (typeof data === 'object' && 'text' in data) {
+                console.warn("Received non-streaming response, yielding as single chunk");
+                yield {
+                    text: () => data.text || '',
+                } as unknown as GenerateContentResponse;
+                return;
+            }
+
+            throw new Error(`Expected ReadableStream but got ${typeof data} (${data?.constructor?.name || 'unknown'})`);
+        }
+
+        const reader = data.getReader();
+        const decoder = new TextDecoder();
+        let done = false;
+
+        while (!done) {
+            const { value, done: readerDone } = await reader.read();
+            done = readerDone;
+            if (value) {
+                const text = decoder.decode(value, { stream: true });
+                if (text) {
                     yield {
                         text: () => text,
                     } as unknown as GenerateContentResponse;
                 }
             }
-        } else {
-            throw new Error("Expected ReadableStream but got different type");
         }
 
     } catch (error) {
