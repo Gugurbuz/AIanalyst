@@ -15,9 +15,28 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { contents, config, stream = false } = await req.json();
+    const body = await req.json().catch(err => {
+      console.error("JSON parse error:", err);
+      return null;
+    });
+
+    if (!body) {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON in request body" }),
+        {
+          status: 400,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    }
+
+    const { contents, config, stream = false } = body;
 
     if (!contents || !Array.isArray(contents)) {
+      console.error("Invalid contents:", contents);
       return new Response(
         JSON.stringify({ error: "Invalid request: contents must be an array" }),
         {
@@ -32,6 +51,7 @@ Deno.serve(async (req: Request) => {
 
     const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) {
+      console.error("GEMINI_API_KEY not found in environment");
       return new Response(
         JSON.stringify({ error: "GEMINI_API_KEY not configured" }),
         {

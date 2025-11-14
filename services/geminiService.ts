@@ -17,11 +17,20 @@ export interface DocumentImpactAnalysis {
 
 function handleGeminiError(error: any): never {
     console.error("Gemini/Supabase Function Hatası:", error);
+
+    if (error?.context) {
+        console.error("Hata Detayı:", error.context);
+    }
+
     const message = (error?.message || String(error)).toLowerCase();
     if (message.includes('429') || message.includes('quota')) throw new Error("API Kota Limiti Aşıldı.");
     if (message.includes('api key not valid')) throw new Error("Geçersiz API Anahtarı.");
     if (message.includes('internal error')) throw new Error("Gemini API'sinde geçici bir iç hata oluştu.");
     if (message.includes('network error')) throw new Error("Ağ bağlantı hatası.");
+    if (message.includes('non-2xx status code')) {
+        const details = error?.context?.error || error?.context?.details || 'Detay bulunamadı';
+        throw new Error(`Edge Function hatası: ${details}`);
+    }
     throw new Error(`Beklenmedik bir hata oluştu: ${error?.message || error}`);
 }
 
