@@ -1,13 +1,10 @@
 // services/geminiService.ts
 
-// GoogleGenAI import'u kaldırıldı, supabase import'u eklendi
 import { supabase } from './supabaseClient';
 import { Type, Content, FunctionDeclaration, GenerateContentResponse, Modality } from "@google/genai";
 import type { Message, MaturityReport, BacklogSuggestion, GeminiModel, FeedbackItem, GeneratedDocs, ExpertStep, GenerativeSuggestion, LintingIssue, SourcedDocument, VizData, ThoughtProcess, StreamChunk } from '../types';
 import { promptService } from './promptService';
 import { v4 as uuidv4 } from 'uuid';
-
-// getApiKey fonksiyonu SİLİNDİ.
 
 export interface DocumentImpactAnalysis {
     changeType: 'minor' | 'major';
@@ -33,18 +30,21 @@ function handleGeminiError(error: any): never {
 // ===================================================================
 
 const generateContent = async (
-  prompt: string | Content[], // Artık Content[] dizisini de kabul ediyor
+  prompt: string | Content[], // DÜZELTME: Artık Content[] dizisini de kabul ediyor
   model: GeminiModel,
   modelConfig?: any
 ): Promise<{ text: string, tokens: number }> => {
     
-    const { contents, config } = {
-        contents: prompt, // prompt string veya Content[] olabilir
+    // DÜZELTME: prompt string ise Content[] formatına çevir
+    const contents = typeof prompt === 'string' 
+        ? [{ role: 'user', parts: [{ text: prompt }] }] 
+        : prompt;
+
+    const { config } = {
         config: modelConfig?.generationConfig || modelConfig,
     };
 
     try {
-        // 'gemini-proxy' fonksiyonunu çağır
         const { data, error } = await supabase.functions.invoke('gemini-proxy', {
             body: { contents, config, stream: false }, // Stream olmadığını belirt
         });
@@ -53,8 +53,23 @@ const generateContent = async (
 
         // Edge function stream=false ise doğrudan JSON döner
         if (data && typeof data.text === 'string') {
-             // Edge function'dan token bilgisi gelmiyorsa 0 varsay
              return { text: data.text, tokens: data.tokens || 0 };
+        }
+        
+        // Edge function stream=true cevabı döndürürse (hata)
+        if (data instanceof ReadableStream) {
+             const reader = data.getReader();
+             const decoder = new TextDecoder();
+             let text = "";
+             let done = false;
+             while (!done) {
+                const { value, done: readerDone } = await reader.read();
+                done = readerDone;
+                if (value) {
+                    text += decoder.decode(value, { stream: true });
+                }
+             }
+             return { text: text, tokens: 0 }; 
         }
 
         throw new Error("Supabase Function'dan beklenmeyen yanıt formatı (JSON bekleniyordu).");
@@ -66,18 +81,21 @@ const generateContent = async (
 };
 
 const generateContentStream = async function* (
-  prompt: string | Content[], // Artık Content[] dizisini de kabul ediyor
+  prompt: string | Content[], // DÜZELTME: Artık Content[] dizisini de kabul ediyor
   model: GeminiModel,
   modelConfig?: any
 ): AsyncGenerator<GenerateContentResponse> {
     
-    const { contents, config } = {
-        contents: prompt, // prompt string veya Content[] olabilir
+    // DÜZELTME: prompt string ise Content[] formatına çevir
+    const contents = typeof prompt === 'string' 
+        ? [{ role: 'user', parts: [{ text: prompt }] }] 
+        : prompt;
+
+    const { config } = {
         config: modelConfig?.generationConfig || modelConfig,
     };
 
     try {
-        // 'gemini-proxy' fonksiyonunu çağır
         const { data, error } = await supabase.functions.invoke('gemini-proxy', {
             body: { contents, config, stream: true }, // Stream istediğimizi belirt
             responseType: 'stream',
@@ -95,10 +113,8 @@ const generateContentStream = async function* (
             done = readerDone;
             if (value) {
                 const text = decoder.decode(value, { stream: true });
-                // Orijinal 'GenerateContentResponse' formatına benzeterek yield et
                 yield {
                     text: () => text,
-                    // usageMetadata vb. bu yöntemle gelmez
                 } as unknown as GenerateContentResponse;
             }
         }
@@ -169,10 +185,7 @@ export async function* parseStreamingResponse(stream: AsyncGenerator<GenerateCon
     let thoughtYielded = false;
 
     for await (const chunk of stream) {
-        // Stream'den token bilgisi gelmiyor (Edge Function kısıtlaması)
-        // if (chunk.usageMetadata) {
-        //     yield { type: 'usage_update', tokens: chunk.usageMetadata.totalTokenCount };
-        // }
+        // if (chunk.usageMetadata) ... // Token bilgisi stream'de gelmez
         
         const text = chunk.text ? chunk.text() : null;
         if (!text) continue;
@@ -197,7 +210,7 @@ export async function* parseStreamingResponse(stream: AsyncGenerator<GenerateCon
                     }
                     buffer = ''; 
                 } catch (e) {
-                    // JSON yarım kalmış olabilir, sonraki chunk'ı bekle
+                    // JSON yarım kalmış olabilir
                 }
             }
         } else {
@@ -338,8 +351,6 @@ export const geminiService = {
         }
     },
     
-    // Not: 'runExpertAnalysisStream' de 'generateContent' ve 'generateContentStream'
-    // kullandığı için otomatik olarak proxy'yi kullanacaktır.
     runExpertAnalysisStream: async function* (userMessage: Message, generatedDocs: GeneratedDocs, templates: { analysis: string; test: string; traceability: string; visualization: string; }, diagramType: 'mermaid' | 'bpmn'): AsyncGenerator<StreamChunk> {
         let totalTokens = 0;
         
@@ -607,7 +618,7 @@ export const geminiService = {
                 suggestions: {
                     type: Type.ARRAY,
                     items: recursiveBacklogItemSchema
-                }, // <-- DÜZELTME BURADAYDI
+                }, // <-- Düzeltilmiş virgül
                 reasoning: { type: Type.STRING }
             },
             required: ['suggestions', 'reasoning']
@@ -653,6 +664,8 @@ export const geminiService = {
     },
 
     lintDocument: async (content: string): Promise<{ issues: LintingIssue[], tokens: number }> => {
+        // Bu fonksiyon HTML-tabanlı içerikle çalışmak için güncellenmeli.
+        // Şimdilik, HTML'i de düz metin gibi gönderiyoruz.
         const prompt = promptService.getPrompt('lintDocument') + `\n\n**Doküman İçeriği:**\n${content}`;
         const schema = {
             type: Type.ARRAY,
@@ -672,15 +685,16 @@ export const geminiService = {
             return { issues: JSON.parse(jsonString) as LintingIssue[], tokens };
         } catch (e) {
             console.error("Failed to parse linter issues JSON:", e, "Received string:", jsonString);
-            return { issues: [], tokens }; // Return empty array on parse error
+            return { issues: [], tokens };
         }
     },
 
     fixDocumentLinterIssues: async (content: string, issue: LintingIssue): Promise<{ fixedContent: string, tokens: number }> => {
+        // Bu fonksiyon da HTML-tabanlı içerikle çalışmak için güncellenmeli.
         const instruction = `Lütfen "${issue.section}" bölümündeki şu hatayı düzelt: ${issue.details}`;
-        const prompt = promptService.getPrompt('fixLinterIssues').replace('{instruction}', instruction) + `\n\n**Doküman İçeriği:**\n${content}`;
+        const prompt = promptService.getPrompt('fixLinterIssues').replace('{instruction}', instruction) + `\n\n**Doküman İçeriği (HTML):**\n${content}`;
         const { text, tokens } = await generateContent(prompt, 'gemini-2.5-flash');
-        return { fixedContent: text, tokens };
+        return { fixedContent: text, tokens }; // AI'nın HTML döndürdüğünü varsayıyoruz
     },
     
     analyzeDocumentChange: async (oldContent: string, newContent: string, model: GeminiModel): Promise<{ impact: DocumentImpactAnalysis, tokens: number }> => {
@@ -696,20 +710,20 @@ export const geminiService = {
             },
             required: ['changeType', 'summary', 'isVisualizationImpacted', 'isTestScenariosImpacted', 'isTraceabilityImpacted', 'isBacklogImpacted']
         };
-        const prompt = `Bir iş analizi dokümanının iki versiyonu aşağıdadır. Değişikliğin etkisini analiz et.
+        const prompt = `Bir iş analizi dokümanının (HTML formatında) iki versiyonu aşağıdadır. Değişikliğin etkisini analiz et.
         
         **DEĞİŞİKLİK ETKİ ANALİZİ KURALLARI:**
-        - Eğer sadece metinsel düzeltmeler, yeniden ifade etmeler veya küçük eklemeler yapıldıysa, bu 'minor' bir değişikliktir.
+        - Eğer sadece metinsel düzeltmeler (örn: <p> içindeki yazı), yeniden ifade etmeler veya küçük eklemeler yapıldıysa, bu 'minor' bir değişikliktir.
         - Eğer yeni bir fonksiyonel gereksinim (FR) eklendiyse, mevcut bir FR'nin mantığı tamamen değiştiyse veya bir bölüm silindiyse, bu 'major' bir değişikliktir.
         - 'major' bir değişiklik genellikle görselleştirmeyi, test senaryolarını ve izlenebilirliği etkiler.
         - 'summary' alanına değişikliği tek bir cümleyle özetle.
         
-        **ESKİ VERSİYON:**
+        **ESKİ VERSİYON (HTML):**
         ---
         ${oldContent}
         ---
         
-        **YENİ VERSİYON:**
+        **YENİ VERSİYON (HTML):**
         ---
         ${newContent}
         ---
@@ -727,6 +741,10 @@ export const geminiService = {
     },
 
     generateDiagram: async (analysisDoc: string, type: 'mermaid' | 'bpmn', template: string, model: GeminiModel): Promise<{ code: string, tokens: number }> => {
+        // 'analysisDoc' artık HTML. Prompt'un bunu işlemesi gerekiyor.
+        // promptService'deki prompt'ların (generateVisualization, generateBPMN)
+        // {analysis_document_content}'in HTML olacağını bilmesi gerekir.
+        // Şimdilik, AI'nın HTML'i anlayabildiğini varsayıyoruz.
         const prompt = template.replace('{analysis_document_content}', analysisDoc);
         const { text, tokens } = await generateContent(prompt, model);
         const codeBlockRegex = type === 'mermaid' ? /```mermaid\n([\s\S]*?)\n```/ : /```xml\n([\s\S]*?)\n```/;
@@ -735,21 +753,27 @@ export const geminiService = {
     },
 
     generateAnalysisDocument: async function* (requestDoc: string, history: Message[], template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
+        // Bu fonksiyonun çıktısı Markdown'du.
+        // Kalıcı çözüm için bunun da HTML döndürmesi gerekir.
+        // Şimdilik, Tiptap'in gelen Markdown stream'ini işlemesini bekliyoruz.
+        // Bu, DocumentCanvas'ta donmalara neden OLABİLİR.
+        
         const historyString = history.map(m => `${m.role}: ${m.content}`).join('\n');
         
         const prompt = template
             .replace('{request_document_content}', requestDoc || "[Talep Dokümanı Yok]")
-            .replace('{conversation_history}', historyString);
+            .replace('{conversation_history}', historyString)
+            + "\n\nÖNEMLİ NOT: Çıktıyı Markdown formatında değil, **doğrudan HTML formatında** oluştur."; // <-- GEÇİCİ ÇÖZÜM
 
         const stream = generateContentStream(prompt, model);
 
         let totalTokens = 0;
         let fullText = '';
         for await (const chunk of stream) {
-            // if (chunk.usageMetadata) ... // Stream'den token gelmez
-            const text = chunk.text ? chunk.text() : null; // DEĞİŞİKLİK
+            const text = chunk.text ? chunk.text() : null;
             if (text) {
                 fullText += text;
+                // 'doc_stream_chunk' artık HTML stream'i taşıyor
                 yield { type: 'doc_stream_chunk', docKey: 'analysisDoc', chunk: fullText };
             }
         }
@@ -758,13 +782,15 @@ export const geminiService = {
     },
 
     generateTestScenarios: async function* (analysisDoc: string, template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
-        const prompt = template.replace('{analysis_document_content}', analysisDoc);
+        // Bu da HTML almalı ve HTML (tablo) döndürmeli.
+        const prompt = template.replace('{analysis_document_content}', analysisDoc)
+            + "\n\nÖNEMLİ NOT: Çıktıyı Markdown tablosu yerine **doğrudan HTML <table>...</table> formatında** oluştur."; // <-- GEÇİCİ ÇÖZÜM
+
         const stream = generateContentStream(prompt, model);
         let totalTokens = 0;
         let fullText = '';
         for await (const chunk of stream) {
-            // if (chunk.usageMetadata) ... // Stream'den token gelmez
-            const text = chunk.text ? chunk.text() : null; // DEĞİŞİKLİK
+            const text = chunk.text ? chunk.text() : null;
             if (text) {
                 fullText += text;
                 yield { type: 'doc_stream_chunk', docKey: 'testScenarios', chunk: fullText };
@@ -774,15 +800,17 @@ export const geminiService = {
     },
 
     generateTraceabilityMatrix: async function* (analysisDoc: string, testScenarios: string, template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
+        // Bu da HTML almalı ve HTML (tablo) döndürmeli.
         const prompt = template
-            .replace('{analysis_document_content}', analysisDoc)
-            .replace('{test_scenarios_content}', testScenarios);
+            .replace('{analysis_document_content}', analysisDoc) // Bu HTML
+            .replace('{test_scenarios_content}', testScenarios) // Bu da HTML
+            + "\n\nÖNEMLİ NOT: Çıktıyı Markdown tablosu yerine **doğrudan HTML <table>...</table> formatında** oluştur."; // <-- GEÇİCİ ÇÖZÜM
+
         const stream = generateContentStream(prompt, model);
         let totalTokens = 0;
         let fullText = '';
         for await (const chunk of stream) {
-            // if (chunk.usageMetadata) ... // Stream'den token gelmez
-            const text = chunk.text ? chunk.text() : null; // DEĞİŞİKLİK
+            const text = chunk.text ? chunk.text() : null;
             if (text) {
                 fullText += text;
                 yield { type: 'doc_stream_chunk', docKey: 'traceabilityMatrix', chunk: fullText };
@@ -793,7 +821,7 @@ export const geminiService = {
 
     suggestNextFeature: async (analysisDoc: string, history: Message[]): Promise<{ suggestions: string[], tokens: number }> => {
         const prompt = promptService.getPrompt('suggestNextFeature')
-            .replace('{analysis_document}', analysisDoc)
+            .replace('{analysis_document}', analysisDoc) // HTML
             .replace('{conversation_history}', JSON.stringify(history, null, 2));
         const schema = {
             type: Type.OBJECT,
@@ -831,9 +859,7 @@ export const geminiService = {
 
     editImage: async (base64ImageData: string, mimeType: string, prompt: string): Promise<{ base64Image: string, tokens: number }> => {
         // TODO: Bu fonksiyonun 'gemini-proxy' Edge Function'a yönlendirilmesi gerekir.
-        // Şu anki 'gemini-proxy' sadece metin/içerik oluşturmayı destekliyor.
-        // Bu özelliği desteklemek için Edge Function'ın güncellenmesi gerekir.
         console.error("editImage fonksiyonu, Edge Function proxy'si ile henüz entegre edilmedi.");
         throw new Error("Görsel düzenleme şu anda desteklenmiyor.");
     },
-}; // <-- !!!!!!!!!!!!!!! BU EKSİK PARANTEZİ EKLEDİM !!!!!!!!!!!!!!!
+}; // <-- !!!!!!!!!!!!!!! EKSİK OLAN KAPAMA PARANTEZİ !!!!!!!!!!!!!!!
