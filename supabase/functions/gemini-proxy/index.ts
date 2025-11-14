@@ -72,7 +72,16 @@ Deno.serve(async (req: Request) => {
     };
 
     if (config) {
-      const { model: _, ...restConfig } = config;
+      const { model: _, systemInstruction, tools, ...restConfig } = config;
+
+      if (systemInstruction) {
+        requestBody.systemInstruction = systemInstruction;
+      }
+
+      if (tools) {
+        requestBody.tools = tools;
+      }
+
       if (Object.keys(restConfig).length > 0) {
         requestBody.generationConfig = restConfig;
       }
