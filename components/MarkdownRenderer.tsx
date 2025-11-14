@@ -44,72 +44,56 @@ const parseMarkdown = (text: string, highlightedLines: number[], rephrasingText:
         
         return processed;
     };
-
-    const isTableSeparator = (line: string): boolean => {
-        const trimmed = line.trim();
-        // It must have dashes and pipes to be a separator
-        if (!trimmed.includes('-') || !trimmed.includes('|')) {
-            return false;
-        }
-        // All parts between pipes must be valid separator syntax
-        const columnSeparators = trimmed.split('|').map(p => p.trim()).filter(p => p.length > 0);
-        if (columnSeparators.length === 0) {
-            return false;
-        }
-        return columnSeparators.every(p => /^:?-+:?$/.test(p));
-    };
     
     for (let i = 0; i < lines.length; i++) {
         let line = lines[i];
         const isHighlighted = highlightedLines.includes(i);
+        
         const startTag = isHighlighted ? `<div class="highlight-new rounded-md -mx-2 px-2">` : '';
         const endTag = isHighlighted ? `</div>` : '';
 
-        // NEW: Lookahead-based table detection
-        if (!inTable && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
-            const headerLine = line;
+
+        const isTableLine = line.trim().startsWith('|') && line.trim().endsWith('|');
+        
+        let isHeaderSeparator = false;
+        if (i + 1 < lines.length) {
+            const nextLine = lines[i+1].trim();
+            // A valid separator line must have at least one pipe and one hyphen.
+            if (nextLine.includes('|') && nextLine.includes('-')) {
+                // Get the parts between the pipes. Filter out empty strings from leading/trailing pipes.
+                const parts = nextLine.split('|').map(p => p.trim()).filter(Boolean);
+                // Check if every part is a valid separator (e.g., '---', ':--', '--:')
+                if (parts.length > 0) {
+                    isHeaderSeparator = parts.every(p => /^:?-+:?$/.test(p));
+                }
+            }
+        }
+
+
+        if (isTableLine && isHeaderSeparator) {
             closeLists();
-
-            const getCells = (l: string) => {
-                const trimmed = l.trim();
-                let cellsStr = trimmed;
-                if (trimmed.startsWith('|')) cellsStr = cellsStr.substring(1);
-                if (trimmed.endsWith('|')) cellsStr = cellsStr.slice(0, -1);
-                return cellsStr.split('|');
-            };
-
-            const headers = getCells(headerLine);
-
-            const headerIsHighlighted = highlightedLines.includes(i);
-            html += `<div class="overflow-x-auto my-5"><table class="w-full text-sm border-collapse border border-slate-300 dark:border-slate-600">
+            if (inTable) html += '</tbody></table></div>'; 
+            
+            const headers = line.split('|').slice(1, -1).map(h => h.trim());
+            html += `<div class="overflow-x-auto my-5"><table class="w-full text-sm border-collapse border border-slate-300 dark:border-slate-600 table-fixed">
                         <thead class="bg-slate-100 dark:bg-slate-800">
-                            <tr${headerIsHighlighted ? ' class="highlight-new"' : ''}>${headers.map(h => `<th class="p-3 font-semibold text-left border border-slate-300 dark:border-slate-600">${processInline(h.trim())}</th>`).join('')}</tr>
+                            <tr${isHighlighted ? ' class="highlight-new"' : ''}>${headers.map(h => `<th class="p-3 font-semibold text-left border border-slate-300 dark:border-slate-600">${processInline(h)}</th>`).join('')}</tr>
                         </thead>
                         <tbody>`;
             inTable = true;
-            i++; // Skip separator line
+            i++; 
             continue;
         }
-        
+
         if (inTable) {
-            // A table row must contain at least one pipe to be considered part of the table.
-            if (line.includes('|')) {
-                const getCells = (l: string) => {
-                    const trimmed = l.trim();
-                    let cellsStr = trimmed;
-                    if (trimmed.startsWith('|')) cellsStr = cellsStr.substring(1);
-                    if (trimmed.endsWith('|')) cellsStr = cellsStr.slice(0, -1);
-                    return cellsStr.split('|');
-                };
-                const cells = getCells(line);
-                const rowIsHighlighted = highlightedLines.includes(i);
-                const rowClass = `border-t border-slate-200 dark:border-slate-700 even:bg-slate-50 dark:even:bg-slate-800/50 ${rowIsHighlighted ? 'highlight-new' : ''}`;
-                html += `<tr class="${rowClass.trim()}">${cells.map(c => `<td class="p-3 border border-slate-300 dark:border-slate-600 break-words">${processInline(c.trim())}</td>`).join('')}</tr>`;
+            if (isTableLine) {
+                const cells = line.split('|').slice(1, -1).map(c => c.trim());
+                const rowClass = `border-t border-slate-200 dark:border-slate-700 even:bg-slate-50 dark:even:bg-slate-800/50 ${isHighlighted ? 'highlight-new' : ''}`;
+                html += `<tr class="${rowClass.trim()}">${cells.map(c => `<td class="p-3 border border-slate-300 dark:border-slate-600 break-words">${processInline(c)}</td>`).join('')}</tr>`;
                 continue;
             } else {
                 html += '</tbody></table></div>';
                 inTable = false;
-                // Fallthrough to process this line as non-table content
             }
         }
         
