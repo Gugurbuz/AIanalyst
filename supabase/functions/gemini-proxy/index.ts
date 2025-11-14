@@ -296,7 +296,12 @@ Deno.serve(async (req: Request) => {
                   if (depth === 0 && currentObject.trim()) {
                     try {
                       const parsedChunk = JSON.parse(currentObject);
-                      console.log("[EDGE STREAM] Parsed chunk:", parsedChunk);
+                      console.log("[EDGE STREAM] Parsed chunk:", JSON.stringify(parsedChunk).substring(0, 500));
+
+                      if (parsedChunk.candidates?.[0]?.finishReason) {
+                        console.log("[EDGE STREAM] ⚠️ FINISH REASON:", parsedChunk.candidates[0].finishReason);
+                      }
+
                       const streamChunk: StreamChunk = {};
 
                       if (parsedChunk.candidates?.[0]?.content?.parts) {
