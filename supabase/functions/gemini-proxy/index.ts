@@ -276,12 +276,22 @@ Deno.serve(async (req: Request) => {
               buffer = lines.pop() || '';
 
               for (const line of lines) {
-                if (!line.trim()) {
+                const trimmedLine = line.trim();
+                if (!trimmedLine) {
+                  continue;
+                }
+
+                let jsonData = trimmedLine;
+                if (trimmedLine.startsWith('data: ')) {
+                  jsonData = trimmedLine.slice(6);
+                }
+
+                if (!jsonData || jsonData === '[DONE]') {
                   continue;
                 }
 
                 try {
-                  const chunk = JSON.parse(line);
+                  const chunk = JSON.parse(jsonData);
 
                   const streamChunk: StreamChunk = {};
 
