@@ -1,13 +1,10 @@
 // components/BPMNViewer.tsx
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, LoaderCircle } from 'lucide-react';
+// DEĞİŞİKLİK: Artık 'window' üzerinden değil, paketten import ediyoruz
+import BpmnJS from 'bpmn-js/lib/Modeler'; 
 
-// BpmnJS is loaded from a script tag in index.html, so we declare it globally for TypeScript
-declare global {
-    interface Window {
-        BpmnJS: any;
-    }
-}
+// 'declare global' bloğu SİLİNDİ.
 
 interface BPMNViewerProps {
     xml: string;
@@ -24,24 +21,17 @@ export const BPMNViewer: React.FC<BPMNViewerProps> = ({ xml, setSvgContentGetter
     useEffect(() => {
         if (!containerRef.current) return;
         
-        if (!window.BpmnJS) {
-            setError("BPMN Kütüphanesi yüklenemedi.");
-            setIsLoading(false);
-            return;
-        }
-
-        const modeler = new window.BpmnJS({
+        // DEĞİŞİKLİK: BpmnJS'i 'new window.BpmnJS' yerine doğrudan 'new BpmnJS' olarak kullanıyoruz
+        const modeler = new BpmnJS({
             container: containerRef.current,
             keyboard: { bindTo: window },
         });
         modelerRef.current = modeler;
         
         if (setSvgContentGetter) {
-            // FIX: Pass the async getter function directly, instead of a function that returns it.
             setSvgContentGetter(async () => {
                 if (!modelerRef.current) return null;
                 
-                // Strengthened safeguard: Check if the diagram has any elements before exporting.
                 try {
                     const elementRegistry = modelerRef.current.get('elementRegistry');
                     if (!elementRegistry || elementRegistry.getAll().length <= 1) { 
@@ -50,7 +40,7 @@ export const BPMNViewer: React.FC<BPMNViewerProps> = ({ xml, setSvgContentGetter
                     }
                 } catch (e) {
                     console.error("Could not get BPMN element registry:", e);
-                    return null; // Return null if safeguard fails
+                    return null;
                 }
 
                 try {
@@ -66,7 +56,7 @@ export const BPMNViewer: React.FC<BPMNViewerProps> = ({ xml, setSvgContentGetter
         return () => {
             modeler.destroy();
         };
-    }, [setSvgContentGetter]);
+    }, [setSvgContentGetter]); // BpmnJS bağımlılıktan kaldırıldı
 
     useEffect(() => {
         if (modelerRef.current) {
