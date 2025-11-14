@@ -166,61 +166,53 @@ const generateContentStream = async function* (
     try {
         console.log("Calling gemini-proxy STREAM with:", { contents, config });
 
-        const { data, error } = await supabase.functions.invoke('gemini-proxy', {
-            body: { contents, config, stream: true },
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+            throw new Error('Supabase credentials not found');
+        }
+
+        const response = await fetch(`${supabaseUrl}/functions/v1/gemini-proxy`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${supabaseKey}`,
+            },
+            body: JSON.stringify({ contents, config, stream: true }),
         });
 
         console.log("Response from gemini-proxy STREAM:", {
-            hasData: !!data,
-            dataType: data?.constructor?.name,
-            isReadableStream: data instanceof ReadableStream,
-            error
+            status: response.status,
+            statusText: response.statusText,
+            hasBody: !!response.body,
+            isReadableStream: response.body instanceof ReadableStream,
         });
 
-        if (error) {
-            console.error("Supabase function STREAM error object:", JSON.stringify(error, null, 2));
-
-            if (error.context && error.context instanceof Response) {
-                const errorText = await error.context.text();
-                console.error("Error response body:", errorText);
-                try {
-                    const errorJson = JSON.parse(errorText);
-                    throw new Error(`Edge Function Error: ${errorJson.error || errorJson.details || errorText}`);
-                } catch (parseError) {
-                    throw new Error(`Edge Function Error: ${errorText}`);
-                }
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Edge Function error:", errorText);
+            try {
+                const errorJson = JSON.parse(errorText);
+                throw new Error(`Edge Function Error: ${errorJson.error || errorJson.details || errorText}`);
+            } catch (parseError) {
+                throw new Error(`Edge Function Error: ${errorText}`);
             }
-            throw error;
         }
 
-        if (!data) {
-            console.error("No data received from Edge Function");
-            throw new Error("No data received from stream");
+        if (!response.body) {
+            console.error("No response body from Edge Function");
+            throw new Error("No response body from stream");
         }
+
+        const data = response.body;
 
         if (!(data instanceof ReadableStream)) {
-            console.error("Data is not a ReadableStream:", {
+            console.error("Response body is not a ReadableStream:", {
                 dataType: typeof data,
                 dataConstructor: data?.constructor?.name,
-                dataKeys: Object.keys(data || {}),
-                dataSample: JSON.stringify(data)?.substring(0, 200)
             });
-
-            if (typeof data === 'object' && 'text' in data) {
-                console.warn("Received non-streaming response, yielding as single chunk");
-                const textContent = data.text || '';
-                yield {
-                    text: textContent,
-                    candidates: [{
-                        content: {
-                            parts: [{ text: textContent }]
-                        }
-                    }]
-                } as unknown as GenerateContentResponse;
-                return;
-            }
-
-            throw new Error(`Expected ReadableStream but got ${typeof data} (${data?.constructor?.name || 'unknown'})`);
+            throw new Error(`Expected ReadableStream but got ${typeof data}`);
         }
 
         const reader = data.getReader();
