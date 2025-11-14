@@ -10,6 +10,16 @@ import type { Session } from '@supabase/supabase-js';
 import { PublicView } from './components/PublicView';
 import { LandingPage } from './components/LandingPage';
 import './index.css'; // YENİ EKLENEN ANA CSS IMPORTU
+// index.tsx
+import React, { useState, useEffect, useRef } from 'react';
+import ReactDOM from 'react-dom/client';
+import { App } from './App';
+import { AuthPage } from './components/AuthPage';
+// ...diğer importlar...
+import { LandingPage } from './components/LandingPage';
+import './index.css'; // <-- BU SATIRI EKLEYİN
+
+// ... (dosyanın geri kalanı aynı) ...
 
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900">
