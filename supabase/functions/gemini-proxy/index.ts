@@ -247,89 +247,70 @@ Deno.serve(async (req: Request) => {
         async start(controller) {
           let totalTokens = 0;
           let buffer = "";
+          let depth = 0;
+          let currentObject = "";
 
           try {
             while (true) {
               const { done, value } = await reader.read();
               if (done) break;
 
-              buffer += decoder.decode(value, { stream: true });
-              const lines = buffer.split("\n");
-              buffer = lines.pop() || "";
+              const chunk = decoder.decode(value, { stream: true });
+              buffer += chunk;
 
-              for (const line of lines) {
-                const trimmedLine = line.trim();
-                if (!trimmedLine || trimmedLine === "data: [DONE]") continue;
+              for (let i = 0; i < buffer.length; i++) {
+                const char = buffer[i];
 
-                let dataLine = trimmedLine;
-                if (dataLine.startsWith("data: ")) {
-                  dataLine = dataLine.slice(6);
-                }
+                if (char === '{') {
+                  depth++;
+                  currentObject += char;
+                } else if (char === '}') {
+                  currentObject += char;
+                  depth--;
 
-                if (!dataLine) continue;
+                  if (depth === 0 && currentObject.trim()) {
+                    try {
+                      const parsedChunk = JSON.parse(currentObject);
+                      const streamChunk: StreamChunk = {};
 
-                try {
-                  const chunk = JSON.parse(dataLine);
+                      if (parsedChunk.candidates?.[0]?.content?.parts) {
+                        const parts = parsedChunk.candidates[0].content.parts;
+                        const textParts = parts.filter((part: any) => part.text).map((part: any) => part.text);
+                        if (textParts.length > 0) {
+                          streamChunk.text = textParts.join('');
+                        }
 
-                  const streamChunk: StreamChunk = {};
+                        const functionCalls = parts.filter((part: any) => part.functionCall);
+                        if (functionCalls.length > 0) {
+                          streamChunk.functionCalls = functionCalls.map((part: any) => part.functionCall);
+                        }
+                      }
 
-                  const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text;
-                  if (text) {
-                    streamChunk.text = text;
+                      if (parsedChunk.usageMetadata) {
+                        streamChunk.usageMetadata = {
+                          promptTokenCount: parsedChunk.usageMetadata.promptTokenCount || 0,
+                          candidatesTokenCount: parsedChunk.usageMetadata.candidatesTokenCount || parsedChunk.usageMetadata.totalTokenCount || 0,
+                          totalTokenCount: parsedChunk.usageMetadata.totalTokenCount || 0,
+                        };
+                        totalTokens = streamChunk.usageMetadata.totalTokenCount;
+                      }
+
+                      if (Object.keys(streamChunk).length > 0) {
+                        controller.enqueue(encoder.encode(JSON.stringify(streamChunk) + "\n"));
+                      }
+
+                      currentObject = "";
+                    } catch (e) {
+                      console.error("Failed to parse JSON object:", e, "Object:", currentObject);
+                      currentObject = "";
+                    }
                   }
-
-                  const functionCalls = chunk.candidates?.[0]?.content?.parts?.filter((part: any) => part.functionCall);
-                  if (functionCalls && functionCalls.length > 0) {
-                    streamChunk.functionCalls = functionCalls.map((part: any) => part.functionCall);
-                  }
-
-                  if (chunk.usageMetadata) {
-                    streamChunk.usageMetadata = {
-                      promptTokenCount: chunk.usageMetadata.promptTokenCount || 0,
-                      candidatesTokenCount: chunk.usageMetadata.candidatesTokenCount || 0,
-                      totalTokenCount: chunk.usageMetadata.totalTokenCount || 0,
-                    };
-                    totalTokens = streamChunk.usageMetadata.totalTokenCount;
-                  }
-
-                  if (Object.keys(streamChunk).length > 0) {
-                    controller.enqueue(encoder.encode(JSON.stringify(streamChunk) + "\n"));
-                  }
-                } catch (e) {
-                  console.error("Failed to parse stream chunk:", e, "Line:", dataLine);
+                } else if (depth > 0) {
+                  currentObject += char;
                 }
               }
-            }
 
-            if (buffer.trim()) {
-              try {
-                const chunk = JSON.parse(buffer);
-                const streamChunk: StreamChunk = {};
-
-                const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (text) {
-                  streamChunk.text = text;
-                }
-
-                const functionCalls = chunk.candidates?.[0]?.content?.parts?.filter((part: any) => part.functionCall);
-                if (functionCalls && functionCalls.length > 0) {
-                  streamChunk.functionCalls = functionCalls.map((part: any) => part.functionCall);
-                }
-
-                if (chunk.usageMetadata) {
-                  streamChunk.usageMetadata = {
-                    promptTokenCount: chunk.usageMetadata.promptTokenCount || 0,
-                    candidatesTokenCount: chunk.usageMetadata.candidatesTokenCount || 0,
-                    totalTokenCount: chunk.usageMetadata.totalTokenCount || 0,
-                  };
-                }
-
-                if (Object.keys(streamChunk).length > 0) {
-                  controller.enqueue(encoder.encode(JSON.stringify(streamChunk) + "\n"));
-                }
-              } catch (e) {
-                console.error("Failed to parse final buffer:", e, "Buffer:", buffer);
-              }
+              buffer = currentObject;
             }
 
             controller.close();
