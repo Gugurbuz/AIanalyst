@@ -470,12 +470,20 @@ export const geminiService = {
 
             let buffer = '';
             let thoughtYielded = false;
-            
-            for await (const chunk of responseStream) {
-                 // if (chunk.usageMetadata) ... // Token bilgisi stream'de gelmez
 
-                // TODO: Edge Function 'functionCalls' döndürecek şekilde güncellenmeli
-                // if (chunk.functionCalls) ...
+            for await (const chunk of responseStream) {
+                if (chunk.usageMetadata) {
+                    yield { type: 'usage_update', tokens: chunk.usageMetadata.totalTokenCount };
+                }
+
+                if (chunk.candidates?.[0]?.content?.parts) {
+                    const parts = chunk.candidates[0].content.parts;
+                    for (const part of parts) {
+                        if (part.functionCall) {
+                            yield { type: 'function_call', functionCall: part.functionCall };
+                        }
+                    }
+                }
 
                 const text = (chunk as any).text;
                 if (typeof text !== 'string') continue;
@@ -497,14 +505,14 @@ export const geminiService = {
                                 if (remainingText) {
                                     yield { type: 'text_chunk', text: remainingText };
                                 }
-                                buffer = ''; 
+                                buffer = '';
                             } catch (e) {
                                 // Incomplete JSON
                             }
                         }
                     } else {
                         yield { type: 'text_chunk', text: buffer };
-                        buffer = ''; 
+                        buffer = '';
                     }
                 }
             }
@@ -936,61 +944,78 @@ export const geminiService = {
 
     generateAnalysisDocument: async function* (requestDoc: string, history: Message[], template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
         const historyString = history.map(m => `${m.role}: ${m.content}`).join('\n');
-        
+
         const prompt = template
             .replace('{request_document_content}', requestDoc || "[Talep Dokümanı Yok]")
             .replace('{conversation_history}', historyString)
-            + "\n\nÖNEMLİ NOT: Çıktıyı Markdown formatında değil, **doğrudan HTML formatında** oluştur."; // <-- GEÇİCİ ÇÖZÜM
+            + "\n\nÖNEMLİ NOT: Çıktıyı Markdown formatında değil, **doğrudan HTML formatında** oluştur.";
 
         const stream = generateContentStream(prompt, model);
 
         let totalTokens = 0;
         let fullText = '';
         for await (const chunk of stream) {
+            if (chunk.usageMetadata) {
+                totalTokens = chunk.usageMetadata.totalTokenCount;
+                yield { type: 'usage_update', tokens: totalTokens };
+            }
             const text = (chunk as any).text;
             if (text && typeof text === 'string') {
                 fullText += text;
                 yield { type: 'doc_stream_chunk', docKey: 'analysisDoc', chunk: fullText };
             }
         }
-        // Token'ları stream'den alamadığımız için 0 yolluyoruz
-        yield { type: 'usage_update', tokens: 0 };
+        if (totalTokens === 0) {
+            yield { type: 'usage_update', tokens: 0 };
+        }
     },
 
     generateTestScenarios: async function* (analysisDoc: string, template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
         const prompt = template.replace('{analysis_document_content}', analysisDoc)
-            + "\n\nÖNEMLİ NOT: Çıktıyı Markdown tablosu yerine **doğrudan HTML <table>...</table> formatında** oluştur."; 
-
-        const stream = generateContentStream(prompt, model);
-        let totalTokens = 0;
-        let fullText = '';
-        for await (const chunk of stream) {
-            const text = (chunk as any).text;
-            if (text && typeof text === 'string') {
-                fullText += text;
-                yield { type: 'doc_stream_chunk', docKey: 'testScenarios', chunk: fullText };
-            }
-        }
-        yield { type: 'usage_update', tokens: 0 };
-    },
-
-    generateTraceabilityMatrix: async function* (analysisDoc: string, testScenarios: string, template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
-        const prompt = template
-            .replace('{analysis_document_content}', analysisDoc) // Bu HTML
-            .replace('{test_scenarios_content}', testScenarios) // Bu da HTML
             + "\n\nÖNEMLİ NOT: Çıktıyı Markdown tablosu yerine **doğrudan HTML <table>...</table> formatında** oluştur.";
 
         const stream = generateContentStream(prompt, model);
         let totalTokens = 0;
         let fullText = '';
         for await (const chunk of stream) {
+            if (chunk.usageMetadata) {
+                totalTokens = chunk.usageMetadata.totalTokenCount;
+                yield { type: 'usage_update', tokens: totalTokens };
+            }
+            const text = (chunk as any).text;
+            if (text && typeof text === 'string') {
+                fullText += text;
+                yield { type: 'doc_stream_chunk', docKey: 'testScenarios', chunk: fullText };
+            }
+        }
+        if (totalTokens === 0) {
+            yield { type: 'usage_update', tokens: 0 };
+        }
+    },
+
+    generateTraceabilityMatrix: async function* (analysisDoc: string, testScenarios: string, template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
+        const prompt = template
+            .replace('{analysis_document_content}', analysisDoc)
+            .replace('{test_scenarios_content}', testScenarios)
+            + "\n\nÖNEMLİ NOT: Çıktıyı Markdown tablosu yerine **doğrudan HTML <table>...</table> formatında** oluştur.";
+
+        const stream = generateContentStream(prompt, model);
+        let totalTokens = 0;
+        let fullText = '';
+        for await (const chunk of stream) {
+            if (chunk.usageMetadata) {
+                totalTokens = chunk.usageMetadata.totalTokenCount;
+                yield { type: 'usage_update', tokens: totalTokens };
+            }
             const text = (chunk as any).text;
             if (text && typeof text === 'string') {
                 fullText += text;
                 yield { type: 'doc_stream_chunk', docKey: 'traceabilityMatrix', chunk: fullText };
             }
         }
-        yield { type: 'usage_update', tokens: 0 };
+        if (totalTokens === 0) {
+            yield { type: 'usage_update', tokens: 0 };
+        }
     },
 
     suggestNextFeature: async (analysisDoc: string, history: Message[]): Promise<{ suggestions: string[], tokens: number }> => {
