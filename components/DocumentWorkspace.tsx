@@ -71,14 +71,15 @@ interface DocumentWorkspaceProps {
 const StaleIndicator: React.FC<{ isStale?: boolean; onUpdate: () => void }> = ({ isStale, onUpdate }) => {
     if (!isStale) return null;
     return (
-        <button 
+        <div // <-- DEĞİŞİKLİK: <button> etiketini <div> olarak değiştirin
+            role="button" // Erişilebilirlik için
             onClick={(e) => { e.stopPropagation(); onUpdate(); }}
-            className="ml-2 flex items-center gap-1.5 pl-1.5 pr-2 py-0.5 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-200 rounded-full text-xs font-semibold hover:bg-amber-200 dark:hover:bg-amber-800"
+            className="ml-2 flex items-center gap-1.5 pl-1.5 pr-2 py-0.5 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-200 rounded-full text-xs font-semibold hover:bg-amber-200 dark:hover:bg-amber-800 cursor-pointer" // 'cursor-pointer' eklendi
             title="Bu bölüm, analiz dokümanındaki son değişiklikler nedeniyle güncel olmayabilir. Güncellemek için tıklayın."
         >
             <RefreshCw className="h-3 w-3" />
             Güncelle
-        </button>
+        </div> // <-- DEĞİŞİKLİK: </button> etiketini </div> olarak değiştirin
     );
 };
 
