@@ -130,6 +130,14 @@ Deno.serve(async (req: Request) => {
 
     const { contents, config, stream = false } = body;
 
+    console.log("[EDGE] Request body parsed:", {
+      hasContents: !!contents,
+      contentsLength: contents?.length,
+      hasConfig: !!config,
+      streamParam: stream,
+      streamType: typeof stream,
+    });
+
     const apiKey = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GEMINI_APIKEY");
     if (!apiKey) {
       console.error("GEMINI_API_KEY or GEMINI_APIKEY not found in environment");
@@ -162,7 +170,8 @@ Deno.serve(async (req: Request) => {
           };
         } else {
           requestBody.systemInstruction = systemInstruction;
-        }      }
+        }
+      }
 
       if (tools) {
         requestBody.tools = tools;
@@ -173,9 +182,11 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    console.log("Sending request to Gemini API:", {
+    console.log("[EDGE] Sending request to Gemini API:", {
       model,
       stream,
+      streamMode: stream ? 'streamGenerateContent' : 'generateContent',
+      apiUrl: apiUrl.substring(0, 100) + '...',
       hasTools: !!requestBody.tools,
       hasSystemInstruction: !!requestBody.systemInstruction,
     });
@@ -224,8 +235,12 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    console.log("[EDGE] Checking stream mode:", { stream, hasResponseBody: !!response.body });
+
     if (stream) {
+      console.log("[EDGE] ENTERING STREAM MODE");
       if (!response.body) {
+        console.error("[EDGE] No response body from Gemini API in stream mode!");
         return new Response(
           JSON.stringify({ error: "No response body from Gemini API" }),
           {
@@ -342,6 +357,11 @@ Deno.serve(async (req: Request) => {
         },
       });
 
+      console.log("[EDGE] Returning stream response with headers:", {
+        contentType: "application/x-ndjson",
+        transferEncoding: "chunked",
+      });
+
       return new Response(stream, {
         headers: {
           ...corsHeaders,
@@ -351,6 +371,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    console.log("[EDGE] NOT in stream mode, returning non-stream response");
     const data = await response.json();
 
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
