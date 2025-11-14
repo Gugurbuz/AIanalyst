@@ -208,8 +208,14 @@ const generateContentStream = async function* (
 
             if (typeof data === 'object' && 'text' in data) {
                 console.warn("Received non-streaming response, yielding as single chunk");
+                const textContent = data.text || '';
                 yield {
-                    text: data.text || '',
+                    text: () => textContent,
+                    candidates: [{
+                        content: {
+                            parts: [{ text: textContent }]
+                        }
+                    }]
                 } as unknown as GenerateContentResponse;
                 return;
             }
@@ -225,10 +231,15 @@ const generateContentStream = async function* (
             const { value, done: readerDone } = await reader.read();
             done = readerDone;
             if (value) {
-                const text = decoder.decode(value, { stream: true });
-                if (text) {
+                const textContent = decoder.decode(value, { stream: true });
+                if (textContent) {
                     yield {
-                        text: text,
+                        text: () => textContent,
+                        candidates: [{
+                            content: {
+                                parts: [{ text: textContent }]
+                            }
+                        }]
                     } as unknown as GenerateContentResponse;
                 }
             }
