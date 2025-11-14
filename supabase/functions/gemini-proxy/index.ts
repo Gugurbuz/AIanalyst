@@ -75,7 +75,13 @@ Deno.serve(async (req: Request) => {
       const { model: _, systemInstruction, tools, ...restConfig } = config;
 
       if (systemInstruction) {
-        requestBody.systemInstruction = systemInstruction;
+        if (typeof systemInstruction === 'string') {
+          requestBody.systemInstruction = {
+            parts: [{ text: systemInstruction }]
+          };
+        } else {
+          requestBody.systemInstruction = systemInstruction;
+        }
       }
 
       if (tools) {
