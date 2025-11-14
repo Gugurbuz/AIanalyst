@@ -210,7 +210,7 @@ const generateContentStream = async function* (
                 console.warn("Received non-streaming response, yielding as single chunk");
                 const textContent = data.text || '';
                 yield {
-                    text: () => textContent,
+                    text: textContent,
                     candidates: [{
                         content: {
                             parts: [{ text: textContent }]
@@ -234,7 +234,7 @@ const generateContentStream = async function* (
                 const textContent = decoder.decode(value, { stream: true });
                 if (textContent) {
                     yield {
-                        text: () => textContent,
+                        text: textContent,
                         candidates: [{
                             content: {
                                 parts: [{ text: textContent }]
@@ -319,8 +319,8 @@ export async function* parseStreamingResponse(stream: AsyncGenerator<GenerateCon
     for await (const chunk of stream) {
         // if (chunk.usageMetadata) ... // Token bilgisi stream'de gelmez
 
-        const text = typeof chunk.text === 'function' ? chunk.text() : chunk.text;
-        if (!text) continue;
+        const text = (chunk as any).text;
+        if (!text || typeof text !== 'string') continue;
 
         buffer += text;
         
@@ -420,7 +420,8 @@ export const geminiService = {
                 // TODO: Edge Function 'functionCalls' döndürecek şekilde güncellenmeli
                 // if (chunk.functionCalls) ...
 
-                const text = typeof chunk.text === 'function' ? chunk.text() : chunk.text;
+                const text = (chunk as any).text;
+                if (typeof text !== 'string') continue;
                 if (text) {
                     buffer += text;
                     if (!thoughtYielded) {
@@ -889,8 +890,8 @@ export const geminiService = {
         let totalTokens = 0;
         let fullText = '';
         for await (const chunk of stream) {
-            const text = typeof chunk.text === 'function' ? chunk.text() : chunk.text;
-            if (text) {
+            const text = (chunk as any).text;
+            if (text && typeof text === 'string') {
                 fullText += text;
                 yield { type: 'doc_stream_chunk', docKey: 'analysisDoc', chunk: fullText };
             }
@@ -907,8 +908,8 @@ export const geminiService = {
         let totalTokens = 0;
         let fullText = '';
         for await (const chunk of stream) {
-            const text = typeof chunk.text === 'function' ? chunk.text() : chunk.text;
-            if (text) {
+            const text = (chunk as any).text;
+            if (text && typeof text === 'string') {
                 fullText += text;
                 yield { type: 'doc_stream_chunk', docKey: 'testScenarios', chunk: fullText };
             }
@@ -926,8 +927,8 @@ export const geminiService = {
         let totalTokens = 0;
         let fullText = '';
         for await (const chunk of stream) {
-            const text = typeof chunk.text === 'function' ? chunk.text() : chunk.text;
-            if (text) {
+            const text = (chunk as any).text;
+            if (text && typeof text === 'string') {
                 fullText += text;
                 yield { type: 'doc_stream_chunk', docKey: 'traceabilityMatrix', chunk: fullText };
             }
