@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Flow Viewer - Asisty</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Basit stiller -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        width: 100%;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        padding: 8px 12px;
+        font-size: 12px;
+        border-bottom: 1px solid #e2e8f0;
+        background: #f8fafc;
+        color: #334155;
+      }
+      #canvas {
+        flex: 1;
+        position: relative;
+      }
+      .center {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 16px;
+        box-sizing: border-box;
+      }
+      .msg {
+        max-width: 480px;
+        font-size: 14px;
+        color: #1e293b;
+      }
+      .msg code {
+        font-size: 12px;
+        background: #e2e8f0;
+        padding: 2px 4px;
+        border-radius: 4px;
+      }
+      .error {
+        color: #b91c1c;
+      }
+    </style>
+
+    <!-- BPMN ve Mermaid scriptleri CDN üzerinden -->
+    <script src="https://unpkg.com/bpmn-js@11.5.0/dist/bpmn-viewer.development.js"></script>
+    <script src="https://unpkg.com/mermaid@10.9.1/dist/mermaid.min.js"></script>
+    <script>
+      mermaid.initialize({ startOnLoad: false });
+    </script>
+  </head>
+  <body>
+    <header>
+      FlowViewer • Asisty &mdash; URL parametreleriyle iletilen BPMN / Mermaid
+      diyagramını gösterir
+    </header>
+    <div id="canvas"></div>
+
+    <script>
+      function getParams() {
+        const sp = new URLSearchParams(window.location.search);
+        return {
+          type: (sp.get("type") || "").toLowerCase(),
+          data: sp.get("data") || ""
+        };
+      }
+
+      function decodeBase64ToString(b64Param) {
+        // URL decode
+        const decoded = decodeURIComponent(b64Param);
+        // base64 -> binary
+        const binary = atob(decoded);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        // UTF-8 decode
+        const decoder = new TextDecoder();
+        return decoder.decode(bytes);
+      }
+
+      function showMessage(html, isError) {
+        const canvas = document.getElementById("canvas");
+        canvas.innerHTML = `
+          <div class="center">
+            <div class="msg ${isError ? "error" : ""}">${html}</div>
+          </div>
+        `;
+      }
+
+      async function renderBPMN(xml) {
+        if (!window.BpmnJS) {
+          showMessage("BPMN kütüphanesi yüklenemedi.", true);
+          return;
+        }
+        const canvas = document.getElementById("canvas");
+        canvas.innerHTML = "";
+        const viewer = new window.BpmnJS({
+          container: "#canvas"
+        });
+
+        try {
+          await viewer.importXML(xml);
+          const c = viewer.get("canvas");
+          c.zoom("fit-viewport", "auto");
+        } catch (err) {
+          console.error("BPMN import error:", err);
+          showMessage(
+            "BPMN XML ayrıştırılırken hata oluştu:<br><code>" +
+              (err && err.message ? err.message : "Bilinmeyen hata") +
+              "</code>",
+            true
+          );
+        }
+      }
+
+      function renderMermaid(code) {
+        const canvas = document.getElementById("canvas");
+        canvas.innerHTML = `<div id="mermaid-root"></div>`;
+        const el = document.getElementById("mermaid-root");
+
+        // Mermeid'in requiresUniqueIds uyarılarını kapatmak için random id
+        const id = "mermaid-" + Math.random().toString(36).substring(2, 10);
+
+        mermaid.render(id, code, (svgCode) => {
+          el.innerHTML = svgCode;
+        });
+      }
+
+      (function main() {
+        const { type, data } = getParams();
+
+        if (!type || !data) {
+          showMessage(
+            `Geçersiz veya eksik parametre.<br><br>
+             Beklenen format:<br>
+             <code>/flowviewer.html?type=bpmn&amp;data=&lt;base64&gt;</code> veya<br>
+             <code>/flowviewer.html?type=mermaid&amp;data=&lt;base64&gt;</code>`,
+            true
+          );
+          return;
+        }
+
+        let decoded;
+        try {
+          decoded = decodeBase64ToString(data);
+        } catch (e) {
+          console.error("Decode hatası:", e);
+          showMessage(
+            "data parametresi çözümlenemedi. Base64 + URL encode edilmiş olmalı.",
+            true
+          );
+          return;
+        }
+
+        if (type === "bpmn") {
+          renderBPMN(decoded);
+        } else if (type === "mermaid") {
+          renderMermaid(decoded);
+        } else {
+          showMessage(
+            'Desteklenmeyen type.<br> Sadece <code>bpmn</code> veya <code>mermaid</code> olabilir.',
+            true
+          );
+        }
+      })();
+    </script>
+  </body>
+</html>
