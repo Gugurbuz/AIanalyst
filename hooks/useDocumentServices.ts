@@ -71,7 +71,8 @@ export const useDocumentServices = ({
         const streamGenerators = {
             analysis: () => geminiService.generateAnalysisDocument(activeConv.generatedDocs.requestDoc, activeConv.messages, templates.analysis, activeModel()),
             test: () => geminiService.generateTestScenarios(activeConv.generatedDocs.analysisDoc, templates.test, activeModel()),
-            traceability: () => geminiService.generateTraceabilityMatrix(activeConv.generatedDocs.analysisDoc, (activeConv.generatedDocs.testScenarios as SourcedDocument)?.content || activeConv.generatedDocs.testScenarios as string, templates.traceability, activeModel()),
+            // FIX: Correctly access the .content property of the SourcedDocument type for testScenarios.
+            traceability: () => geminiService.generateTraceabilityMatrix(activeConv.generatedDocs.analysisDoc, activeConv.generatedDocs.testScenarios.content, templates.traceability, activeModel()),
         };
 
         try {
@@ -81,17 +82,21 @@ export const useDocumentServices = ({
                 const sourceHash = simpleHash(activeConv.generatedDocs.analysisDoc);
                 const vizData = { code, sourceHash };
                 const docKey = diagramTypeToUse === 'bpmn' ? 'bpmnViz' : 'mermaidViz';
-                await conversationState.saveDocumentVersion(docKey, vizData, `Diyagram oluşturuldu (${diagramTypeToUse})`);
+                await conversationState.saveDocumentVersion(docKey, vizData, `Diyagram oluşturuldu (${diagramTypeToUse})`, undefined, undefined, tokens);
             } else if (type === 'analysis' || type === 'test' || type === 'traceability') {
                 const stream = streamGenerators[type]();
+                let isFirstChunk = true;
+                let finalTokenCount = 0;
                 for await (const chunk of stream) {
                      if (chunk.type === 'doc_stream_chunk') {
-                        conversationState.streamDocument(chunk.docKey, chunk.chunk);
+                        conversationState.streamDocument(chunk.docKey, chunk.chunk, isFirstChunk);
+                        isFirstChunk = false;
                     } else if (chunk.type === 'usage_update') {
-                        conversationState.commitTokenUsage(chunk.tokens);
+                        finalTokenCount = chunk.tokens;
                     }
                 }
-                await conversationState.finalizeStreamedDocuments(newTemplateId);
+                conversationState.commitTokenUsage(finalTokenCount);
+                await conversationState.finalizeStreamedDocuments(newTemplateId, finalTokenCount);
             }
         } catch(e: any) {
             uiState.setError(e.message);
@@ -156,7 +161,7 @@ export const useDocumentServices = ({
         const docKey = documentTypeToKeyMap[version.document_type] as keyof GeneratedDocs;
         if (!docKey) return;
         
-        await conversationState.saveDocumentVersion(docKey, version.content, `v${version.version_number} versiyonuna geri dönüldü`, version.template_id);
+        await conversationState.saveDocumentVersion(docKey, version.content, `v${version.version_number} versiyonuna geri dönüldü`, version.template_id, undefined, 0);
     };
 
     return {

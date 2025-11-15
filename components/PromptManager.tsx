@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { promptService } from '../services/promptService';
 import type { PromptData, Prompt, PromptVersion } from '../types';
-// REMOVED: MermaidPromptEditor is no longer relevant for generateVisualization prompt.
+import { TemplateGeneratorModal } from './TemplateGeneratorModal';
+import { FileUp } from 'lucide-react';
 
 interface PromptManagerProps {
     isOpen: boolean;
@@ -15,7 +16,8 @@ export const PromptManager: React.FC<PromptManagerProps> = ({ isOpen, onClose })
     const [selectedVersion, setSelectedVersion] = useState<PromptVersion | null>(null);
     const [promptText, setPromptText] = useState('');
     const [isDirty, setIsDirty] = useState(false);
-    const [mobileViewPanel, setMobileViewPanel] = useState<'categories' | 'prompts' | 'editor'>('categories'); // New state for mobile navigation
+    const [mobileViewPanel, setMobileViewPanel] = useState<'categories' | 'prompts' | 'editor'>('categories');
+    const [isGeneratorOpen, setIsGeneratorOpen] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
@@ -223,6 +225,36 @@ export const PromptManager: React.FC<PromptManagerProps> = ({ isOpen, onClose })
         }
     };
 
+    const handleSaveNewTemplate = (newPrompt: Omit<Prompt, 'id' | 'versions' | 'activeVersionId'> & { prompt: string }) => {
+        const newFullPrompt: Prompt = {
+            id: `custom_${newPrompt.name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`,
+            name: newPrompt.name,
+            description: newPrompt.description,
+            document_type: newPrompt.document_type,
+            is_system_template: false,
+            versions: [{
+                versionId: 'default',
+                name: 'Versiyon 1',
+                createdAt: new Date().toISOString(),
+                prompt: newPrompt.prompt
+            }],
+            activeVersionId: 'default'
+        };
+
+        const updatedData = [...promptData];
+        let customCategory = updatedData.find(c => c.id === 'custom');
+        if (!customCategory) {
+            customCategory = { id: 'custom', name: 'Özel Şablonlar', prompts: [] };
+            updatedData.push(customCategory);
+        }
+        customCategory.prompts.push(newFullPrompt);
+        
+        setPromptData(updatedData);
+        promptService.savePrompts(updatedData);
+        setIsGeneratorOpen(false);
+        alert("Yeni şablon başarıyla kaydedildi!");
+    };
+
     if (!isOpen) return null;
 
     const currentCategory = promptData.find(c => c.id === selectedCategory);
@@ -249,7 +281,10 @@ export const PromptManager: React.FC<PromptManagerProps> = ({ isOpen, onClose })
                                 </button>
                             ))}
                         </div>
-                        <div className="pt-2 mt-auto border-t border-slate-200 dark:border-slate-700">
+                        <div className="pt-2 mt-auto border-t border-slate-200 dark:border-slate-700 space-y-2">
+                             <button onClick={() => setIsGeneratorOpen(true)} className="w-full text-center px-3 py-2 rounded-md text-sm font-medium transition-colors bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-200 hover:bg-indigo-200 dark:hover:bg-indigo-900 flex items-center justify-center gap-2">
+                                <FileUp className="h-4 w-4" /> Dosyadan Şablon Oluştur
+                            </button>
                              <button onClick={handleResetAll} className="w-full text-center px-3 py-2 rounded-md text-sm font-medium transition-colors bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-900">
                                 Tümünü Sıfırla
                             </button>
@@ -351,6 +386,13 @@ export const PromptManager: React.FC<PromptManagerProps> = ({ isOpen, onClose })
                         )}
                     </main>
                 </div>
+                {isGeneratorOpen && (
+                    <TemplateGeneratorModal 
+                        isOpen={isGeneratorOpen}
+                        onClose={() => setIsGeneratorOpen(false)}
+                        onSave={handleSaveNewTemplate}
+                    />
+                )}
             </div>
         </div>
     );

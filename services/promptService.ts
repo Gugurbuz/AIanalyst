@@ -74,25 +74,21 @@ Kullanıcının son mesajını analiz et ve niyetini belirle:
 **YANIT FORMATI (SADECE NİYET 'SOHBET' İSE UYGULANIR):**
 Her yanıtın iki ayrı bölümü OLMALIDIR:
 
-1.  **Thinking Process (JSON Code Block):**
-    * Cevabını oluştururken attığın adımları, yaptığın analizleri ve kararlarını, aşağıdaki JSON şemasına uygun olarak bir markdown code block içinde **tek satırlık bir JSON string** olarak hazırla.
-    * Format: \`\`\`thinking
+1.  **<dusunce> Bloğu (JSON olarak):**
+    * Cevabını oluştururken attığın adımları, yaptığın analizleri ve kararlarını, aşağıdaki JSON şemasına uygun olarak <dusunce>...</dusunce> etiketleri içinde **tek satırlık bir JSON string** olarak hazırla.
     * JSON Şeması: \`{ "title": "Düşünce Başlığı", "steps": [{ "id": "step1", "name": "1. Adım", "status": "in_progress" }, ...] }\`
     * Bu senin iç monoloğundur ve şeffaflık için zorunludur.
 
 2.  **Kullanıcıya Yanıt:**
-    * Thinking code block'u kapattıktan SONRA, kullanıcıya yönelik nihai cevabını yaz.
+    * </dusunce> etiketini kapattıktan SONRA, kullanıcıya yönelik nihai cevabını yaz.
 
 **DOĞRU SOHBET YANITI ÖRNEĞİ:**
-\`\`\`thinking
-{"title": "Kullanıcıyı Analiz Etme", "steps": [{"id": "s1", "name": "Kullanıcının talebini analiz ettim. Eksik bilgiler var.", "status": "in_progress"}, {"id": "s2", "name": "Netleştirici sorular hazırladım.", "status": "pending"}]}
-\`\`\`
-Merhaba, talebinizi daha iyi anlamak için birkaç sorum olacak: ...
+<dusunce>{"title": "Kullanıcıyı Analiz Etme", "steps": [{"id": "s1", "name": "Kullanıcının talebini analiz ettim. Eksik bilgiler var.", "status": "in_progress"}, {"id": "s2", "name": "Netleştirici sorular hazırladım.", "status": "pending"}]}</dusunce>Merhaba, talebinizi daha iyi anlamak için birkaç sorum olacak: ...
 
 **KRİTİK KURALLAR (TÜM NİYETLER İÇİN):**
-- **KURAL 1 (SOHBET):** Eğer niyet 'SOHBET' ise, yanıtında ÖNCE \`\`\`thinking code block içinde JSON, SONRA kullanıcıya yönelik metin olmalıdır.
-- **KURAL 2 (SOHBET):** KULLANICIYA YÖNELİK CEVABINI ASLA thinking code block içine yazma.
-- **KURAL 3 (GÖREV):** Eğer niyet 'GÖREV' ise, ASLA metin yanıtı veya thinking bloğu üretme. Sadece araç çağrısı yap.
+- **KURAL 1 (SOHBET):** Eğer niyet 'SOHBET' ise, yanıtında ÖNCE JSON içeren <dusunce> bloğu, SONRA kullanıcıya yönelik metin olmalıdır.
+- **KURAL 2 (SOHBET):** KULLANICIYA YÖNELİK CEVABINI ASLA <dusunce> etiketleri içine yazma.
+- **KURAL 3 (GÖREV):** Eğer niyet 'GÖREV' ise, ASLA metin yanıtı veya <dusunce> bloğu üretme. Sadece araç çağrısı yap.
 - Araçları ('functions') proaktif olarak kullan.
 - Kullanıcıya ASLA doğrudan JSON veya tam bir Markdown dokümanı GÖSTERME. Bunun yerine ARAÇLARI KULLAN.
 - Araçları kullandıktan sonra, kullanıcıya 'Dokümanı güncelledim' gibi kısa bir onay mesajı ver (bu, araç çağrısından *sonraki* adımda senin görevin).
@@ -305,11 +301,19 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
 
 **ÇOK ÖNEMLİ KURALLAR:**
 1.  Çıktın **SADECE VE SADECE** \`\`\`mermaid ... \`\`\` kod bloğu içinde olmalıdır. Başka HİÇBİR metin, başlık, açıklama veya not ekleme.
-2.  Diyagram tipi **MUTLAKA** \`graph TD\` (Yukarıdan Aşağıya Akış Şeması) olmalıdır. Diğer diyagram tiplerini (sequenceDiagram, classDiagram vb.) KESİNLİKLE KULLANMA.
-3.  Bağlantılar için **SADECE** \`-->\` operatörünü kullan. Örnek: \`A --> B\`.
-4.  Kutu metinlerinde satır atlamak için **SADECE** \`<br>\` etiketini kullan. Çift tırnak (") veya özel karakterler kullanmaktan kaçın.
-5.  Kutuları basit tut. Örnek: \`A[Kutu 1]\`, \`B(Kutu 2)\`, \`C{Karar Kutusu}\`. Karmaşık şekiller veya stiller KULLANMA.
-6.  Kodun ayrıştırılabilir (parsable) ve sözdizimsel olarak (syntactically) doğru olduğundan emin ol.
+2.  Diyagram tipi **MUTLAKA** \`graph TD\` (Yukarıdan Aşağıya Akış Şeması) olmalıdır.
+3.  **METİNLERİ TIRNAK İÇİNE AL:** Diyagramdaki **TÜM** metinleri (kutu içi, bağlantı üzeri vb.) **MUTLAKA** çift tırnak (" ") içine al. Bu kural, parantez \`()\`, köşeli parantez \`[]\` veya tire \`-\` gibi özel karakterlerin hataya yol açmasını engeller.
+    - **DOĞRU:** \`A["Metin (Detay)"]\`
+    - **YANLIŞ:** \`A[Metin (Detay)]\`
+    - **DOĞRU:** \`C -- "Evet" --> D\`
+    - **YANLIŞ:** \`C -- Evet --> D\`
+4.  **SATIR ATLAMA:** Kutu metinlerinde satır atlamak için **SADECE** \`<br>\` etiketini kullan.
+5.  **BAĞLANTILAR:** Akışları göstermek için **SADECE** \`-->\` operatörünü kullan.
+6.  **KUTU ŞEKİLLERİ:** Kutuları basit tut. Metinleri kural #3'e göre tırnak içine almayı unutma.
+    - Dikdörtgen: \`A["Metin"]\`
+    - Yuvarlak Köşeli Dikdörtgen: \`B("Metin")\`
+    - Karar (eşkenar dörtgen): \`C{"Metin"}\`
+7.  Kodun ayrıştırılabilir (parsable) ve sözdizimsel olarak (syntactically) doğru olduğundan emin ol. Hatalı kod üretme.
 
 **İş Analizi Dokümanı:**
 ---
@@ -338,6 +342,7 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
 2.  Oluşturduğun XML, aşağıdaki yapıya tam olarak uymalıdır. ID'leri (örn: \`Task_1\`, \`Flow_1\`) benzersiz (unique) olarak kendin oluşturmalısın.
 3.  Tüm görsel elemanlar için \`<bpmndi:BPMNShape>\` ve akışlar için \`<bpmndi:BPMNEdge>\` etiketlerini eklediğinden emin ol.
 4.  Koordinatları (\`x\`, \`y\`, \`width\`, \`height\`) ve yol noktalarını (\`waypoint\`) mantıklı bir şekilde yerleştirerek diyagramın okunabilir olmasını sağla.
+5.  **BAĞLANTI BÜTÜNLÜĞÜ:** Her \`<bpmn:sequenceFlow>\` elemanı, mutlaka bir \`sourceRef\` (kaynak eleman ID'si) ve bir \`targetRef\` (hedef eleman ID'si) özelliğine sahip olmalıdır. Akışların havada kalmadığından veya eksik bağlantı içermediğinden emin ol.
 
 **ÖRNEK VE UYULMASI GEREKEN XML YAPISI:**
 \`\`\`xml
@@ -509,10 +514,11 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
             prompt: `Bir uzman iş analizi denetçisi olarak, sana verilen konuşma geçmişini ve mevcut proje dokümanlarını incele. Görevin, bu bilgilerin yeni bir özellik geliştirmeye başlamak için yeterli olup olmadığını değerlendirmektir. Değerlendirmeni aşağıdaki JSON şemasına göre yap.
 
 **Değerlendirme Kriterleri:**
-- **Kapsam (scope):** Projenin sınırları, dahil olan ve olmayanlar net mi? (0-100 puan)
-- **Teknik Detay (technical):** Gerekli entegrasyonlar, veri modelleri gibi teknik konular yeterince tartışıldı mı? (0-100 puan)
-- **Kullanıcı Akışı (userFlow):** Kullanıcının sistemle nasıl etkileşime gireceği, ana akışlar ve istisnai durumlar belli mi? (0-100 puan)
-- **Fonksiyonel Olmayan Gereksinimler (nonFunctional):** Performans, güvenlik, ölçeklenebilirlik gibi konular ele alındı mı? (0-100 puan)
+- **Kapsamlılık (comprehensiveness):** Projenin sınırları, kapsamı ve kapsam dışı maddeler net bir şekilde tanımlanmış mı? (0-100 puan)
+- **Netlik (clarity):** Gereksinimler belirsizlikten uzak, basit ve anlaşılır mı? (0-100 puan)
+- **Tutarlılık (consistency):** Gereksinimler birbiriyle çelişiyor mu? Terminoloji tutarlı bir şekilde kullanılmış mı? (0-100 puan)
+- **Test Edilebilirlik (testability):** Her bir gereksinimi doğrulamak için test senaryoları yazmak mümkün mü? (0-100 puan)
+- **Bütünlük (completeness):** Fonksiyonel, fonksiyonel olmayan, iş kuralları, kısıtlar gibi tüm gereksinim türleri ele alınmış mı? (0-100 puan)
 - **Genel Puan (overallScore):** Yukarıdaki puanların ağırlıklı ortalaması.
 - **Yeterlilik (isSufficient):** Genel puan 75'in üzerindeyse 'true', değilse 'false' olmalı.
 - **Özet (summary):** Analizin mevcut durumu hakkında 1-2 cümlelik genel bir özet.
@@ -621,7 +627,39 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
                 }
             ],
             activeVersionId: 'default'
-        }
+        },
+        {
+          id: 'generateTemplateFromText',
+          name: 'Metinden Şablon Oluştur',
+          description: 'Bir dosyanın metin içeriğini analiz ederek yeniden kullanılabilir bir Markdown şablonu oluşturur.',
+          is_system_template: true,
+          versions: [
+            {
+              versionId: 'default',
+              name: 'Varsayılan',
+              createdAt: new Date().toISOString(),
+              prompt: `Sen uzman bir doküman yapı analistisin. Görevin, sana verilen bir metin içeriğini analiz ederek, bu içeriğin yapısını temsil eden genel ve yeniden kullanılabilir bir **Markdown şablonu** oluşturmaktır.
+
+**KURALLAR:**
+1.  **Yapıyı Tanımla:** Metindeki başlıkları, alt başlıkları, listeleri (sıralı/sırasız), tabloları ve paragrafları belirle.
+2.  **Genelleştir:** Metindeki spesifik örnekleri veya verileri, \`[Açıklama]\`, \`[Veri buraya gelecek]\`, \`[Örnek]\` gibi genel yer tutucularla (placeholders) değiştir. Amaç, gelecekte farklı verilerle doldurulabilecek boş bir şablon oluşturmaktır.
+3.  **Formatı Koru:** Orijinal dokümanın başlık hiyerarşisini (örn: \`## Başlık\`, \`### Alt Başlık\`) ve yapısını (örn: tablo yapısı) koru.
+4.  **Temiz Çıktı:** Çıktın **SADECE VE SADECE** oluşturduğun Markdown şablonunu içermelidir. Başka HİÇBİR açıklama, giriş/sonuç cümlesi veya kod bloğu (\`\`\`) ekleme.
+
+**ÖRNEK:**
+**Girdi Metni:**
+"Proje Adı: Müşteri Portalı. Bu proje, müşterilerin kendi bilgilerini güncellemesini sağlar. FR-001: Müşteri şifresini değiştirebilmelidir."
+
+**Beklenen Çıktı:**
+## Proje Adı: [Proje Adını Buraya Girin]
+[Projenin genel amacını ve tanımını buraya yazın.]
+
+### Gereksinimler
+- **[Gereksinim ID]:** [Gereksinim açıklamasını buraya yazın.]`
+            }
+          ],
+          activeVersionId: 'default'
+      }
     ]
   },
   {
@@ -659,18 +697,11 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
                 versionId: 'default',
                 name: 'Varsayılan',
                 createdAt: new Date().toISOString(),
-                prompt: `Bir kalite güvence uzmanı olarak, aşağıdaki dokümanı analiz et. Özellikle gereksinim ID'leri gibi sıralı listelerde (örn: REQ-001, REQ-002, REQ-004) atlama veya tutarsızlık olup olmadığını kontrol et. Bulduğun hataları JSON formatında bir dizi olarak döndür. Eğer hata yoksa, boş bir dizi \`[]\` döndür.
-
-**Hata Formatı:**
-\`\`\`json
-[
-  {
-    "type": "BROKEN_SEQUENCE",
-    "section": "[Hatanın bulunduğu bölümün başlığı]",
-    "details": "[Hatanın detayı, örn: 'REQ-002'den sonra 'REQ-004' geliyor, 'REQ-003' atlanmış.']"
-  }
-]
-\`\`\``
+                prompt: `Bir kalite güvence uzmanı olarak, aşağıdaki dokümanı analiz et. Özellikle gereksinim ID'leri gibi sıralı listelerde (örn: FR-001, FR-002, FR-004) atlama veya tutarsızlık olup olmadığını kontrol et.
+Bulduğun hataları bir JSON dizisi olarak döndür.
+Her bir hata nesnesi "type" ('BROKEN_SEQUENCE' olmalı), "section" ve "details" alanlarını içermelidir.
+Eğer hata yoksa, boş bir dizi \`[]\` döndür.
+Çıktı olarak sadece ve sadece JSON dizisini ver, başka hiçbir metin, açıklama veya not ekleme.`
               }
             ],
             activeVersionId: 'default'

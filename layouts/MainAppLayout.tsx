@@ -1,5 +1,5 @@
 // layouts/MainAppLayout.tsx
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, useRef } from 'react';
 import { useAppContext } from '../contexts/AppContext';
 import { ChatInterface } from '../components/ChatInterface';
 import { ChatMessageHistory } from '../components/ChatMessageHistory';
@@ -16,10 +16,18 @@ import { ResetConfirmationModal } from '../components/ResetConfirmationModal';
 import { ProjectBoard } from '../components/ProjectBoard';
 import { AlertTriangle, FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, X, PanelRightClose, PanelRightOpen, PanelLeft } from 'lucide-react';
 import { MainSidebar } from './MainSidebar';
+import { ConfirmationModal } from '../components/ConfirmationModal';
 
 const AnalystWorkspace = () => {
     const context = useAppContext();
     const { activeConversation, isWorkspaceVisible } = context;
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (scrollContainerRef.current) {
+            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
+    }, [activeConversation?.messages]);
 
     const nextBestAction = useNextBestAction(activeConversation, {
         onGenerateDoc: context.handleGenerateDoc,
@@ -27,6 +35,37 @@ const AnalystWorkspace = () => {
         onSendMessage: context.sendMessage,
         onEvaluateDocument: context.handleEvaluateDocument
     });
+
+    const handleLongTextPaste = (content: string) => {
+        context.setLongTextPrompt({
+            content: content,
+            callback: (choice: 'analyze' | 'save') => {
+                const saveAsAnalysisDoc = async (isNew: boolean) => {
+                    let convId = context.activeConversationId;
+                    // FIX: Correctly create a new conversation, get its ID, and then update the title.
+                    // This avoids a logic bug where the title was parsed as content and fixes the type error.
+                    if (isNew || !convId) {
+                        const result = await context.handleNewConversation();
+                        convId = result?.newConvId ?? null;
+                        if (convId) {
+                            context.updateConversationTitle(convId, 'Yeni Yapıştırılan Doküman');
+                        }
+                    }
+                    if (convId) {
+                        context.saveDocumentVersion('analysisDoc', content, 'Doküman olarak kaydedildi (yapıştırıldı)');
+                        context.setActiveDocTab('analysis');
+                    }
+                };
+
+                if (choice === 'analyze') {
+                    context.handleNewConversation(content);
+                } else if (choice === 'save') {
+                    saveAsAnalysisDoc(!context.activeConversationId);
+                }
+                context.setLongTextPrompt(null);
+            }
+        });
+    };
 
     if (!activeConversation) {
         return (
@@ -52,7 +91,7 @@ const AnalystWorkspace = () => {
                 >
                     {context.isWorkspaceVisible ? <PanelRightClose className="h-5 w-5" /> : <PanelRightOpen className="h-5 w-5" />}
                 </button>
-                <main className="flex-1 overflow-y-auto p-4">
+                <main ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4">
                      <div className="max-w-4xl mx-auto w-full">
                          {activeConversation && activeConversation.messages.filter(m => m.role !== 'system').length > 0 ? (
                             <ChatMessageHistory
@@ -85,6 +124,7 @@ const AnalystWorkspace = () => {
                             onDeepAnalysisModeChange={context.handleDeepAnalysisModeChange}
                             isExpertMode={context.isExpertMode}
                             setIsExpertMode={context.setIsExpertMode}
+                            onLongTextPaste={handleLongTextPaste}
                         />
                     </div>
                 </footer>
@@ -178,7 +218,7 @@ export const MainAppLayout: React.FC = () => {
                 </div>
             )}
             
-            <div className={`flex-shrink-0 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
+            <div className={`h-full flex-shrink-0 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
                 <MainSidebar
                     user={context.user}
                     profile={context.userProfile}
@@ -219,6 +259,20 @@ export const MainAppLayout: React.FC = () => {
             )}
             {context.resetConfirmation && (
                  <ResetConfirmationModal isOpen={!!context.resetConfirmation} onClose={() => context.setResetConfirmation(null)} onConfirm={context.handleConfirmReset} documentName={context.resetConfirmation.changedDocName} impactedDocs={context.resetConfirmation.impactedDocNames} />
+            )}
+            {context.confirmation && (
+                <ConfirmationModal
+                    isOpen={!!context.confirmation}
+                    title={context.confirmation.title}
+                    message={context.confirmation.message}
+                    onConfirm={() => {
+                        if (context.confirmation) {
+                            context.confirmation.onConfirm();
+                        }
+                        context.setConfirmation(null);
+                    }}
+                    onClose={() => context.setConfirmation(null)}
+                />
             )}
         </div>
     );

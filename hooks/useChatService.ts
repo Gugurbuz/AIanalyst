@@ -9,9 +9,10 @@ import type { useUIState } from './useUIState';
 import type { Message, GeminiModel, ThoughtProcess, StreamChunk, Document, GeneratedDocs, SourcedDocument } from '../types';
 
 const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
+    // FIX: Initialize SourcedDocument properties correctly.
     const defaultGeneratedDocs: GeneratedDocs = {
-        requestDoc: '', analysisDoc: '', testScenarios: '', visualization: '',
-        traceabilityMatrix: '', isVizStale: false, isTestStale: false,
+        requestDoc: '', analysisDoc: '', testScenarios: { content: '', sourceHash: '' }, visualization: '',
+        traceabilityMatrix: { content: '', sourceHash: '' }, isVizStale: false, isTestStale: false,
         isTraceabilityStale: false, isBacklogStale: false,
     };
     const documentTypeToKeyMap = {
@@ -33,7 +34,7 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
                     (docs as any)[key] = JSON.parse(doc.content);
                 } catch (e) {
                     if (['testScenarios', 'traceabilityMatrix'].includes(key)) {
-                        (docs as any)[key] = doc.content;
+                        (docs as any)[key] = { content: doc.content, sourceHash: 'legacy' };
                     }
                 }
             } else {
@@ -242,6 +243,7 @@ export const useChatService = ({
             let accumulatedContent = '';
             let accumulatedThought: ThoughtProcess | null = null;
             let functionCallHandled = false;
+            const docStreamFirstChunkTracker: Partial<Record<keyof GeneratedDocs, boolean>> = {};
             
             for await (const chunk of stream) {
                 if (generationController.current?.signal.aborted) break;
@@ -272,7 +274,11 @@ export const useChatService = ({
                         break;
 
                     case 'doc_stream_chunk':
-                        conversationState.streamDocument(chunk.docKey, chunk.chunk);
+                        const isFirstChunk = !docStreamFirstChunkTracker[chunk.docKey];
+                        if (isFirstChunk) {
+                            docStreamFirstChunkTracker[chunk.docKey] = true;
+                        }
+                        conversationState.streamDocument(chunk.docKey, chunk.chunk, isFirstChunk);
                         break;
                     case 'usage_update':
                         conversationState.commitTokenUsage(chunk.tokens);

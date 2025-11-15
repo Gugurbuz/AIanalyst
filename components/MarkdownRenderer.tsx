@@ -1,3 +1,4 @@
+// components/MarkdownRenderer.tsx
 import React, { useMemo } from 'react';
 
 interface MarkdownRendererProps {
@@ -54,21 +55,7 @@ const parseMarkdown = (text: string, highlightedLines: number[], rephrasingText:
 
 
         const isTableLine = line.trim().startsWith('|') && line.trim().endsWith('|');
-        
-        let isHeaderSeparator = false;
-        if (i + 1 < lines.length) {
-            const nextLine = lines[i+1].trim();
-            // A valid separator line must have at least one pipe and one hyphen.
-            if (nextLine.includes('|') && nextLine.includes('-')) {
-                // Get the parts between the pipes. Filter out empty strings from leading/trailing pipes.
-                const parts = nextLine.split('|').map(p => p.trim()).filter(Boolean);
-                // Check if every part is a valid separator (e.g., '---', ':--', '--:')
-                if (parts.length > 0) {
-                    isHeaderSeparator = parts.every(p => /^:?-+:?$/.test(p));
-                }
-            }
-        }
-
+        const isHeaderSeparator = i + 1 < lines.length && lines[i+1].trim().match(/^\|(?:\s*:?-+:?\s*\|)+$/);
 
         if (isTableLine && isHeaderSeparator) {
             closeLists();
@@ -166,9 +153,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, hig
     return (
         <div
             className="prose prose-slate dark:prose-invert max-w-none 
-                       prose-headings:font-bold prose-headings:tracking-tight 
-                       prose-h2:text-3xl prose-h2:font-extrabold prose-h2:pb-3 prose-h2:mt-10 prose-h2:mb-5 prose-h2:border-b prose-h2:border-slate-200 dark:prose-h2:border-slate-700 
-                       prose-h3:text-xl prose-h3:font-bold prose-h3:mt-8 prose-h3:mb-3
+                       prose-headings:tracking-tight 
+                       prose-h2:text-2xl prose-h2:font-bold prose-h2:pb-3 prose-h2:mt-10 prose-h2:mb-5 prose-h2:border-b prose-h2:border-slate-200 dark:prose-h2:border-slate-700 
+                       prose-h3:text-lg prose-h3:font-semibold prose-h3:mt-8 prose-h3:mb-3
                        prose-p:leading-relaxed prose-p:mb-5
                        prose-ul:my-5 prose-ol:my-5 prose-li:my-2
                        prose-strong:font-semibold prose-strong:text-slate-800 dark:prose-strong:text-slate-200 

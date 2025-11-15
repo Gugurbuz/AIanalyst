@@ -1,5 +1,5 @@
 // components/DocumentWorkspace.tsx
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { Conversation, Template, MaturityReport, GeneratedDocs, Document, DocumentType, SourcedDocument, DocumentVersion, IsBirimiTalep } from '../types';
 import { DocumentCanvas } from './DocumentCanvas';
 import { Visualizations } from './Visualizations';
@@ -68,18 +68,16 @@ interface DocumentWorkspaceProps {
     onRestoreVersion: (version: DocumentVersion) => void;
 }
 
-const StaleIndicator: React.FC<{ isStale?: boolean; onUpdate: () => void }> = ({ isStale, onUpdate }) => {
+const StaleIndicator: React.FC<{ isStale?: boolean }> = ({ isStale }) => {
     if (!isStale) return null;
     return (
-        <div // <-- <button> 'div' olarak değiştirildi
-            role="button" // Erişilebilirlik için eklendi
-            onClick={(e) => { e.stopPropagation(); onUpdate(); }}
-            className="ml-2 flex items-center gap-1.5 pl-1.5 pr-2 py-0.5 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-200 rounded-full text-xs font-semibold hover:bg-amber-200 dark:hover:bg-amber-800 cursor-pointer" // 'cursor-pointer' eklendi
-            title="Bu bölüm, analiz dokümanındaki son değişiklikler nedeniyle güncel olmayabilir. Güncellemek için tıklayın."
+        <span 
+            className="ml-2 flex items-center gap-1.5 px-2 py-0.5 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-200 rounded-full text-xs font-semibold stale-pulse"
+            title="Bu bölüm, analiz dokümanındaki son değişiklikler nedeniyle güncel olmayabilir. Görüntülemek için tıkladığınızda otomatik olarak güncellenecektir."
         >
             <RefreshCw className="h-3 w-3" />
-            Güncelle
-        </div> // <-- </div> olarak değiştirildi
+            Güncel Değil
+        </span>
     );
 };
 
@@ -113,14 +111,14 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     const { generatedDocs, id: conversationId } = conversation;
     const prevAnalysisDoc = usePrevious(generatedDocs.analysisDoc);
     
-    const updateDocumentStaleness = async (docType: DocumentType, isStale: boolean) => {
+    const updateDocumentStaleness = useCallback(async (docType: DocumentType, isStale: boolean) => {
         const { error } = await supabase
             .from('documents')
             .update({ is_stale: isStale })
             .eq('conversation_id', conversationId)
             .eq('document_type', docType);
         if (error) console.error(`Failed to update staleness for ${docType}:`, error);
-    };
+    }, [conversationId]);
 
     useEffect(() => {
         if (generatedDocs.requestDoc) {
@@ -164,7 +162,37 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             };
             analyze();
         }
-    }, [generatedDocs.analysisDoc, prevAnalysisDoc, conversationId, isProcessing, onAddTokens]);
+    }, [generatedDocs.analysisDoc, prevAnalysisDoc, conversationId, isProcessing, onAddTokens, updateDocumentStaleness]);
+
+    const handleRegenerate = useCallback((docType: 'viz' | 'test' | 'traceability' | 'backlog-generation') => {
+        if (docType === 'viz') {
+            const dbDocType = diagramType; // 'mermaid' or 'bpmn'
+            updateDocumentStaleness(dbDocType, false);
+        } else {
+            const typeMap: Record<string, DocumentType> = { test: 'test', traceability: 'traceability' };
+            const dbDocType = typeMap[docType];
+            if (dbDocType) updateDocumentStaleness(dbDocType, false);
+        }
+        onGenerateDoc(docType as any);
+    }, [diagramType, onGenerateDoc, updateDocumentStaleness]);
+
+    useEffect(() => {
+        if (isProcessing) return; 
+
+        let staleAction: (() => void) | null = null;
+        if (activeDocTab === 'viz' && generatedDocs.isVizStale) {
+            staleAction = () => handleRegenerate('viz');
+        } else if (activeDocTab === 'test' && generatedDocs.isTestStale) {
+            staleAction = () => handleRegenerate('test');
+        } else if (activeDocTab === 'traceability' && generatedDocs.isTraceabilityStale) {
+            staleAction = () => handleRegenerate('traceability');
+        }
+
+        if (staleAction) {
+            staleAction();
+        }
+    }, [activeDocTab, generatedDocs.isVizStale, generatedDocs.isTestStale, generatedDocs.isTraceabilityStale, isProcessing, handleRegenerate]);
+
 
     const vizContent = diagramType === 'bpmn'
         ? generatedDocs.bpmnViz?.code ?? (generatedDocs.visualizationType === 'bpmn' ? generatedDocs.visualization : '')
@@ -180,27 +208,14 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
 
     const isAnalysisDocReady = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
 
-    const handleRegenerate = (docType: 'viz' | 'test' | 'traceability' | 'backlog-generation') => {
-        if (docType === 'viz') {
-            // Use the currently active diagram type for staleness update
-            const dbDocType = diagramType; // This will be 'mermaid' or 'bpmn'
-            updateDocumentStaleness(dbDocType, false);
-        } else {
-            const typeMap: Record<string, DocumentType> = { test: 'test', traceability: 'traceability' };
-            const dbDocType = typeMap[docType];
-            if (dbDocType) updateDocumentStaleness(dbDocType, false);
-        }
-        onGenerateDoc(docType as any);
-    }
-
     const allTabs = [
-        { id: 'request', name: 'Talep', icon: FileInput, content: generatedDocs.requestDoc, isStale: false, onUpdate: () => {} },
-        { id: 'analysis', name: 'İş Analizi', icon: FileText, content: generatedDocs.analysisDoc, isStale: false, onUpdate: () => {} },
-        { id: 'viz', name: 'Görselleştirme', icon: GanttChartSquare, content: vizContent, isStale: generatedDocs.isVizStale, onUpdate: () => handleRegenerate('viz') },
-        { id: 'test', name: 'Test Senaryoları', icon: Beaker, content: testScenariosContent, isStale: generatedDocs.isTestStale, onUpdate: () => handleRegenerate('test') },
-        { id: 'traceability', name: 'İzlenebilirlik', icon: GitBranch, content: traceabilityMatrixContent, isStale: generatedDocs.isTraceabilityStale, onUpdate: () => handleRegenerate('traceability') },
-        { id: 'backlog-generation', name: 'Backlog', icon: CheckSquare, content: true, isStale: generatedDocs.isBacklogStale, onUpdate: () => {} }, // Always available
-        { id: 'maturity', name: 'Olgunluk', icon: Check, content: true, isStale: false, onUpdate: () => {} }, // Always available
+        { id: 'request', name: 'Talep', icon: FileInput, content: generatedDocs.requestDoc, isStale: false },
+        { id: 'analysis', name: 'İş Analizi', icon: FileText, content: generatedDocs.analysisDoc, isStale: false },
+        { id: 'viz', name: 'Görselleştirme', icon: GanttChartSquare, content: vizContent, isStale: generatedDocs.isVizStale },
+        { id: 'test', name: 'Test Senaryoları', icon: Beaker, content: testScenariosContent, isStale: generatedDocs.isTestStale },
+        { id: 'traceability', name: 'İzlenebilirlik', icon: GitBranch, content: traceabilityMatrixContent, isStale: generatedDocs.isTraceabilityStale },
+        { id: 'backlog-generation', name: 'Backlog', icon: CheckSquare, content: true, isStale: generatedDocs.isBacklogStale },
+        { id: 'maturity', name: 'Olgunluk', icon: Check, content: true, isStale: false },
     ];
 
     const handleGenerateOrModifyViz = async (prompt?: string) => {
@@ -235,25 +250,28 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
         onUpdateDocument('maturityReport', newReport as any, 'Kullanıcı soruyu reddetti');
     };
     
+    const handleExplainSelection = (text: string) => {
+        onPrepareQuestionForAnswer(`Bu metni açıkla: "${text}"`);
+    };
+
     return (
         <div className="flex flex-col h-full w-full min-h-0">
             <div className="px-4 flex-shrink-0 border-b border-slate-200 dark:border-slate-700">
                 <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Tabs">
                     {allTabs.map(tab => (
-                        <div key={tab.id} className="relative flex items-center">
-                            <button
-                                onClick={() => setActiveDocTab(tab.id as any)}
-                                className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors flex items-center ${
-                                    activeDocTab === tab.id
-                                        ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
-                                        : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 dark:hover:text-slate-200 dark:hover:border-slate-500'
-                                }`}
-                            >
-                                <tab.icon className="h-5 w-5 mr-2" />
-                                {tab.name}
-                            </button>
-                            <StaleIndicator isStale={tab.isStale} onUpdate={tab.onUpdate} />
-                        </div>
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveDocTab(tab.id as any)}
+                            className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors flex items-center ${
+                                activeDocTab === tab.id
+                                    ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 dark:hover:text-slate-200 dark:hover:border-slate-500'
+                            }`}
+                        >
+                            <tab.icon className="h-5 w-5 mr-2" />
+                            {tab.name}
+                            <StaleIndicator isStale={tab.isStale} />
+                        </button>
                     ))}
                 </nav>
             </div>
@@ -274,13 +292,14 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             documentVersions={conversation.documentVersions}
                             onAddTokens={onAddTokens}
                             onRestoreVersion={onRestoreVersion}
+                            onExplainSelection={handleExplainSelection}
                         />
                     ) : (
                         <DocumentEmptyState icon={<FileInput />} title="Talep Dokümanı" description="Yeni bir sohbete başladığınızda veya uzun bir metin yapıştırdığınızda burası otomatik olarak dolacaktır." buttonText="" onAction={()=>{}} isDisabled={true} />
                     )
                 )}
                 {activeDocTab === 'analysis' && (generatedDocs.analysisDoc ?
-                    <DocumentCanvas key="analysis" content={generatedDocs.analysisDoc} onContentChange={(newContent, reason) => onUpdateDocument('analysisDoc', newContent, reason)} docKey="analysisDoc" onModifySelection={onModifySelection} inlineModificationState={inlineModificationState} isGenerating={isProcessing} isStreaming={generatingDocType === 'analysis'} templates={templates.analysis} selectedTemplate={selectedTemplates.analysis} onTemplateChange={onTemplateChange.analysis} filename={`${conversation.title}-analiz`} documentVersions={conversation.documentVersions} onAddTokens={onAddTokens} onRestoreVersion={onRestoreVersion} />
+                    <DocumentCanvas key="analysis" content={generatedDocs.analysisDoc} onContentChange={(newContent, reason) => onUpdateDocument('analysisDoc', newContent, reason)} docKey="analysisDoc" onModifySelection={onModifySelection} inlineModificationState={inlineModificationState} isGenerating={isProcessing} isStreaming={generatingDocType === 'analysis'} templates={templates.analysis} selectedTemplate={selectedTemplates.analysis} onTemplateChange={onTemplateChange.analysis} filename={`${conversation.title}-analiz`} documentVersions={conversation.documentVersions} onAddTokens={onAddTokens} onRestoreVersion={onRestoreVersion} onExplainSelection={handleExplainSelection} />
                     : <DocumentEmptyState icon={<FileText />} title="İş Analizi Dokümanı" description="Analistle sohbet ederek gereksinimleri olgunlaştırın. Yeterli bilgi toplandığında, AI doküman oluşturmayı önerecektir." buttonText="Analiz Dokümanı Oluştur" onAction={() => onGenerateDoc('analysis')} isDisabled={isProcessing || !generatedDocs.requestDoc} disabledTooltip="Önce bir talep dokümanı gereklidir." isLoading={generatingDocType === 'analysis'}/>
                 )}
                  {activeDocTab === 'viz' && (generatedDocs.analysisDoc ?
@@ -299,11 +318,11 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                     : <DocumentEmptyState icon={<GanttChartSquare />} title="Süreç Görselleştirmesi" description="Görselleştirme oluşturmak için önce bir iş analizi dokümanı gereklidir." buttonText="Analiz Dokümanı Oluştur" onAction={() => setActiveDocTab('analysis')} />
                 )}
                 {activeDocTab === 'test' && (testScenariosContent ?
-                    <DocumentCanvas key="test" content={testScenariosContent} onContentChange={(newContent, reason) => onUpdateDocument('testScenarios', newContent, reason)} docKey="testScenarios" onModifySelection={onModifySelection} inlineModificationState={inlineModificationState} isGenerating={isProcessing} isStreaming={generatingDocType === 'test'} templates={templates.test} selectedTemplate={selectedTemplates.test} onTemplateChange={onTemplateChange.test} filename={`${conversation.title}-test-senaryolari`} isTable documentVersions={conversation.documentVersions} onAddTokens={onAddTokens} onRestoreVersion={onRestoreVersion} />
+                    <DocumentCanvas key="test" content={testScenariosContent} onContentChange={(newContent, reason) => onUpdateDocument('testScenarios', newContent, reason)} docKey="testScenarios" onModifySelection={onModifySelection} inlineModificationState={inlineModificationState} isGenerating={isProcessing} isStreaming={generatingDocType === 'test'} templates={templates.test} selectedTemplate={selectedTemplates.test} onTemplateChange={onTemplateChange.test} filename={`${conversation.title}-test-senaryolari`} isTable documentVersions={conversation.documentVersions} onAddTokens={onAddTokens} onRestoreVersion={onRestoreVersion} onExplainSelection={handleExplainSelection} />
                     : <DocumentEmptyState icon={<Beaker />} title="Test Senaryoları" description="Analiz dokümanınıza dayanarak test senaryoları oluşturun." buttonText="Test Senaryoları Oluştur" onAction={() => onGenerateDoc('test')} isDisabled={isProcessing || !isAnalysisDocReady} disabledTooltip="Önce geçerli bir analiz dokümanı oluşturmalısınız." isLoading={generatingDocType === 'test'}/>
                 )}
                  {activeDocTab === 'traceability' && (traceabilityMatrixContent ?
-                    <DocumentCanvas key="traceability" content={traceabilityMatrixContent} onContentChange={(newContent, reason) => onUpdateDocument('traceabilityMatrix', newContent, reason)} docKey="traceabilityMatrix" onModifySelection={async () => {}} inlineModificationState={inlineModificationState} isGenerating={isProcessing} isStreaming={generatingDocType === 'traceability'} isTable filename={`${conversation.title}-izlenebilirlik`} documentVersions={conversation.documentVersions} onAddTokens={onAddTokens} templates={templates.traceability} selectedTemplate={selectedTemplates.traceability} onTemplateChange={onTemplateChange.traceability} onRestoreVersion={onRestoreVersion} />
+                    <DocumentCanvas key="traceability" content={traceabilityMatrixContent} onContentChange={(newContent, reason) => onUpdateDocument('traceabilityMatrix', newContent, reason)} docKey="traceabilityMatrix" onModifySelection={async () => {}} inlineModificationState={inlineModificationState} isGenerating={isProcessing} isStreaming={generatingDocType === 'traceability'} isTable filename={`${conversation.title}-izlenebilirlik`} documentVersions={conversation.documentVersions} onAddTokens={onAddTokens} templates={templates.traceability} selectedTemplate={selectedTemplates.traceability} onTemplateChange={onTemplateChange.traceability} onRestoreVersion={onRestoreVersion} onExplainSelection={handleExplainSelection} />
                     : <DocumentEmptyState icon={<GitBranch />} title="İzlenebilirlik Matrisi" description="Gereksinimler ile test senaryoları arasındaki ilişkiyi kurun." buttonText="Matris Oluştur" onAction={() => onGenerateDoc('traceability')} isDisabled={isProcessing || !isAnalysisDocReady || !testScenariosContent} disabledTooltip="Önce analiz ve test dokümanları oluşturmalısınız." isLoading={generatingDocType === 'traceability'}/>
                 )}
                 {activeDocTab === 'backlog-generation' && <BacklogGenerationView conversation={conversation} onUpdateConversation={onUpdateConversation} />}

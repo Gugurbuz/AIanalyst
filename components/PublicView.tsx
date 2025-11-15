@@ -12,12 +12,13 @@ interface PublicViewProps {
 }
 
 // FIX: Add `requestDoc` to `defaultGeneratedDocs` to match the `GeneratedDocs` type definition.
+// FIX: Initialize SourcedDocument properties as objects.
 const defaultGeneratedDocs: GeneratedDocs = {
     requestDoc: '',
     analysisDoc: '',
-    testScenarios: '',
+    testScenarios: { content: '', sourceHash: '' },
     visualization: '',
-    traceabilityMatrix: '',
+    traceabilityMatrix: { content: '', sourceHash: '' },
 };
 
 // FIX: Add `request` key to map to `requestDoc` to satisfy the `Record<DocumentType, keyof GeneratedDocs>` type.
@@ -46,7 +47,7 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
                      if (key.endsWith('Viz')) {
                         (docs as any)[key] = { code: '', sourceHash: '' };
                      } else if (key === 'testScenarios' || key === 'traceabilityMatrix') {
-                        (docs as any)[key] = doc.content; // Fallback for old string format
+                        (docs as any)[key] = { content: doc.content, sourceHash: 'legacy' }; // Fallback for old string format
                      } else {
                         (docs as any)[key] = null;
                      }
@@ -172,6 +173,8 @@ export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
                             content={generatedDocs.analysisDoc} onContentChange={noOpWithArgs} docKey="analysisDoc" onModifySelection={noOpWithArgs}
                             inlineModificationState={null} isGenerating={false} isStreaming={false} documentVersions={conversation.documentVersions}
                             onAddTokens={noOpWithArgs} onRestoreVersion={noOpWithArgs} filename={`${title}-analiz`}
+// FIX: Add missing required prop 'onExplainSelection'.
+                            onExplainSelection={noOpWithArgs}
                         />
                     )}
                      {activeTab === 'viz' && (
@@ -185,6 +188,8 @@ export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
                             content={testScenariosContent} onContentChange={noOpWithArgs} docKey="testScenarios" onModifySelection={noOpWithArgs}
                             inlineModificationState={null} isGenerating={false} isStreaming={false} documentVersions={conversation.documentVersions}
                             onAddTokens={noOpWithArgs} onRestoreVersion={noOpWithArgs} filename={`${title}-test-senaryolari`} isTable
+// FIX: Add missing required prop 'onExplainSelection'.
+                            onExplainSelection={noOpWithArgs}
                         />
                      )}
                     {activeTab === 'traceability' && (
@@ -192,6 +197,8 @@ export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
                             content={traceabilityMatrixContent} onContentChange={noOpWithArgs} docKey="traceabilityMatrix" onModifySelection={noOpWithArgs}
                             inlineModificationState={null} isGenerating={false} isStreaming={false} documentVersions={conversation.documentVersions}
                             onAddTokens={noOpWithArgs} onRestoreVersion={noOpWithArgs} filename={`${title}-izlenebilirlik`} isTable
+// FIX: Add missing required prop 'onExplainSelection'.
+                            onExplainSelection={noOpWithArgs}
                         />
                     )}
                 </div>

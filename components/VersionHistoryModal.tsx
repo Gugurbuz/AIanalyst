@@ -1,6 +1,7 @@
 import React from 'react';
 import type { DocumentVersion } from '../types';
 import { History, X } from 'lucide-react';
+import { TokenCostIndicator } from './TokenCostIndicator';
 
 interface VersionHistoryModalProps {
     isOpen: boolean;
@@ -54,6 +55,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                                         <th scope="col" className="px-6 py-3 w-24">Versiyon</th>
                                         <th scope="col" className="px-6 py-3 w-48">Tarih</th>
                                         <th scope="col" className="px-6 py-3">Değişiklik Sebebi</th>
+                                        <th scope="col" className="px-6 py-3 w-48">Token / Maliyet</th>
                                         <th scope="col" className="px-6 py-3 w-32">Eylemler</th>
                                     </tr>
                                 </thead>
@@ -71,6 +73,13 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
                                             </td>
                                             <td className="px-6 py-4">
                                                 {version.reason_for_change}
+                                            </td>
+                                             <td className="px-6 py-4">
+                                                {version.tokens_used && version.tokens_used > 0 ? (
+                                                    <TokenCostIndicator tokens={version.tokens_used} />
+                                                ) : (
+                                                    <span className="text-xs text-slate-400 dark:text-slate-500">-</span>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4">
                                                 <button

@@ -12,9 +12,9 @@ import type { User, Conversation, Message, GeneratedDocs, FeedbackItem, Template
 const defaultGeneratedDocs: GeneratedDocs = {
     requestDoc: '',
     analysisDoc: '',
-    testScenarios: '',
+    testScenarios: { content: '', sourceHash: '' },
     visualization: '',
-    traceabilityMatrix: '',
+    traceabilityMatrix: { content: '', sourceHash: '' },
     isVizStale: false,
     isTestStale: false,
     isTraceabilityStale: false,
@@ -55,30 +55,37 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
 
     for (const doc of documents) {
         const key = documentTypeToKeyMap[doc.document_type];
-        if (key) {
-             if (key === 'mermaidViz' || key === 'bpmnViz' || key === 'maturityReport' || key === 'testScenarios' || key === 'traceabilityMatrix') {
-                try {
-                    (docs as any)[key] = JSON.parse(doc.content);
-                } catch (e) {
-                     const fallbackToStringKeys: (keyof GeneratedDocs)[] = ['testScenarios', 'traceabilityMatrix'];
-                    if (fallbackToStringKeys.includes(key as any)) {
-                        (docs as any)[key] = doc.content;
-                    } else {
-                         console.error(`Error parsing JSON for ${key}:`, e);
-                        if (key.endsWith('Viz')) {
-                            (docs as any)[key] = { code: '', sourceHash: '' };
-                        } else if (key === 'maturityReport') {
-                            (docs as any)[key] = null;
-                        }
-                    }
+        if (!key) continue;
+
+        if (key === 'testScenarios' || key === 'traceabilityMatrix') {
+            try {
+                const parsed = JSON.parse(doc.content);
+                if (parsed && typeof parsed.content === 'string' && typeof parsed.sourceHash === 'string') {
+                    (docs as any)[key] = parsed;
+                } else {
+                    (docs as any)[key] = { content: doc.content, sourceHash: 'legacy_json' };
                 }
-            } else {
-                 (docs as any)[key] = doc.content;
+            } catch (e) {
+                (docs as any)[key] = { content: doc.content, sourceHash: 'legacy_string' };
             }
+        } else if (key === 'mermaidViz' || key === 'bpmnViz') {
+             try {
+                (docs as any)[key] = JSON.parse(doc.content);
+             } catch(e) {
+                (docs as any)[key] = { code: doc.content, sourceHash: 'legacy_string' };
+             }
+        } else if (key === 'maturityReport') {
+            try {
+                (docs as any)[key] = JSON.parse(doc.content);
+            } catch (e) {
+                console.error(`Error parsing JSON for ${key}:`, e);
+                (docs as any)[key] = null;
+            }
+        } else {
+             (docs as any)[key] = doc.content;
         }
     }
     
-    // Read staleness from the source of truth (the document objects)
     docs.isVizStale = findDoc('mermaid')?.is_stale || findDoc('bpmn')?.is_stale || false;
     docs.isTestStale = findDoc('test')?.is_stale || false;
     docs.isTraceabilityStale = findDoc('traceability')?.is_stale || false;
@@ -90,9 +97,10 @@ const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
 interface UseConversationStateProps {
     user: User;
     initialData: AppData;
+    setError: (message: string | null) => void;
 }
 
-export const useConversationState = ({ user, initialData }: UseConversationStateProps) => {
+export const useConversationState = ({ user, initialData, setError }: UseConversationStateProps) => {
     const [conversations, setConversations] = useState<Conversation[]>(initialData.conversations);
     const [activeConversationId, setActiveConversationId] = useState<string | null>(
         initialData.conversations.length > 0 ? initialData.conversations[0].id : null
@@ -180,7 +188,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
     }, [activeConversationId, triggerProfileSave, triggerSave]);
     
     // FIX: Add optional `conversationIdOverride` parameter to handle new conversations correctly and prevent race conditions.
-    const saveDocumentVersion = useCallback(async (docKey: keyof GeneratedDocs, newContent: any, reason: string, templateId?: string | null, conversationIdOverride?: string) => {
+    const saveDocumentVersion = useCallback(async (docKey: keyof GeneratedDocs, newContent: any, reason: string, templateId?: string | null, conversationIdOverride?: string, tokensUsed?: number) => {
         const conversationId = conversationIdOverride || activeConversationId;
         if (!conversationId) return Promise.reject("No active conversation");
 
@@ -206,7 +214,8 @@ export const useConversationState = ({ user, initialData }: UseConversationState
         const newVersionRecord: Omit<DocumentVersion, 'id' | 'created_at'> = {
             conversation_id: conversationId, user_id: user.id, document_type,
             content: newContentString, version_number: newVersionNumber,
-            reason_for_change: reason, template_id: validTemplateId
+            reason_for_change: reason, template_id: validTemplateId,
+            tokens_used: tokensUsed || 0
         };
         
         const { data: newVersionDb, error: insertError } = await supabase.from('document_versions').insert(newVersionRecord).select().single();
@@ -242,7 +251,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
 
     const streamedDocsRef = useRef<Partial<Record<keyof GeneratedDocs, string>>>({});
 
-    const streamDocument = useCallback((docKey: keyof GeneratedDocs, newContent: string) => {
+    const streamDocument = useCallback((docKey: keyof GeneratedDocs, chunk: string, isFirstChunk: boolean) => {
         const document_type = keyToDocumentTypeMap[docKey];
         if (!document_type) {
             console.warn(`Unknown docKey "${String(docKey)}" passed to streamDocument. Skipping.`);
@@ -258,7 +267,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
             const updatedDocuments = (updatedConv.documents || []).map(doc => {
                 if (doc.document_type === document_type) {
                     docFound = true;
-                    // Always replace content for live streaming view
+                    const newContent = isFirstChunk ? chunk : (doc.content || '') + chunk;
                     return { ...doc, content: newContent, updated_at: new Date().toISOString() };
                 }
                 return doc;
@@ -272,7 +281,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                     document_type,
-                    content: newContent,
+                    content: chunk,
                     current_version_id: null,
                     is_stale: false,
                 };
@@ -283,11 +292,14 @@ export const useConversationState = ({ user, initialData }: UseConversationState
             return updatedConv;
         }));
     
-        // Update the ref for the final save operation at the end of the stream.
-        streamedDocsRef.current[docKey] = newContent;
+        if (isFirstChunk) {
+            streamedDocsRef.current[docKey] = chunk;
+        } else {
+            streamedDocsRef.current[docKey] = (streamedDocsRef.current[docKey] || '') + chunk;
+        }
     }, [activeConversationId, user.id]);
 
-    const finalizeStreamedDocuments = useCallback(async (templateId?: string | null) => {
+    const finalizeStreamedDocuments = useCallback(async (templateId?: string | null, tokensUsed?: number) => {
         if (!activeConversationId) return;
         const docsToSave = { ...streamedDocsRef.current };
         streamedDocsRef.current = {};
@@ -296,7 +308,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
             const docKey = key as keyof GeneratedDocs;
             const content = docsToSave[docKey];
             if (content) {
-                await saveDocumentVersion(docKey, content, 'AI tarafından oluşturuldu', templateId);
+                await saveDocumentVersion(docKey, content, 'AI tarafından oluşturuldu', templateId, undefined, tokensUsed);
             }
         }
     }, [activeConversationId, saveDocumentVersion]);
@@ -371,21 +383,45 @@ export const useConversationState = ({ user, initialData }: UseConversationState
     }, [updateConversation]);
 
     const deleteConversation = useCallback(async (id: string) => {
-        // Optimistic UI update
+        // Keep original states for potential revert on error
         const originalConversations = conversations;
-        setConversations(prev => prev.filter(c => c.id !== id));
-        if (activeConversationId === id) {
-            setActiveConversationId(conversations.length > 1 ? conversations.filter(c => c.id !== id)[0].id : null);
-        }
+        const originalActiveId = activeConversationId;
 
+        // Perform optimistic UI updates using functional forms
+        setConversations(prev => prev.filter(c => c.id !== id));
+        setActiveConversationId(prevActiveId => {
+            // If the deleted conversation was not the active one, do nothing
+            if (prevActiveId !== id) {
+                return prevActiveId;
+            }
+            
+            // If the active conversation was deleted, find a new one
+            const updatedConversations = originalConversations.filter(c => c.id !== id);
+            
+            // If no conversations are left, set active to null
+            if (updatedConversations.length === 0) {
+                return null;
+            }
+
+            // Otherwise, select a new active conversation
+            const currentIndex = originalConversations.findIndex(c => c.id === id);
+            const newIndex = Math.min(currentIndex, updatedConversations.length - 1);
+            return updatedConversations[newIndex].id;
+        });
+
+        // Perform the async database operation
         const { error } = await supabase.from('conversations').delete().eq('id', id);
 
+        // Handle error case by reverting the optimistic updates
         if (error) {
             console.error("Failed to delete conversation:", error);
-            // Revert UI on error
+            setError(`Analiz silinemedi: ${error.message}. Bu genellikle veritabanı izinlerinden (RLS) kaynaklanır.`);
+            
+            // Revert UI changes
             setConversations(originalConversations);
+            setActiveConversationId(originalActiveId);
         }
-    }, [conversations, activeConversationId]);
+    }, [conversations, activeConversationId, setError]);
     
     return {
         user,

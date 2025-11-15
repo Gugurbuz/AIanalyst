@@ -30,6 +30,7 @@ export const useUIState = () => {
     const [resetConfirmation, setResetConfirmation] = useState<{ changedDocKey: keyof GeneratedDocs; changedDocName: string; impactedDocNames: string[] } | null>(null);
     const [error, setError] = useState<string | null>(null);
     const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [confirmation, setConfirmation] = useState<{ title: string; message: string; onConfirm: () => void; } | null>(null);
 
     const handleThemeChange = (newTheme: Theme) => {
         setTheme(newTheme);
@@ -97,5 +98,7 @@ export const useUIState = () => {
         error,
         setError: setDisplayError,
         handleToggleDeveloperPanel,
+        confirmation,
+        setConfirmation,
     };
 };

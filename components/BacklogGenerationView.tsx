@@ -88,21 +88,16 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
 
     const isReadyForGeneration = 
         !!generatedDocs.analysisDoc &&
-        !!generatedDocs.testScenarios &&
-        !!generatedDocs.traceabilityMatrix;
+        !!generatedDocs.testScenarios.content &&
+        !!generatedDocs.traceabilityMatrix.content;
 
     const handleGenerateSuggestions = useCallback(async () => {
         setIsGenerating(true);
         setError(null);
         try {
-            const testScenariosContent = typeof generatedDocs.testScenarios === 'object'
-                ? (generatedDocs.testScenarios as SourcedDocument).content
-                : generatedDocs.testScenarios;
-            const traceabilityMatrixContent = typeof generatedDocs.traceabilityMatrix === 'object'
-                ? (generatedDocs.traceabilityMatrix as SourcedDocument).content
-                : generatedDocs.traceabilityMatrix;
+            const testScenariosContent = generatedDocs.testScenarios.content;
+            const traceabilityMatrixContent = generatedDocs.traceabilityMatrix.content;
 
-            // FIX: Correctly call the 'generateBacklogSuggestions' method which now exists on geminiService.
             const { suggestions: result, reasoning, tokens } = await geminiService.generateBacklogSuggestions(
                 generatedDocs.requestDoc,
                 generatedDocs.analysisDoc,
@@ -112,7 +107,6 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
             );
 
             if (!result || result.length === 0) {
-                // If the result is empty, use the AI's reasoning as the error message.
                 const errorMessage = reasoning || "Yapay zeka, sağlanan dokümanlardan bir backlog oluşturamadı. Lütfen dokümanlarınızın içeriğini kontrol edip tekrar deneyin.";
                 throw new Error(errorMessage);
             }
@@ -138,38 +132,27 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
             setIsGenerating(false);
         }
     }, [conversation.id, conversation.total_tokens_used, generatedDocs, onUpdateConversation]);
-
+    
     const handleToggleSelection = useCallback((id: string, toggledSuggestion: BacklogSuggestion) => {
         const newSelection = new Set(selectedIds);
         const childIds = new Set<string>();
         
-        // Recursive function to collect all child IDs
         const traverse = (items: BacklogSuggestion[] | undefined) => {
-            // GUARD: Prevent crash if an item has no `children` property.
-            if (!items) {
-                return;
-            }
+            if (!items) return;
             items.forEach(item => {
                 childIds.add(item.id);
-                // Recursively traverse if children exist
-                if (item.children) {
-                    traverse(item.children);
-                }
+                if (item.children) traverse(item.children);
             });
         };
         
-        // Start traversal with the toggled suggestion's children
         traverse(toggledSuggestion.children);
     
-        const isSelected = newSelection.has(id);
-        if (isSelected) {
-            // If it was selected, deselect it and all its children
+        const isCurrentlySelected = newSelection.has(id);
+        if (isCurrentlySelected) {
             newSelection.delete(id);
             childIds.forEach(childId => newSelection.delete(childId));
         } else {
-            // If it was not selected, select it and all its children
             newSelection.add(id);
-            // BUG FIX: The second argument to `add` should be the `childId`, not the parent `id`.
             childIds.forEach(childId => newSelection.add(childId));
         }
         setSelectedIds(newSelection);
@@ -179,159 +162,118 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
         setIsSaving(true);
         setError(null);
 
-        const { data: existingTasks, error: fetchError } = await supabase
-            .from('tasks')
-            .select('task_key')
-            .eq('user_id', conversation.user_id);
+        try {
+            const { data: existingTasks, error: fetchError } = await supabase
+                .from('tasks')
+                .select('task_key')
+                .eq('user_id', conversation.user_id);
 
-        if (fetchError) {
-            setError(fetchError.message);
-            setIsSaving(false);
-            return;
-        }
+            if (fetchError) throw fetchError;
 
-        let maxKeyNum = 0;
-        if (existingTasks) {
-            for (const task of existingTasks) {
-                if (task.task_key && typeof task.task_key === 'string' && task.task_key.startsWith('TASK-')) {
-                    const numPart = parseInt(task.task_key.split('-')[1], 10);
-                    if (!isNaN(numPart) && numPart > maxKeyNum) {
-                        maxKeyNum = numPart;
+            let maxKeyNum = 0;
+            if (existingTasks) {
+                for (const task of existingTasks) {
+                    if (task.task_key?.startsWith('TASK-')) {
+                        const numPart = parseInt(task.task_key.split('-')[1], 10);
+                        if (!isNaN(numPart) && numPart > maxKeyNum) maxKeyNum = numPart;
                     }
                 }
             }
-        }
-
-        const flatSelectedSuggestions: { suggestion: BacklogSuggestion, parentSuggestionId: string | null }[] = [];
-        const traverseAndCollect = (items: BacklogSuggestion[], parentId: string | null) => {
-            items.forEach(item => {
-                if (selectedIds.has(item.id)) {
-                    flatSelectedSuggestions.push({ suggestion: item, parentSuggestionId: parentId });
-                }
-                if (item.children) {
-                    traverseAndCollect(item.children, item.id);
-                }
-            });
-        };
-        traverseAndCollect(suggestions, null);
-        
-        if (flatSelectedSuggestions.length === 0) {
-            setError("Lütfen panoya eklemek için en az bir görev seçin.");
-            setIsSaving(false);
-            return;
-        }
-        
-        // Map old suggestion IDs to new database UUIDs to maintain hierarchy
-        const suggestionIdToDbId = new Map<string, string>();
-        
-        const tasksToInsert = flatSelectedSuggestions.map(({ suggestion }, index) => {
-            const newDbId = uuidv4();
-            suggestionIdToDbId.set(suggestion.id, newDbId);
-            const newKeyNum = maxKeyNum + index + 1;
             
-            return {
-                id: newDbId,
-                task_key: `TASK-${newKeyNum}`,
-                user_id: conversation.user_id,
-                conversation_id: conversation.id,
-                parent_id: null, // This will be updated in the next step
-                title: suggestion.title,
-                description: suggestion.description,
-                priority: suggestion.priority,
-                status: 'todo' as const,
-                type: suggestion.type,
+            const insertTasksRecursively = async (suggestionsToProcess: BacklogSuggestion[], parentDbId: string | null): Promise<void> => {
+                 for (const suggestion of suggestionsToProcess) {
+                    if (!selectedIds.has(suggestion.id)) continue;
+
+                    maxKeyNum++;
+                    const newTask: Omit<Task, 'id' | 'created_at' | 'children'> = {
+                        user_id: conversation.user_id,
+                        conversation_id: conversation.id,
+                        parent_id: parentDbId,
+                        task_key: `TASK-${maxKeyNum}`,
+                        title: suggestion.title,
+                        description: suggestion.description,
+                        status: 'todo',
+                        priority: suggestion.priority,
+                        type: suggestion.type,
+                        assignee: null,
+                    };
+
+                    const { data: insertedTask, error: insertError } = await supabase
+                        .from('tasks')
+                        .insert(newTask)
+                        .select()
+                        .single();
+
+                    if (insertError) throw insertError;
+
+                    if (insertedTask && suggestion.children) {
+                        await insertTasksRecursively(suggestion.children, insertedTask.id);
+                    }
+                }
             };
-        });
-        
-        // Now, set the correct parent_id using our map
-        // FIX: The `parentSuggestionId` is on the `item` object, not inside the `suggestion` object.
-        // The previous code `suggestion.parentSuggestionId` was incorrect. This is now corrected to `item.parentSuggestionId`.
-        flatSelectedSuggestions.forEach((item, index) => {
-            if (item.parentSuggestionId && suggestionIdToDbId.has(item.parentSuggestionId)) {
-                tasksToInsert[index].parent_id = suggestionIdToDbId.get(item.parentSuggestionId)!;
-            }
-        });
+            
+            await insertTasksRecursively(suggestions, null);
+            onUpdateConversation(conversation.id, { backlogSuggestions: [] });
 
-        const { error: insertError } = await supabase.from('tasks').insert(tasksToInsert);
-
-        if (insertError) {
-            setError(insertError.message);
-        } else {
-            // Filter out added suggestions and their children from the UI
-            const addedTopLevelIds = new Set(
-                suggestions.filter(s => selectedIds.has(s.id)).map(s => s.id)
-            );
-            const remainingSuggestions = suggestions.filter(s => !addedTopLevelIds.has(s.id));
-
-            onUpdateConversation(conversation.id, {
-                backlogSuggestions: remainingSuggestions
-            });
-            setSelectedIds(new Set());
-            alert(`${tasksToInsert.length} madde başarıyla Backlog panosuna eklendi.`);
+        } catch (err: any) {
+            setError(err.message || 'Görevler backlog\'a eklenirken bir hata oluştu.');
+        } finally {
+            setIsSaving(false);
         }
-        setIsSaving(false);
     };
-
-    if (isGenerating) {
-         return (
-            <div className="p-6 flex flex-col justify-center items-center text-center h-full">
-                <LoaderCircle className="animate-spin h-8 w-8 text-indigo-500" />
-                <p className="mt-4 text-sm font-semibold text-slate-600 dark:text-slate-300">Akıllı Backlog Oluşturuluyor...</p>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Analiz, test ve izlenebilirlik dokümanları inceleniyor. Bu işlem biraz zaman alabilir.</p>
-            </div>
-        );
-    }
-
-    if (suggestions.length === 0) {
-        return (
-            <div className="p-6 text-center text-slate-500 dark:text-slate-400 h-full flex flex-col justify-center items-center">
-                {error && (
-                    <div className="mb-4 w-full max-w-xl p-3 text-sm text-red-800 bg-red-100 border border-red-300 rounded-lg dark:bg-red-900/50 dark:text-red-300 dark:border-red-600 flex items-start gap-2">
-                        <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" /> 
-                        <span className="text-left">{error}</span>
-                    </div>
-                )}
-                <p className="text-lg font-semibold">Henüz backlog önerisi oluşturulmadı.</p>
-                <p className="text-sm mt-1 max-w-md">Mevcut analiz dokümanlarını (analiz, test, izlenebilirlik) kullanarak AI'dan hiyerarşik bir backlog oluşturmasını isteyin.</p>
-                 <button 
-                    onClick={handleGenerateSuggestions}
-                    disabled={!isReadyForGeneration}
-                    title={!isReadyForGeneration ? "Önce Analiz, Test Senaryoları ve İzlenebilirlik Matrisi oluşturmalısınız." : ""}
-                    className="mt-4 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
-                >
-                    Backlog Önerileri Oluştur
-                </button>
-            </div>
-        );
-    }
-
+    
     return (
-        <div className="p-4 md:p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Onay Bekleyen Backlog Maddeleri</h3>
-                 <button 
-                    onClick={handleAddToBacklog}
-                    disabled={isSaving || selectedIds.size === 0}
-                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition disabled:opacity-50 flex items-center"
-                >
-                     {isSaving && <LoaderCircle className="animate-spin -ml-1 mr-2 h-4 w-4" />}
-                     {isSaving ? 'Ekleniyor...' : `Seçili ${selectedIds.size} Maddeyi Ekle`}
-                </button>
-            </div>
+        <div className="flex flex-col h-full">
+            <header className="flex-shrink-0 p-4 border-b border-slate-200 dark:border-slate-700">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Proje Backlog Oluşturma</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Mevcut dokümanlarınızdan proje görevleri oluşturun ve bunları Proje Panonuza ekleyin.
+                </p>
+            </header>
 
-            {error && <div className="p-3 text-sm text-red-800 bg-red-100 border border-red-300 rounded-lg dark:bg-red-900/50 dark:text-red-300 dark:border-red-600 flex gap-2"><AlertTriangle className="h-5 w-5"/> {error}</div>}
-
-            <div className="space-y-1">
-                {suggestions.map((s) => (
-                    <SuggestionItem 
-                        key={s.id} 
-                        suggestion={s} 
-                        level={0} 
-                        isSelected={(id) => selectedIds.has(id)}
-                        onToggle={handleToggleSelection}
-                    />
-                ))}
-            </div>
+            {suggestions.length > 0 ? (
+                <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                    {suggestions.map(suggestion => (
+                        <SuggestionItem
+                            key={suggestion.id}
+                            suggestion={suggestion}
+                            level={0}
+                            isSelected={(id) => selectedIds.has(id)}
+                            onToggle={handleToggleSelection}
+                        />
+                    ))}
+                </div>
+            ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+                    <CheckSquare className="w-16 h-16 text-slate-400 mb-4" strokeWidth={1} />
+                    <h4 className="text-xl font-semibold text-slate-700 dark:text-slate-300">Backlog Önerileri Oluşturun</h4>
+                    <p className="mt-2 max-w-lg text-slate-500 dark:text-slate-400">
+                        Analiz, Test ve İzlenebilirlik dokümanlarınızı kullanarak AI'dan projeniz için bir görev listesi (backlog) oluşturmasını isteyin.
+                    </p>
+                    <button
+                        onClick={handleGenerateSuggestions}
+                        disabled={isGenerating || !isReadyForGeneration}
+                        className="mt-6 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 flex items-center"
+                        title={!isReadyForGeneration ? "Lütfen önce Analiz, Test ve İzlenebilirlik dokümanlarını oluşturun." : ""}
+                    >
+                        {isGenerating ? <><LoaderCircle className="animate-spin mr-2 h-5 w-5" /> Oluşturuluyor...</> : "Backlog Önerileri Oluştur"}
+                    </button>
+                    {error && <div className="mt-4 p-3 text-sm text-red-800 bg-red-100 border border-red-300 rounded-lg dark:bg-red-900/50 dark:text-red-300 dark:border-red-600"><AlertTriangle className="inline h-4 w-4 mr-2" />{error}</div>}
+                </div>
+            )}
+            
+            {suggestions.length > 0 && (
+                <footer className="flex-shrink-0 p-4 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                    <div className="text-sm font-medium">{selectedIds.size} görev seçildi</div>
+                    <button
+                        onClick={handleAddToBacklog}
+                        disabled={isSaving || selectedIds.size === 0}
+                        className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-md shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 flex items-center"
+                    >
+                         {isSaving ? <><LoaderCircle className="animate-spin mr-2 h-5 w-5" /> Ekleniyor...</> : "Seçilenleri Panoya Ekle"}
+                    </button>
+                </footer>
+            )}
         </div>
     );
 };

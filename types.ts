@@ -1,5 +1,7 @@
 // types.ts
 import type { User as SupabaseUser } from '@supabase/supabase-js';
+// FIX: Added import for @tiptap/core to make module augmentation work.
+import '@tiptap/core';
 
 // Re-exporting Supabase user type for convenience
 export type User = SupabaseUser;
@@ -97,12 +99,12 @@ export interface MaturityReport {
     summary: string;
     missingTopics: string[];
     suggestedQuestions: string[];
-    // Replaced single score with a detailed breakdown
     scores: {
-        scope: number;          // Kapsam
-        technical: number;      // Teknik Detay
-        userFlow: number;       // Kullanıcı Akışı
-        nonFunctional: number;  // Fonksiyonel Olmayan Gereksinimler
+        comprehensiveness: number; // Kapsamlılık
+        clarity: number;           // Netlik
+        consistency: number;       // Tutarlılık
+        testability: number;       // Test Edilebilirlik
+        completeness: number;      // Bütünlük
     };
     overallScore: number; // The average/weighted score for a quick glance
     justification: string; // Puanın kısa açıklaması
@@ -121,6 +123,7 @@ export interface DocumentVersion {
     version_number: number;
     reason_for_change: string;
     template_id?: string | null;
+    tokens_used?: number;
 }
 
 
@@ -151,12 +154,12 @@ export interface SourcedDocument {
 export interface GeneratedDocs {
     requestDoc: string;
     analysisDoc: string;
-    testScenarios: SourcedDocument | string;
+    testScenarios: SourcedDocument;
     visualization: string; // Legacy, for backward compatibility
     visualizationType?: 'mermaid' | 'bpmn'; // Legacy
     mermaidViz?: VizData;
     bpmnViz?: VizData;
-    traceabilityMatrix: SourcedDocument | string;
+    traceabilityMatrix: SourcedDocument;
     maturityReport?: MaturityReport | null;
     // --- New flags for impact analysis ---
     isVizStale?: boolean;
@@ -302,3 +305,24 @@ export interface StructuredTraceabilityRow {
     "İlgili Test Senaryo ID'leri": string; // Comma separated string
 }
 // ... diğer tipler
+
+// FIX: Tiptap module augmentation is defined here. Importing '@tiptap/core'
+// in this file ensures TypeScript can find and augment the module correctly.
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    fontSize: {
+      setFontSize: (size: string) => ReturnType;
+      unsetFontSize: () => ReturnType;
+    };
+    fontFamily: {
+      setFontFamily: (fontFamily: string) => ReturnType;
+      unsetFontFamily: () => ReturnType;
+    };
+    highlight: {
+        toggleHighlight: (options?: { color: string }) => ReturnType;
+    };
+    textAlign: {
+        setTextAlign: (alignment: string) => ReturnType;
+    };
+  }
+}

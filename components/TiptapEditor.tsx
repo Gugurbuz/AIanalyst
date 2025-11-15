@@ -1,176 +1,302 @@
 // components/TiptapEditor.tsx
-import React from 'react';
-import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useEditor, EditorContent, BubbleMenu, Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-// YENİ EKLENEN IMPORTLAR (npm'den)
-import Table from '@tiptap/extension-table';
+import { Table as TiptapTable } from '@tiptap/extension-table';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import TableRow from '@tiptap/extension-table-row';
+import Underline from '@tiptap/extension-underline';
+import Link from '@tiptap/extension-link';
+import { Highlight } from '@tiptap/extension-highlight';
+import TaskList from '@tiptap/extension-task-list';
+import TaskItem from '@tiptap/extension-task-item';
+import { TextAlign } from '@tiptap/extension-text-align';
+import { marked } from 'marked';
+import TurndownService from 'turndown';
 import DOMPurify from 'dompurify';
 import { 
-    Bold, Italic, Heading2, Heading3, List, ListOrdered, Table as TableIcon,
-    Trash2, GitMerge, Combine, Pilcrow,
-    ArrowUpFromLine, ArrowDownFromLine, ArrowLeftFromLine, ArrowRightFromLine,
-    Columns, Rows
+    Bold, Italic, Heading2, Heading3, List, ListOrdered, Table2, ChevronDown, Trash2,
+    Undo, Redo, Strikethrough, Quote, Code2, Minus, Sparkles, Pencil,
+    Underline as UnderlineIcon, Highlighter, ListTodo, AlignLeft, AlignCenter, AlignRight, Link2, RemoveFormatting
 } from 'lucide-react';
+import TextStyle from '@tiptap/extension-text-style';
+import FontFamily from '@tiptap/extension-font-family';
+import { Extension } from '@tiptap/core';
+import { StreamingIndicator } from './StreamingIndicator';
 
-// ARTIK 'turndown' VEYA 'marked' IMPORT ETMİYORUZ
+// FIX: Tiptap module augmentation has been moved to types.ts to resolve module resolution errors.
+
+// Custom FontSize extension
+export const FontSize = Extension.create({
+  name: 'fontSize',
+  addOptions() { return { types: ['textStyle'] }; },
+  addGlobalAttributes() {
+    return [{
+      types: this.options.types,
+      attributes: {
+        fontSize: {
+          default: null,
+          parseHTML: element => element.style.fontSize.replace(/['"]+/g, ''),
+          renderHTML: attributes => {
+            if (!attributes.fontSize) { return {}; }
+            return { style: `font-size: ${attributes.fontSize}` };
+          },
+        },
+      },
+    }];
+  },
+  addCommands() {
+    return {
+      setFontSize: (fontSize: string) => ({ chain }) => {
+        return chain().setMark('textStyle', { fontSize }).run();
+      },
+      unsetFontSize: () => ({ chain }) => {
+        return chain().setMark('textStyle', { fontSize: null }).run();
+      },
+    };
+  },
+});
+
 
 interface TiptapEditorProps {
-    content: string; // Artık HTML alacak
-    onChange: (html: string) => void; // Artık HTML döndürecek
+    content: string;
+    onChange: (markdown: string) => void;
     onSelectionUpdate: (text: string) => void;
     isEditable: boolean;
+    onExplainSelection: (text: string) => void;
+    onEditWithAI: (text: string) => void;
+    isStreaming?: boolean;
 }
 
-const MenuBar = ({ editor }: { editor: any }) => {
-    if (!editor) return null;
-    const buttonClass = (isActive: boolean) => 
-        `p-2 rounded-md ${isActive ? 'bg-slate-300 dark:bg-slate-600' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`;
+const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+turndownService.addRule('tables', {
+  filter: ['table'],
+  replacement: function (content, node) {
+    const table = node as HTMLTableElement;
+    let markdown = '';
+    const rows = Array.from(table.querySelectorAll('tr'));
+    rows.forEach((row, i) => {
+      const cells = Array.from(row.querySelectorAll('th, td'));
+      markdown += '| ' + cells.map(cell => turndownService.turndown((cell as HTMLElement).innerHTML).replace(/\|/g, '\\|')).join(' | ') + ' |\n';
+      if (i === 0 && row.querySelector('th')) {
+        markdown += '| ' + cells.map(() => '---').join(' | ') + ' |\n';
+      }
+    });
+    return '\n' + markdown + '\n';
+  }
+});
 
+const TableMenu = ({ editor }: { editor: Editor }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) setIsOpen(false);
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+    const menuItems = [
+        { label: 'Tablo Ekle', action: () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(), disabled: editor.isActive('table') },
+        { label: 'Sütun Ekle (Önce)', action: () => editor.chain().focus().addColumnBefore().run() },
+        { label: 'Sütun Ekle (Sonra)', action: () => editor.chain().focus().addColumnAfter().run() },
+        { label: 'Sütunu Sil', action: () => editor.chain().focus().deleteColumn().run() },
+        { label: 'Satır Ekle (Önce)', action: () => editor.chain().focus().addRowBefore().run() },
+        { label: 'Satır Ekle (Sonra)', action: () => editor.chain().focus().addRowAfter().run() },
+        { label: 'Satırı Sil', action: () => editor.chain().focus().deleteRow().run() },
+        { label: 'Tabloyu Sil', action: () => editor.chain().focus().deleteTable().run() },
+        { label: 'Başlık Satırı Ekle/Kaldır', action: () => editor.chain().focus().toggleHeaderRow().run() },
+    ];
     return (
-        <div className="flex items-center gap-1 p-2 border-b border-slate-300 dark:border-slate-600 flex-wrap">
-            <button
-                onClick={() => editor.chain().focus().toggleBold().run()}
-                className={buttonClass(editor.isActive('bold'))} title="Kalın">
-                <Bold className="h-4 w-4" />
+        <div className="relative" ref={menuRef}>
+            <button type="button" onClick={() => setIsOpen(!isOpen)} className={`p-2 rounded-md flex items-center gap-1 ${editor.isActive('table') ? 'bg-slate-300 dark:bg-slate-600' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`} title="Tablo İşlemleri">
+                <Table2 className="h-4 w-4" />
+                <ChevronDown className="h-3 w-3" />
             </button>
-            <button
-                onClick={() => editor.chain().focus().toggleItalic().run()}
-                className={buttonClass(editor.isActive('italic'))} title="İtalik">
-                <Italic className="h-4 w-4" />
-            </button>
-            <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
-            <button
-                onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                className={buttonClass(editor.isActive('heading', { level: 2 }))} title="Başlık 1">
-                <Heading2 className="h-4 w-4" />
-            </button>
-            <button
-                onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-                className={buttonClass(editor.isActive('heading', { level: 3 }))} title="Başlık 2">
-                <Heading3 className="h-4 w-4" />
-            </button>
-            <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
-            <button
-                onClick={() => editor.chain().focus().toggleBulletList().run()}
-                className={buttonClass(editor.isActive('bulletList'))} title="Liste">
-                <List className="h-4 w-4" />
-            </button>
-            <button
-                onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                className={buttonClass(editor.isActive('orderedList'))} title="Numaralı Liste">
-                <ListOrdered className="h-4 w-4" />
-            </button>
-            <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>
-             <button
-                onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
-                className={buttonClass(false)} title="Tablo Ekle">
-                <TableIcon className="h-4 w-4" />
-            </button>
+            {isOpen && (
+                <div className="absolute top-full mt-2 w-56 bg-white dark:bg-slate-800 rounded-md shadow-lg border border-slate-200 dark:border-slate-700 z-10">
+                    <div className="p-1">
+                        {menuItems.map((item, index) => {
+                            const isDisabled = item.disabled || (index > 0 && !editor.isActive('table'));
+                            return <button key={item.label} onClick={() => { item.action(); setIsOpen(false); }} disabled={isDisabled} className="w-full text-left px-3 py-1.5 text-sm rounded-md disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700">{item.label}</button>;
+                        })}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
 
+const FONT_FACES = ['Inter', 'Arial', 'Georgia', 'Times New Roman', 'Courier New', 'Verdana'];
+const FONT_SIZES = ['12px', '14px', '16px', '18px', '20px', '24px', '30px'];
 
-export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, onSelectionUpdate, isEditable }) => {
-    const isUpdatingRef = React.useRef(false);
-    const [sanitizedContent, setSanitizedContent] = React.useState('');
+const MenuBar = ({ editor }: { editor: Editor | null }) => {
+    if (!editor) return null;
 
-    React.useEffect(() => {
-        const sanitized = DOMPurify.sanitize(content || '', {
-            ADD_TAGS: ["table", "thead", "tbody", "tr", "th", "td", "col", "colgroup"],
-            ADD_ATTR: ["colspan", "rowspan", "colwidth"]
-        });
-        setSanitizedContent(sanitized);
-    }, [content]);
+    const setLink = useCallback(() => {
+        const previousUrl = editor.getAttributes('link').href;
+        const url = window.prompt('URL', previousUrl);
+        if (url === null) return;
+        if (url === '') { editor.chain().focus().extendMarkRange('link').unsetLink().run(); return; }
+        editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+    }, [editor]);
 
+    const handleFontFamilyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const value = e.target.value;
+        if (value === 'default') {
+            editor.chain().focus().unsetFontFamily().run();
+        } else {
+            editor.chain().focus().setFontFamily(value).run();
+        }
+    };
+
+    const handleFontSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const value = e.target.value;
+        if (value === 'default') {
+            editor.chain().focus().unsetFontSize().run();
+        } else {
+            editor.chain().focus().setFontSize(value).run();
+        }
+    };
+    
+    const activeFontFamily = editor.getAttributes('textStyle').fontFamily?.replace(/['"]+/g, '') || 'default';
+    const activeFontSize = editor.getAttributes('textStyle').fontSize || 'default';
+
+
+    const buttonClass = (isActive: boolean) => `p-2 rounded-md ${isActive ? 'bg-slate-300 dark:bg-slate-600' : 'hover:bg-slate-200 dark:hover:bg-slate-700'}`;
+    const Divider = () => <div className="h-5 w-px bg-slate-300 dark:bg-slate-600 mx-1"></div>;
+
+    return (
+        <div className="flex items-center gap-1 p-2 border-b border-slate-300 dark:border-slate-600 flex-wrap">
+            <button onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} className={buttonClass(false)} title="Geri Al"><Undo className="h-4 w-4" /></button>
+            <button onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()} className={buttonClass(false)} title="İleri Al"><Redo className="h-4 w-4" /></button>
+            <Divider />
+            <select value={activeFontFamily} onChange={handleFontFamilyChange} className="tiptap-select" title="Yazı Tipi">
+                <option value="default">Varsayılan</option>
+                {FONT_FACES.map(font => <option key={font} value={font} style={{fontFamily: font}}>{font}</option>)}
+            </select>
+             <select value={activeFontSize} onChange={handleFontSizeChange} className="tiptap-select" title="Yazı Tipi Boyutu">
+                <option value="default">Varsayılan</option>
+                {FONT_SIZES.map(size => <option key={size} value={size}>{size}</option>)}
+            </select>
+            <Divider />
+            <button onClick={() => editor.chain().focus().toggleBold().run()} disabled={!editor.can().chain().focus().toggleBold().run()} className={buttonClass(editor.isActive('bold'))} title="Kalın"><Bold className="h-4 w-4" /></button>
+            <button onClick={() => editor.chain().focus().toggleItalic().run()} disabled={!editor.can().chain().focus().toggleItalic().run()} className={buttonClass(editor.isActive('italic'))} title="İtalik"><Italic className="h-4 w-4" /></button>
+            <button onClick={() => editor.chain().focus().toggleUnderline().run()} disabled={!editor.can().chain().focus().toggleUnderline().run()} className={buttonClass(editor.isActive('underline'))} title="Altı Çizili"><UnderlineIcon className="h-4 w-4" /></button>
+            <button onClick={() => editor.chain().focus().toggleStrike().run()} disabled={!editor.can().chain().focus().toggleStrike().run()} className={buttonClass(editor.isActive('strike'))} title="Üstü Çizili"><Strikethrough className="h-4 w-4" /></button>
+            <button onClick={() => editor.chain().focus().toggleHighlight().run()} disabled={!editor.can().chain().focus().toggleHighlight().run()} className={buttonClass(editor.isActive('highlight'))} title="Vurgula"><Highlighter className="h-4 w-4" /></button>
+            <Divider />
+            <button onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={buttonClass(editor.isActive('heading', { level: 2 }))} title="Başlık 1"><Heading2 className="h-4 w-4" /></button>
+            <button onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} className={buttonClass(editor.isActive('heading', { level: 3 }))} title="Başlık 2"><Heading3 className="h-4 w-4" /></button>
+            <Divider />
+            <button onClick={() => editor.chain().focus().toggleBulletList().run()} className={buttonClass(editor.isActive('bulletList'))} title="Sırasız Liste"><List className="h-4 w-4" /></button>
+            <button onClick={() => editor.chain().focus().toggleOrderedList().run()} className={buttonClass(editor.isActive('orderedList'))} title="Sıralı Liste"><ListOrdered className="h-4 w-4" /></button>
+            <button onClick={() => editor.chain().focus().toggleTaskList().run()} className={buttonClass(editor.isActive('taskList'))} title="Görev Listesi"><ListTodo className="h-4 w-4" /></button>
+            <Divider />
+            <button onClick={() => editor.chain().focus().setTextAlign('left').run()} className={buttonClass(editor.isActive({ textAlign: 'left' }))} title="Sola Hizala"><AlignLeft className="h-4 w-4" /></button>
+            <button onClick={() => editor.chain().focus().setTextAlign('center').run()} className={buttonClass(editor.isActive({ textAlign: 'center' }))} title="Ortala"><AlignCenter className="h-4 w-4" /></button>
+            <button onClick={() => editor.chain().focus().setTextAlign('right').run()} className={buttonClass(editor.isActive({ textAlign: 'right' }))} title="Sağa Hizala"><AlignRight className="h-4 w-4" /></button>
+            <Divider />
+            <button onClick={setLink} disabled={editor.isActive('link')} className={buttonClass(editor.isActive('link'))} title="Link Ekle"><Link2 className="h-4 w-4" /></button>
+            <button onClick={() => editor.chain().focus().toggleBlockquote().run()} className={buttonClass(editor.isActive('blockquote'))} title="Alıntı Bloğu"><Quote className="h-4 w-4" /></button>
+            <button onClick={() => editor.chain().focus().toggleCodeBlock().run()} className={buttonClass(editor.isActive('codeBlock'))} title="Kod Bloğu"><Code2 className="h-4 w-4" /></button>
+            <TableMenu editor={editor} />
+            <Divider />
+            <button onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()} className={buttonClass(false)} title="Formatı Temizle"><RemoveFormatting className="h-4 w-4" /></button>
+        </div>
+    );
+};
+
+// FIX: Add the main TiptapEditor component and export it to resolve import errors in other files.
+export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, onSelectionUpdate, isEditable, onExplainSelection, onEditWithAI, isStreaming }) => {
     const editor = useEditor({
         extensions: [
             StarterKit.configure({
-                heading: { levels: [1, 2, 3] },
+                heading: { levels: [2, 3] },
             }),
             Placeholder.configure({
-                placeholder: 'Doküman içeriğini buraya yazın...',
+                placeholder: 'Dokümanınızı buraya yazın veya AI\'nın oluşturmasını bekleyin...',
             }),
-            Table.configure({
+            Underline,
+            Link.configure({
+                openOnClick: false,
+                autolink: true,
+            }),
+            Highlight,
+            TaskList,
+            TaskItem.configure({
+                nested: true,
+            }),
+            TextAlign.configure({
+                types: ['heading', 'paragraph'],
+            }),
+            TiptapTable.configure({
                 resizable: true,
-                cellMinWidth: 50,
             }),
             TableRow,
             TableHeader,
             TableCell,
+            TextStyle,
+            FontFamily,
+            FontSize,
         ],
+        content: '',
         editable: isEditable,
-        content: sanitizedContent,
-
         onUpdate: ({ editor }) => {
-            if (isEditable && !isUpdatingRef.current) {
+            if (isEditable) {
                 const html = editor.getHTML();
-                onChange(html);
+                const markdown = turndownService.turndown(html);
+                onChange(markdown);
             }
         },
         onSelectionUpdate: ({ editor }) => {
-            if (isEditable) {
-                const { from, to } = editor.state.selection;
-                const selectedText = editor.state.doc.textBetween(from, to, ' ');
-                onSelectionUpdate(selectedText);
+            const { from, to } = editor.state.selection;
+            const text = editor.state.doc.textBetween(from, to, ' ');
+            onSelectionUpdate(text);
+        },
+    });
+
+    useEffect(() => {
+        if (editor) {
+            const html = DOMPurify.sanitize(marked(content) as string);
+            const isSame = editor.getHTML() === html;
+            if (!isSame && !isStreaming) {
+                editor.commands.setContent(html, false);
             }
-        },
-        editorProps: {
-            attributes: {
-                class: `prose prose-slate dark:prose-invert max-w-none focus:outline-none p-4 md:p-6 h-full ${isEditable ? '' : 'cursor-text'}`,
-            },
-        },
-    }, [sanitizedContent, isEditable]);
-
-    React.useEffect(() => {
-        if (!editor || editor.isDestroyed) return;
-
-        const currentContentAsHTML = editor.getHTML();
-
-        if (currentContentAsHTML !== sanitizedContent && sanitizedContent) {
-            isUpdatingRef.current = true;
-            requestAnimationFrame(() => {
-                if (editor && !editor.isDestroyed) {
-                    editor.commands.setContent(sanitizedContent, false);
-                }
-                isUpdatingRef.current = false;
-            });
         }
-    }, [sanitizedContent, editor]);
+    }, [content, editor, isStreaming]);
+    
+    useEffect(() => {
+        if (editor) {
+            editor.setEditable(isEditable);
+        }
+    }, [isEditable, editor]);
+
+    if (!editor) {
+        return null;
+    }
 
     return (
-        <div className="flex flex-col h-full bg-white dark:bg-slate-900">
-            {editor && isEditable && (
-                // YENİ EKLENEN TABLO KONTROL MENÜSÜ
-                <BubbleMenu 
-                    editor={editor} 
-                    tippyOptions={{ duration: 100, zIndex: 25 }}
-                    shouldShow={({ editor }) => editor.isActive('table')}
-                    className="flex items-center gap-1 p-1.5 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700"
-                >
-                    <button onClick={() => editor.chain().focus().addColumnBefore().run()} title="Sola Sütun Ekle"><ArrowLeftFromLine className="h-4 w-4"/></button>
-                    <button onClick={() => editor.chain().focus().addColumnAfter().run()} title="Sağa Sütun Ekle"><ArrowRightFromLine className="h-4 w-4"/></button>
-                    <button onClick={() => editor.chain().focus().deleteColumn().run()} title="Sütunu Sil"><Columns className="h-4 w-4"/></button>
-                    <div className="w-px h-5 bg-slate-200 dark:bg-slate-600 mx-1"></div>
-                    <button onClick={() => editor.chain().focus().addRowBefore().run()} title="Yukarı Satır Ekle"><ArrowUpFromLine className="h-4 w-4"/></button>
-                    <button onClick={() => editor.chain().focus().addRowAfter().run()} title="Aşağı Satır Ekle"><ArrowDownFromLine className="h-4 w-4"/></button>
-                    <button onClick={() => editor.chain().focus().deleteRow().run()} title="Satırı Sil"><Rows className="h-4 w-4"/></button>
-                    <div className="w-px h-5 bg-slate-200 dark:bg-slate-600 mx-1"></div>
-                    <button onClick={() => editor.chain().focus().mergeCells().run()} title="Hücreleri Birleştir"><Combine className="h-4 w-4"/></button>
-                    <button onClick={() => editor.chain().focus().splitCell().run()} title="Hücreyi Ayır"><GitMerge className="h-4 w-4"/></button>
-                    <div className="w-px h-5 bg-slate-200 dark:bg-slate-600 mx-1"></div>
-                     <button onClick={() => editor.chain().focus().toggleHeaderRow().run()} title="Başlık Satırı"><Pilcrow className="h-4 w-4"/></button>
-                    <div className="w-px h-5 bg-slate-200 dark:bg-slate-600 mx-1"></div>
-                    <button onClick={() => editor.chain().focus().deleteTable().run()} title="Tabloyu Sil"><Trash2 className="h-4 w-4 text-red-500"/></button>
-                </BubbleMenu>
-            )}
-            
+        <div className="flex flex-col h-full tiptap-editor-container">
             {isEditable && <MenuBar editor={editor} />}
-            <EditorContent editor={editor} className="flex-1 overflow-y-auto" />
+            <BubbleMenu editor={editor} tippyOptions={{ duration: 100, zIndex: 30 }} className="bubble-menu-wrapper">
+                <div className="bubble-menu">
+                    <button onClick={() => onEditWithAI(editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' '))} className="bubble-menu-button">
+                        <Sparkles className="h-4 w-4 mr-2" /> AI ile Düzenle
+                    </button>
+                    <button onClick={() => onExplainSelection(editor.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to, ' '))} className="bubble-menu-button">
+                        <Pencil className="h-4 w-4 mr-2" /> Açıkla
+                    </button>
+                </div>
+            </BubbleMenu>
+            <EditorContent editor={editor} className="flex-1 overflow-y-auto p-4 tiptap-content" />
+             {isStreaming && (
+                <div className="absolute bottom-4 left-4 p-2 bg-slate-100 dark:bg-slate-700 rounded-lg shadow-md z-20">
+                    <StreamingIndicator />
+                </div>
+            )}
         </div>
     );
 };

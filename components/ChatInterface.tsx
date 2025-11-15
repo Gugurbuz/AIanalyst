@@ -75,6 +75,7 @@ interface ChatInterfaceProps {
     onDeepAnalysisModeChange: (isOn: boolean) => void;
     isExpertMode: boolean;
     setIsExpertMode: (isOn: boolean) => void;
+    onLongTextPaste: (content: string) => void;
 }
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
@@ -89,7 +90,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     isDeepAnalysisMode,
     onDeepAnalysisModeChange,
     isExpertMode,
-    setIsExpertMode
+    setIsExpertMode,
+    onLongTextPaste
 }) => {
     const [input, setInput] = useState('');
     const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -247,6 +249,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         }
     }
 
+    const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+        const pastedText = e.clipboardData.getData('text');
+        if (pastedText.length > 500 && !isLoading) {
+            e.preventDefault();
+            onLongTextPaste(pastedText);
+        }
+    };
+
     return (
         <div className="w-full bg-white dark:bg-slate-800 rounded-lg p-3">
             <form onSubmit={handleSubmit} className="flex items-end space-x-3">
@@ -369,6 +379,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={handleKeyDown}
+                            onPaste={handlePaste}
                             placeholder="Bir iş analisti gibi sorun, Asisty yanıtlasın..."
                             disabled={isLoading}
                             className="w-full py-4 pl-36 pr-12 bg-transparent focus:outline-none disabled:opacity-50 resize-none overflow-y-auto"

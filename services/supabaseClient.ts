@@ -1,4 +1,3 @@
-// services/supabaseClient.ts
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -31,8 +30,8 @@ function createMockClient(): SupabaseClient {
         eq: () => fromMock,
         order: () => fromMock,
         single: () => thenable,
-        upsert: () => fromMock, 
-        in: () => fromMock,     
+        upsert: () => fromMock, // FIX: Add missing 'upsert' method
+        in: () => fromMock,     // FIX: Add missing 'in' method
         ...thenable,
     };
     
@@ -48,6 +47,7 @@ function createMockClient(): SupabaseClient {
                 data: { subscription: { unsubscribe: () => {} } },
             }),
         },
+        // Add other top-level properties to satisfy the SupabaseClient type.
         storage: {},
         rpc: {},
         channel: () => ({
@@ -64,14 +64,10 @@ function createMockClient(): SupabaseClient {
     return mockClient as unknown as SupabaseClient;
 }
 
-// !!!!!!!!!!!!!!! DÜZELTME BURADA !!!!!!!!!!!!!!!
-// 'process.env' KULLANIMI KALDIRILDI.
-// Artık sadece localStorage'dan veya varsayılan değerlerden okuyacak.
-// Bu, Developer Panel'in [3] çalışması için gereklidir.
 
-const supabaseUrl = localStorage.getItem('supabaseUrl') || 'https://mjrshqlpomrezudlpmoj.supabase.co';
-const supabaseAnonKey = localStorage.getItem('supabaseAnonKey') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qcnNocWxwb21yZXp1ZGxwbW9qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzY1MDcsImV4cCI6MjA3NzM1MjUwN30.CY46g7Qnua63CrsWteAAFvMHeU75hwfZzeLfjOKCKNI';
-// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+// Prioritize environment variables, fall back to localStorage, then to hardcoded defaults.
+const supabaseUrl = process.env.SUPABASE_URL || localStorage.getItem('supabaseUrl') || 'https://mjrshqlpomrezudlpmoj.supabase.co';
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || localStorage.getItem('supabaseAnonKey') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qcnNocWxwb21yZXp1ZGxwbW9qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzY1MDcsImV4cCI6MjA3NzM1MjUwN30.CY46g7Qnua63CrsWteAAFvMHeU75hwfZzeLfjOKCKNI';
 
 
 let supabase: SupabaseClient;
@@ -81,9 +77,11 @@ if (supabaseUrl && supabaseAnonKey) {
         supabase = createClient(supabaseUrl, supabaseAnonKey);
     } catch (error) {
         console.error("Failed to initialize Supabase client. Check credentials.", error);
+        // Fallback to mock client if initialization fails for some reason (e.g., malformed URL)
         supabase = createMockClient();
     }
 } else {
+    // This block is now less likely to be hit, but kept for robustness.
     console.warn(`Supabase URL or Anon Key is missing. 
     Please use the Developer Panel (type 'devmode') to configure them.`);
     supabase = createMockClient();

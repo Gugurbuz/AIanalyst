@@ -1,7 +1,7 @@
 // components/MaturityCheckReport.tsx
 import React from 'react';
 import type { MaturityReport, MaturityLevel } from '../types';
-import { ClipboardCheck, CheckCircle2, AlertCircle, ChevronsUp, ThumbsUp, Award, Bot, X } from 'lucide-react';
+import { ClipboardCheck, CheckCircle2, AlertCircle, ChevronsUp, ThumbsUp, Award, Bot, X, Sparkles } from 'lucide-react';
 
 interface MaturityCheckReportProps {
     report: MaturityReport | null;
@@ -38,10 +38,11 @@ const RadarChart: React.FC<{ data: MaturityReport['scores'] }> = ({ data }) => {
     const center = size / 2;
     const radius = size * 0.35;
     const labels = {
-        scope: "Kapsam",
-        technical: "Tek",
-        userFlow: "Akış",
-        nonFunctional: "NFR"
+        comprehensiveness: "Kapsamlılık",
+        clarity: "Netlik",
+        consistency: "Tutarlılık",
+        testability: "Test Edilebilirlik",
+        completeness: "Bütünlük"
     };
 
     const points = Object.keys(data).map((key, i, arr) => {
@@ -61,8 +62,8 @@ const RadarChart: React.FC<{ data: MaturityReport['scores'] }> = ({ data }) => {
     
     const labelPoints = Object.keys(labels).map((_, i, arr) => {
         const angle = (i / arr.length) * 2 * Math.PI - Math.PI / 2;
-        const x = center + (radius + 25) * Math.cos(angle);
-        const y = center + (radius + 25) * Math.sin(angle);
+        const x = center + (radius + 30) * Math.cos(angle);
+        const y = center + (radius + 30) * Math.sin(angle);
         return { x, y };
     });
 
@@ -169,16 +170,18 @@ export const MaturityCheckReport: React.FC<MaturityCheckReportProps> = ({ report
                     <h4 className="text-md font-semibold text-slate-700 dark:text-slate-300 mb-2">Analizi İlerletmek İçin Önerilen Sorular</h4>
                     <div className="flex flex-wrap gap-2">
                         {suggestedQuestions.map((q, index) => (
-                             <div key={index} className="flex items-center gap-0.5 bg-sky-100 dark:bg-sky-900/50 rounded-full transition-colors duration-200 group">
+                             <div key={index} className="flex items-center gap-0.5 bg-sky-100 dark:bg-sky-900/50 rounded-full transition-colors duration-200 group hover:bg-sky-200 dark:hover:bg-sky-800">
                                 <button 
                                     onClick={() => onPrepareQuestionForAnswer(q)}
-                                    className="pl-3 pr-2 py-1.5 text-sky-800 dark:text-sky-200 text-sm hover:text-sky-900 dark:hover:text-sky-100"
+                                    className="flex items-center gap-2 pl-3 pr-2 py-1.5 text-sky-800 dark:text-sky-200 text-sm"
+                                    title="Bu soruyu AI'a sor"
                                 >
+                                    <Sparkles className="h-4 w-4 text-sky-500 flex-shrink-0" />
                                     {q}
                                 </button>
                                 <button
                                     onClick={() => onDismissQuestion(q)}
-                                    className="p-1 rounded-full text-sky-600 dark:text-sky-400 hover:bg-sky-200 dark:hover:bg-sky-800 mr-1"
+                                    className="p-1 rounded-full text-sky-600 dark:text-sky-400 hover:bg-white/50 dark:hover:bg-black/20 mr-1"
                                     title="Bu soruyu kaldır"
                                 >
                                     <X className="h-3 w-3" />

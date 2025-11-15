@@ -27,7 +27,7 @@ interface UseAppLogicProps {
 
 export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) => {
     const uiState = useUIState();
-    const conversationState = useConversationState({ user, initialData });
+    const conversationState = useConversationState({ user, initialData, setError: uiState.setError });
 
     const [isProcessing, setIsProcessing] = useState(false);
     const [generatingDocType, setGeneratingDocType] = useState<'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | null>(null);
@@ -144,6 +144,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         if (error) uiState.setError("Geri bildirim kaydedilemedi.");
     };
 
+    // FIX: Modify this wrapper to return the new conversation ID.
     const handleNewConversationAndSend = async (content?: string, file?: File | null) => {
         const { newConvId, initialContent, initialFile } = await handleNewConversation(content);
         if (newConvId && initialContent) {
@@ -151,6 +152,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         } else if (newConvId && file) {
              chatService.sendMessage(content || '', file, false, newConvId);
         }
+        return { newConvId };
     };
     
     return {
