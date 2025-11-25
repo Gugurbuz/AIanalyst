@@ -110,7 +110,12 @@ const generateContent = async (
         }
 
         if (typeof data === 'object' && 'text' in data && typeof data.text === 'string') {
-             return { text: data.text, tokens: data.tokens || 0 };
+             return {
+                 text: data.text,
+                 tokens: data.tokens || data.usageMetadata?.totalTokenCount || 0,
+                 functionCalls: data.functionCalls,
+                 usageMetadata: data.usageMetadata
+             };
         }
 
         if (data instanceof ReadableStream) {
@@ -187,6 +192,8 @@ const generateContentStream = async function* (
             statusText: response.statusText,
             hasBody: !!response.body,
             isReadableStream: response.body instanceof ReadableStream,
+            contentType: response.headers.get('content-type'),
+            headers: Object.fromEntries(response.headers.entries()),
         });
 
         if (!response.ok) {
@@ -218,27 +225,149 @@ const generateContentStream = async function* (
         const reader = data.getReader();
         const decoder = new TextDecoder();
         let done = false;
+        let buffer = '';
+        let chunkCount = 0;
+        let totalTextLength = 0;
 
-        while (!done) {
-            const { value, done: readerDone } = await reader.read();
-            done = readerDone;
+        console.log("[STREAM DEBUG] Starting to read stream...");
+        console.log("[STREAM DEBUG] Reader object:", reader);
+        console.log("[STREAM DEBUG] Reader locked?:", data.locked);
+
+        try {
+            while (!done) {
+                console.log("[STREAM DEBUG] Calling reader.read()...");
+                const result = await reader.read();
+                chunkCount++;
+                console.log(`[STREAM DEBUG] reader.read() call #${chunkCount} returned:`, {
+                    done: result.done,
+                    hasValue: !!result.value,
+                    valueLength: result.value?.length,
+                    valueType: result.value?.constructor?.name,
+                });
+
+                if (chunkCount === 1 && result.value) {
+                    const firstChunkPreview = decoder.decode(result.value.slice(0, Math.min(500, result.value.length)), { stream: false });
+                    console.log("[STREAM DEBUG] FIRST CHUNK RAW:", firstChunkPreview);
+                }
+
+                done = result.done;
+                const value = result.value;
+
+                if (done && !value) {
+                    console.log("[STREAM DEBUG] Stream ended (done=true, no value)");
+                    break;
+                }
+
             if (value) {
-                const textContent = decoder.decode(value, { stream: true });
-                if (textContent) {
-                    yield {
-                        text: textContent,
-                        candidates: [{
-                            content: {
-                                parts: [{ text: textContent }]
+                const decodedChunk = decoder.decode(value, { stream: true });
+                console.log("[STREAM DEBUG] Received raw chunk:", decodedChunk.substring(0, 200));
+                buffer += decodedChunk;
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                console.log(`[STREAM DEBUG] Processing ${lines.length} lines from buffer`);
+
+                for (const line of lines) {
+                    if (!line.trim()) {
+                        console.log("[STREAM DEBUG] Skipping empty line");
+                        continue;
+                    }
+
+                    try {
+                        const chunk = JSON.parse(line);
+                        chunkCount++;
+
+                        console.log(`[STREAM DEBUG] Chunk #${chunkCount}:`, {
+                            hasText: !!chunk.text,
+                            textLength: chunk.text?.length || 0,
+                            textPreview: chunk.text?.substring(0, 50),
+                            hasFunctionCalls: !!chunk.functionCalls,
+                            hasUsageMetadata: !!chunk.usageMetadata,
+                            fullChunk: chunk
+                        });
+
+                        const responseChunk: any = {
+                            candidates: [{
+                                content: {
+                                    parts: []
+                                }
+                            }]
+                        };
+
+                        if (chunk.text) {
+                            totalTextLength += chunk.text.length;
+                            responseChunk.text = chunk.text;
+                            responseChunk.candidates[0].content.parts.push({ text: chunk.text });
+                            console.log(`[STREAM DEBUG] Added text part, total text length so far: ${totalTextLength}`);
+                        }
+
+                        if (chunk.functionCalls) {
+                            console.log(`[STREAM DEBUG] Processing ${chunk.functionCalls.length} function calls`);
+                            for (const fc of chunk.functionCalls) {
+                                responseChunk.candidates[0].content.parts.push({ functionCall: fc });
                             }
-                        }]
-                    } as unknown as GenerateContentResponse;
+                        }
+
+                        if (chunk.usageMetadata) {
+                            responseChunk.usageMetadata = chunk.usageMetadata;
+                            console.log("[STREAM DEBUG] Usage metadata:", chunk.usageMetadata);
+                        }
+
+                        console.log("[STREAM DEBUG] Yielding response chunk:", responseChunk);
+                        yield responseChunk as GenerateContentResponse;
+                    } catch (e) {
+                        console.error("[STREAM DEBUG] Failed to parse stream line:", e, "Line:", line);
+                    }
                 }
             }
         }
 
+        if (buffer.trim()) {
+            try {
+                const chunk = JSON.parse(buffer);
+                const responseChunk: any = {
+                    candidates: [{
+                        content: {
+                            parts: []
+                        }
+                    }]
+                };
+
+                if (chunk.text) {
+                    totalTextLength += chunk.text.length;
+                    responseChunk.text = chunk.text;
+                    responseChunk.candidates[0].content.parts.push({ text: chunk.text });
+                    console.log("[STREAM DEBUG] Final buffer - Added text part:", chunk.text.substring(0, 50));
+                }
+
+                if (chunk.functionCalls) {
+                    console.log(`[STREAM DEBUG] Final buffer - Processing ${chunk.functionCalls.length} function calls`);
+                    for (const fc of chunk.functionCalls) {
+                        responseChunk.candidates[0].content.parts.push({ functionCall: fc });
+                    }
+                }
+
+                if (chunk.usageMetadata) {
+                    responseChunk.usageMetadata = chunk.usageMetadata;
+                    console.log("[STREAM DEBUG] Final buffer - Usage metadata:", chunk.usageMetadata);
+                }
+
+                console.log("[STREAM DEBUG] Yielding final response chunk:", responseChunk);
+                yield responseChunk as GenerateContentResponse;
+            } catch (e) {
+                console.error("[STREAM DEBUG] Failed to parse final buffer:", e, "Buffer:", buffer);
+            }
+        }
+
+            console.log(`[STREAM DEBUG] Stream while-loop completed. Total chunks: ${chunkCount}, Total text length: ${totalTextLength}`);
+        } catch (error) {
+            console.error("[STREAM DEBUG] Error in while-loop:", error);
+            throw error;
+        }
+
+        console.log(`[STREAM DEBUG] Stream completed. Total chunks: ${chunkCount}, Total text length: ${totalTextLength}`);
     } catch (error) {
-        console.error("Supabase Function Hatası (generateContentStream):", error);
+        console.error("[STREAM DEBUG] Stream error (outer catch):", error);
         console.error("Error details:", {
             message: error?.message,
             context: error?.context,
@@ -405,71 +534,124 @@ export const geminiService = {
 
             let buffer = '';
             let thoughtYielded = false;
-            
-            for await (const chunk of responseStream) {
-                 // if (chunk.usageMetadata) ... // Token bilgisi stream'de gelmez
+            let chunkIndex = 0;
+            let totalTextReceived = 0;
 
-                // TODO: Edge Function 'functionCalls' döndürecek şekilde güncellenmeli
-                // if (chunk.functionCalls) ...
+            console.log("[HANDLER DEBUG] Starting handleUserMessageStream");
+
+            for await (const chunk of responseStream) {
+                chunkIndex++;
+                console.log(`[HANDLER DEBUG] Processing chunk #${chunkIndex}:`, chunk);
+
+                if (chunk.usageMetadata) {
+                    console.log("[HANDLER DEBUG] Yielding usage_update:", chunk.usageMetadata);
+                    yield { type: 'usage_update', tokens: chunk.usageMetadata.totalTokenCount };
+                }
+
+                if (chunk.candidates?.[0]?.content?.parts) {
+                    const parts = chunk.candidates[0].content.parts;
+                    console.log(`[HANDLER DEBUG] Found ${parts.length} parts in chunk`);
+                    for (const part of parts) {
+                        if (part.functionCall) {
+                            console.log("[HANDLER DEBUG] Yielding function_call:", part.functionCall);
+                            yield { type: 'function_call', functionCall: part.functionCall };
+                        }
+                    }
+                }
 
                 const text = (chunk as any).text;
-                if (typeof text !== 'string') continue;
-                if (text) {
-                    buffer += text;
-                    if (!thoughtYielded) {
-                        const startTag = '<dusunce>';
-                        const endTag = '</dusunce>';
-                        const startIdx = buffer.indexOf(startTag);
-                        const endIdx = buffer.indexOf(endTag);
+                console.log("[HANDLER DEBUG] Text from chunk:", { type: typeof text, length: text?.length, preview: text?.substring(0, 50) });
 
-                        if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-                            const jsonStr = buffer.substring(startIdx + startTag.length, endIdx);
-                            try {
-                                const thoughtPayload: ThoughtProcess = JSON.parse(jsonStr);
-                                yield { type: 'thought_chunk', payload: thoughtPayload };
-                                thoughtYielded = true;
-                                const remainingText = buffer.substring(endIdx + endTag.length);
-                                if (remainingText) {
-                                    yield { type: 'text_chunk', text: remainingText };
+                if (typeof text !== 'string') {
+                    console.log("[HANDLER DEBUG] Text is not string, skipping");
+                    continue;
+                }
+                if (text) {
+                    totalTextReceived += text.length;
+                    buffer += text;
+                    console.log(`[HANDLER DEBUG] Added text to buffer. Buffer length: ${buffer.length}, Total text received: ${totalTextReceived}`);
+                    if (!thoughtYielded) {
+                        const startMarker = '```thinking';
+                        const endMarker = '```';
+                        const startIdx = buffer.indexOf(startMarker);
+
+                        if (startIdx !== -1) {
+                            const searchStart = startIdx + startMarker.length;
+                            const endIdx = buffer.indexOf(endMarker, searchStart);
+
+                            if (endIdx !== -1) {
+                                const jsonStr = buffer.substring(searchStart, endIdx).trim();
+                                console.log("[HANDLER DEBUG] Found thinking code block, parsing JSON:", jsonStr.substring(0, 100));
+                                try {
+                                    const thoughtPayload: ThoughtProcess = JSON.parse(jsonStr);
+                                    console.log("[HANDLER DEBUG] Successfully parsed thought, yielding thought_chunk");
+                                    yield { type: 'thought_chunk', payload: thoughtPayload };
+                                    thoughtYielded = true;
+                                    const remainingText = buffer.substring(endIdx + endMarker.length);
+                                    if (remainingText.trim()) {
+                                        console.log("[HANDLER DEBUG] Yielding remaining text after thought:", remainingText.substring(0, 50));
+                                        yield { type: 'text_chunk', text: remainingText };
+                                    }
+                                    buffer = '';
+                                } catch (e) {
+                                    console.log("[HANDLER DEBUG] Failed to parse thought JSON (incomplete):", e);
                                 }
-                                buffer = ''; 
-                            } catch (e) {
-                                // Incomplete JSON
                             }
                         }
                     } else {
+                        console.log("[HANDLER DEBUG] Thought already yielded, yielding text_chunk:", buffer.substring(0, 50));
                         yield { type: 'text_chunk', text: buffer };
-                        buffer = ''; 
+                        buffer = '';
                     }
                 }
             }
 
+            console.log(`[HANDLER DEBUG] Stream loop ended. Buffer remaining: ${buffer.length} chars, Total text: ${totalTextReceived}`);
+
             if (buffer) {
-                 if (!thoughtYielded) {
-                     const startTag = '<dusunce>';
-                    const endTag = '</dusunce>';
-                    const startIdx = buffer.indexOf(startTag);
-                    const endIdx = buffer.indexOf(endTag);
-                     if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-                        const jsonStr = buffer.substring(startIdx + startTag.length, endIdx);
-                        try {
-                            const thoughtPayload: ThoughtProcess = JSON.parse(jsonStr);
-                            yield { type: 'thought_chunk', payload: thoughtPayload };
-                            const remainingText = buffer.substring(endIdx + endTag.length);
-                            if (remainingText) {
-                                yield { type: 'text_chunk', text: remainingText };
+                console.log("[HANDLER DEBUG] Processing final buffer:", buffer.substring(0, 100));
+                if (!thoughtYielded) {
+                    const startMarker = '```thinking';
+                    const endMarker = '```';
+                    const startIdx = buffer.indexOf(startMarker);
+
+                    if (startIdx !== -1) {
+                        const searchStart = startIdx + startMarker.length;
+                        const endIdx = buffer.indexOf(endMarker, searchStart);
+
+                        if (endIdx !== -1) {
+                            const jsonStr = buffer.substring(searchStart, endIdx).trim();
+                            console.log("[HANDLER DEBUG] Final buffer - Found thinking code block, parsing JSON");
+                            try {
+                                const thoughtPayload: ThoughtProcess = JSON.parse(jsonStr);
+                                console.log("[HANDLER DEBUG] Final buffer - Successfully parsed thought");
+                                yield { type: 'thought_chunk', payload: thoughtPayload };
+                                const remainingText = buffer.substring(endIdx + endMarker.length).trim();
+                                if (remainingText) {
+                                    console.log("[HANDLER DEBUG] Final buffer - Yielding remaining text:", remainingText.substring(0, 50));
+                                    yield { type: 'text_chunk', text: remainingText };
+                                }
+                            } catch(e) {
+                                console.log("[HANDLER DEBUG] Final buffer - Failed to parse thought, yielding all as text");
+                                yield { type: 'text_chunk', text: buffer };
                             }
-                        } catch(e) {
-                             yield { type: 'text_chunk', text: buffer.substring(endIdx + endTag.length) };
+                        } else {
+                            console.log("[HANDLER DEBUG] Final buffer - Incomplete thinking block, yielding as text_chunk");
+                            yield { type: 'text_chunk', text: buffer };
                         }
                     } else {
-                         yield { type: 'text_chunk', text: buffer };
+                        console.log("[HANDLER DEBUG] Final buffer - No thinking block, yielding as text_chunk");
+                        yield { type: 'text_chunk', text: buffer };
                     }
                 } else {
+                    console.log("[HANDLER DEBUG] Final buffer - Thought already yielded, yielding as text_chunk");
                     yield { type: 'text_chunk', text: buffer };
                 }
             }
+
+            console.log("[HANDLER DEBUG] handleUserMessageStream completed successfully");
         } catch (error) {
+            console.error("[HANDLER DEBUG] Error in handleUserMessageStream:", error);
             yield { type: 'error', message: error instanceof Error ? error.message : "Bilinmeyen bir hata oluştu" };
         }
     },
@@ -871,61 +1053,78 @@ export const geminiService = {
 
     generateAnalysisDocument: async function* (requestDoc: string, history: Message[], template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
         const historyString = history.map(m => `${m.role}: ${m.content}`).join('\n');
-        
+
         const prompt = template
             .replace('{request_document_content}', requestDoc || "[Talep Dokümanı Yok]")
             .replace('{conversation_history}', historyString)
-            + "\n\nÖNEMLİ NOT: Çıktıyı Markdown formatında değil, **doğrudan HTML formatında** oluştur."; // <-- GEÇİCİ ÇÖZÜM
+            + "\n\nÖNEMLİ NOT: Çıktıyı Markdown formatında değil, **doğrudan HTML formatında** oluştur.";
 
         const stream = generateContentStream(prompt, model);
 
         let totalTokens = 0;
         let fullText = '';
         for await (const chunk of stream) {
+            if (chunk.usageMetadata) {
+                totalTokens = chunk.usageMetadata.totalTokenCount;
+                yield { type: 'usage_update', tokens: totalTokens };
+            }
             const text = (chunk as any).text;
             if (text && typeof text === 'string') {
                 fullText += text;
                 yield { type: 'doc_stream_chunk', docKey: 'analysisDoc', chunk: fullText };
             }
         }
-        // Token'ları stream'den alamadığımız için 0 yolluyoruz
-        yield { type: 'usage_update', tokens: 0 };
+        if (totalTokens === 0) {
+            yield { type: 'usage_update', tokens: 0 };
+        }
     },
 
     generateTestScenarios: async function* (analysisDoc: string, template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
         const prompt = template.replace('{analysis_document_content}', analysisDoc)
-            + "\n\nÖNEMLİ NOT: Çıktıyı Markdown tablosu yerine **doğrudan HTML <table>...</table> formatında** oluştur."; 
-
-        const stream = generateContentStream(prompt, model);
-        let totalTokens = 0;
-        let fullText = '';
-        for await (const chunk of stream) {
-            const text = (chunk as any).text;
-            if (text && typeof text === 'string') {
-                fullText += text;
-                yield { type: 'doc_stream_chunk', docKey: 'testScenarios', chunk: fullText };
-            }
-        }
-        yield { type: 'usage_update', tokens: 0 };
-    },
-
-    generateTraceabilityMatrix: async function* (analysisDoc: string, testScenarios: string, template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
-        const prompt = template
-            .replace('{analysis_document_content}', analysisDoc) // Bu HTML
-            .replace('{test_scenarios_content}', testScenarios) // Bu da HTML
             + "\n\nÖNEMLİ NOT: Çıktıyı Markdown tablosu yerine **doğrudan HTML <table>...</table> formatında** oluştur.";
 
         const stream = generateContentStream(prompt, model);
         let totalTokens = 0;
         let fullText = '';
         for await (const chunk of stream) {
+            if (chunk.usageMetadata) {
+                totalTokens = chunk.usageMetadata.totalTokenCount;
+                yield { type: 'usage_update', tokens: totalTokens };
+            }
+            const text = (chunk as any).text;
+            if (text && typeof text === 'string') {
+                fullText += text;
+                yield { type: 'doc_stream_chunk', docKey: 'testScenarios', chunk: fullText };
+            }
+        }
+        if (totalTokens === 0) {
+            yield { type: 'usage_update', tokens: 0 };
+        }
+    },
+
+    generateTraceabilityMatrix: async function* (analysisDoc: string, testScenarios: string, template: string, model: GeminiModel): AsyncGenerator<StreamChunk> {
+        const prompt = template
+            .replace('{analysis_document_content}', analysisDoc)
+            .replace('{test_scenarios_content}', testScenarios)
+            + "\n\nÖNEMLİ NOT: Çıktıyı Markdown tablosu yerine **doğrudan HTML <table>...</table> formatında** oluştur.";
+
+        const stream = generateContentStream(prompt, model);
+        let totalTokens = 0;
+        let fullText = '';
+        for await (const chunk of stream) {
+            if (chunk.usageMetadata) {
+                totalTokens = chunk.usageMetadata.totalTokenCount;
+                yield { type: 'usage_update', tokens: totalTokens };
+            }
             const text = (chunk as any).text;
             if (text && typeof text === 'string') {
                 fullText += text;
                 yield { type: 'doc_stream_chunk', docKey: 'traceabilityMatrix', chunk: fullText };
             }
         }
-        yield { type: 'usage_update', tokens: 0 };
+        if (totalTokens === 0) {
+            yield { type: 'usage_update', tokens: 0 };
+        }
     },
 
     suggestNextFeature: async (analysisDoc: string, history: Message[]): Promise<{ suggestions: string[], tokens: number }> => {
