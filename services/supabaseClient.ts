@@ -64,14 +64,8 @@ function createMockClient(): SupabaseClient {
     return mockClient as unknown as SupabaseClient;
 }
 
-// !!!!!!!!!!!!!!! DÜZELTME BURADA !!!!!!!!!!!!!!!
-// 'process.env' KULLANIMI KALDIRILDI.
-// Artık sadece localStorage'dan veya varsayılan değerlerden okuyacak.
-// Bu, Developer Panel'in [3] çalışması için gereklidir.
-
-const supabaseUrl = localStorage.getItem('supabaseUrl') || 'https://mjrshqlpomrezudlpmoj.supabase.co';
-const supabaseAnonKey = localStorage.getItem('supabaseAnonKey') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qcnNocWxwb21yZXp1ZGxwbW9qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzY1MDcsImV4cCI6MjA3NzM1MjUwN30.CY46g7Qnua63CrsWteAAFvMHeU75hwfZzeLfjOKCKNI';
-// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 
 let supabase: SupabaseClient;
