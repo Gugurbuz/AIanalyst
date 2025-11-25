@@ -7,7 +7,7 @@ import { promptService } from './promptService';
 import { v4 as uuidv4 } from 'uuid';
 
 const getApiKey = (): string => {
-    const apiKey = process.env.API_KEY;
+    const apiKey = import.meta.env.VITE_GEMINI_APIKEY;
     if (!apiKey) throw new Error("Gemini API Anahtarı ayarlanmamış.");
     return apiKey;
 };
