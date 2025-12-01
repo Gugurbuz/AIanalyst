@@ -121,7 +121,22 @@ export const TiptapEditor: React.FC<TiptapEditorProps> = ({ content, onChange, o
         },
         editorProps: {
             attributes: {
-                class: `prose prose-slate dark:prose-invert max-w-none focus:outline-none p-4 md:p-6 h-full ${isEditable ? '' : 'cursor-text'}`,
+                class: `prose prose-slate dark:prose-invert max-w-none focus:outline-none p-4 md:p-6 h-full ${isEditable ? '' : 'cursor-text'}
+                        prose-headings:font-bold prose-headings:tracking-tight
+                        prose-h1:text-4xl prose-h1:font-extrabold prose-h1:pb-4 prose-h1:mt-12 prose-h1:mb-6 prose-h1:border-b prose-h1:border-slate-200 dark:prose-h1:border-slate-700
+                        prose-h2:text-3xl prose-h2:font-extrabold prose-h2:pb-3 prose-h2:mt-10 prose-h2:mb-5 prose-h2:border-b prose-h2:border-slate-200 dark:prose-h2:border-slate-700
+                        prose-h3:text-xl prose-h3:font-bold prose-h3:mt-8 prose-h3:mb-3
+                        prose-p:leading-relaxed prose-p:mb-5 prose-p:text-slate-700 dark:prose-p:text-slate-300
+                        prose-ul:my-5 prose-ul:list-disc prose-ul:pl-6
+                        prose-ol:my-5 prose-ol:list-decimal prose-ol:pl-6
+                        prose-li:my-2 prose-li:text-slate-700 dark:prose-li:text-slate-300
+                        prose-strong:font-semibold prose-strong:text-slate-800 dark:prose-strong:text-slate-200
+                        prose-hr:my-8 prose-hr:border-slate-200 dark:prose-hr:border-slate-700
+                        prose-table:my-5 prose-table:w-full prose-table:border-collapse
+                        prose-thead:bg-slate-100 dark:prose-thead:bg-slate-800
+                        prose-th:p-3 prose-th:font-semibold prose-th:text-left prose-th:border prose-th:border-slate-300 dark:prose-th:border-slate-600
+                        prose-td:p-3 prose-td:border prose-td:border-slate-300 dark:prose-td:border-slate-600
+                        prose-tr:border-t prose-tr:border-slate-200 dark:prose-tr:border-slate-700 prose-tr:even:bg-slate-50 dark:prose-tr:even:bg-slate-800/50`,
             },
         },
     }, [sanitizedContent, isEditable]);
