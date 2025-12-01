@@ -157,7 +157,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const model = config?.model || "gemini-2.0-flash-exp";
+    const model = config?.model || "gemini-2.5-flash";
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${stream ? 'streamGenerateContent' : 'generateContent'}?key=${apiKey}`;
 
     const requestBody: any = {
