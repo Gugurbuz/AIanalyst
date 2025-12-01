@@ -97,7 +97,7 @@ export const authService = {
     updateModelPreference: async (userId: string, provider: AIProvider, model: AIModel): Promise<void> => {
         const { error } = await supabase
             .from('user_profiles')
-            .update({ ai_provider: provider, ai_model: model })
+            .update({ ai_provider: provider, ai_model: model, updated_at: new Date().toISOString() })
             .eq('id', userId);
 
         if (error) {
