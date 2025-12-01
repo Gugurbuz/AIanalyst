@@ -1,5 +1,6 @@
 import { geminiService } from './geminiService';
 import { openaiService } from './openaiService';
+import { openaiWrapperService } from './openaiWrapperService';
 import { promptService } from './promptService';
 import type {
     Message,
@@ -28,17 +29,7 @@ export const aiService = {
         model: AIModel
     ): AsyncGenerator<StreamChunk> {
         if (provider === 'openai' && isOpenAIModel(model)) {
-            const hasRequestDoc = !!generatedDocs.requestDoc?.trim();
-            const hasRealAnalysisDoc = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
-            const isStartingConversation = !hasRequestDoc && !hasRealAnalysisDoc && history.filter(m => m.role !== 'system').length <= 1;
-
-            const systemInstruction = isStartingConversation
-                ? promptService.getPrompt('continueConversation')
-                : promptService.getPrompt('proactiveAnalystSystemInstruction')
-                    .replace('{analysis_document_content}', generatedDocs.analysisDoc || "...")
-                    .replace('{request_document_content}', generatedDocs.requestDoc || "...");
-
-            yield* openaiService.generateContentStream(history, systemInstruction, model);
+            yield* openaiWrapperService.handleUserMessageStream(history, generatedDocs, templates, model);
         } else if (provider === 'gemini' && isGeminiModel(model)) {
             yield* geminiService.handleUserMessageStream(history, generatedDocs, templates, model);
         } else {

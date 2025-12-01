@@ -11,12 +11,20 @@ interface ChatMessage {
   content: string;
 }
 
+interface FunctionDefinition {
+  name: string;
+  description: string;
+  parameters: any;
+}
+
 interface OpenAIRequest {
   messages: ChatMessage[];
   model?: string;
   stream?: boolean;
   temperature?: number;
   max_tokens?: number;
+  tools?: Array<{ type: string; function: FunctionDefinition }>;
+  tool_choice?: string | { type: string; function: { name: string } };
 }
 
 Deno.serve(async (req: Request) => {
@@ -61,13 +69,24 @@ Deno.serve(async (req: Request) => {
     const model = body.model || "gpt-4-turbo";
     const stream = body.stream ?? false;
 
-    const requestBody = {
+    const requestBody: any = {
       model,
       messages: body.messages,
       stream,
-      ...(body.temperature !== undefined && { temperature: body.temperature }),
-      ...(body.max_tokens !== undefined && { max_tokens: body.max_tokens }),
     };
+
+    if (body.temperature !== undefined) {
+      requestBody.temperature = body.temperature;
+    }
+    if (body.max_tokens !== undefined) {
+      requestBody.max_tokens = body.max_tokens;
+    }
+    if (body.tools && body.tools.length > 0) {
+      requestBody.tools = body.tools;
+    }
+    if (body.tool_choice) {
+      requestBody.tool_choice = body.tool_choice;
+    }
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
