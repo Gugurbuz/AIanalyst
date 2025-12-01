@@ -48,17 +48,34 @@ export const authService = {
             .from('user_profiles')
             .select('*')
             .eq('id', userId)
-            .single();
+            .maybeSingle();
 
         if (error) {
             console.error("Error fetching user profile:", error);
-            // Handle specific case where profile doesn't exist for a new user yet
-            if (error.code === 'PGRST116') {
-                 throw new Error("Kullanıcı profiliniz bulunamadı. Bu durum genellikle yeni kayıtlarda yaşanır. Lütfen birkaç saniye sonra sayfayı yenileyin veya tekrar giriş yapın.");
-            }
-            // For other errors, show a generic message
             throw new Error(`Kullanıcı profili yüklenemedi: ${error.message}`);
         }
+
+        if (!data) {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data: newProfile, error: insertError } = await supabase
+                    .from('user_profiles')
+                    .insert({
+                        id: userId,
+                        email: user.email,
+                        full_name: user.email?.split('@')[0] || 'User'
+                    })
+                    .select()
+                    .single();
+
+                if (insertError) {
+                    throw new Error(`Kullanıcı profili oluşturulamadı: ${insertError.message}`);
+                }
+                return newProfile as UserProfile;
+            }
+            throw new Error("Kullanıcı profiliniz bulunamadı.");
+        }
+
         return data as UserProfile;
     },
     
