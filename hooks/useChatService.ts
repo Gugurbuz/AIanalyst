@@ -1,13 +1,14 @@
 // hooks/useChatService.ts
 import { useState, useCallback, useRef } from 'react';
 import { geminiService } from '../services/geminiService';
+import { openaiWrapperService } from '../services/openaiWrapperService';
 import { aiService } from '../services/aiService';
 import { promptService } from '../services/promptService';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../services/supabaseClient';
 import type { useConversationState } from './useConversationState';
 import type { useUIState } from './useUIState';
-import type { Message, GeminiModel, ThoughtProcess, StreamChunk, Document, GeneratedDocs, SourcedDocument, AIProvider, AIModel } from '../types';
+import type { Message, GeminiModel, OpenAIModel, ThoughtProcess, StreamChunk, Document, GeneratedDocs, SourcedDocument, AIProvider, AIModel } from '../types';
 
 const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
     const defaultGeneratedDocs: GeneratedDocs = {
@@ -230,19 +231,18 @@ export const useChatService = ({
             const streamConv = conversationState.conversations.find(c => c.id === activeId)!;
             const streamGeneratedDocs = buildGeneratedDocs(streamConv.documents);
 
+            const templates = {
+                analysis: conversationState.allTemplates.find(t => t.id === conversationState.selectedTemplates.analysis)?.prompt || promptService.getPrompt('generateAnalysisDocument'),
+                test: conversationState.allTemplates.find(t => t.id === conversationState.selectedTemplates.test)?.prompt || promptService.getPrompt('generateTestScenarios'),
+                traceability: conversationState.allTemplates.find(t => t.id === conversationState.selectedTemplates.traceability)?.prompt || promptService.getPrompt('generateTraceabilityMatrix'),
+                visualization: promptService.getPrompt(uiState.diagramType === 'bpmn' ? 'generateBPMN' : 'generateVisualization'),
+            };
+
             const stream = uiState.isExpertMode
-                ? geminiService.runExpertAnalysisStream(userMessage, streamGeneratedDocs, {
-                    analysis: promptService.getPrompt('generateAnalysisDocument'),
-                    test: promptService.getPrompt('generateTestScenarios'),
-                    traceability: promptService.getPrompt('generateTraceabilityMatrix'),
-                    visualization: promptService.getPrompt(uiState.diagramType === 'bpmn' ? 'generateBPMN' : 'generateVisualization'),
-                }, uiState.diagramType)
-                : aiService.handleUserMessageStream(historyForApi, streamGeneratedDocs, {
-                    analysis: conversationState.allTemplates.find(t => t.id === conversationState.selectedTemplates.analysis)?.prompt || promptService.getPrompt('generateAnalysisDocument'),
-                    test: conversationState.allTemplates.find(t => t.id === conversationState.selectedTemplates.test)?.prompt || promptService.getPrompt('generateTestScenarios'),
-                    traceability: conversationState.allTemplates.find(t => t.id === conversationState.selectedTemplates.traceability)?.prompt || promptService.getPrompt('generateTraceabilityMatrix'),
-                    visualization: promptService.getPrompt(uiState.diagramType === 'bpmn' ? 'generateBPMN' : 'generateVisualization'),
-                }, aiProvider, aiModel);
+                ? (aiProvider === 'gemini'
+                    ? geminiService.runExpertAnalysisStream(userMessage, streamGeneratedDocs, templates, uiState.diagramType)
+                    : openaiWrapperService.runExpertAnalysisStream(userMessage, streamGeneratedDocs, templates, uiState.diagramType, aiModel as OpenAIModel))
+                : aiService.handleUserMessageStream(historyForApi, streamGeneratedDocs, templates, aiProvider, aiModel);
             
             let accumulatedContent = '';
             let accumulatedThought: ThoughtProcess | null = null;

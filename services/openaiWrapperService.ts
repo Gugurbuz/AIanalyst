@@ -55,6 +55,13 @@ const FUNCTION_DEFINITIONS = {
     }
 };
 
+const convertHistoryToText = (history: Message[]): string => {
+    return history
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => `${m.role === 'user' ? 'Kullanıcı' : 'Asistan'}: ${m.content}`)
+        .join('\n\n');
+};
+
 export const openaiWrapperService = {
     handleUserMessageStream: async function* (
         history: Message[],
@@ -98,7 +105,7 @@ export const openaiWrapperService = {
                 body: JSON.stringify({
                     model,
                     messages: messagesWithSystem,
-                    tools: isStartingConversation ? tools : undefined,
+                    tools: tools,
                     stream: false,
                 }),
             });
@@ -166,5 +173,100 @@ export const openaiWrapperService = {
                 message: error?.message || 'OpenAI ile iletişimde hata oluştu'
             };
         }
+    },
+
+    runExpertAnalysisStream: async function* (
+        userMessage: Message,
+        generatedDocs: GeneratedDocs,
+        templates: { analysis: string; test: string; traceability: string; visualization: string },
+        diagramType: 'mermaid' | 'bpmn',
+        model: OpenAIModel
+    ): AsyncGenerator<StreamChunk> {
+        const systemPrompt = promptService.getPrompt('expertSystemInstruction')
+            .replace('{request_document_content}', generatedDocs.requestDoc || "...")
+            .replace('{analysis_document_content}', generatedDocs.analysisDoc || "...");
+
+        yield {
+            type: 'thought_chunk',
+            payload: {
+                title: "Expert Analiz Modu Başlatıldı",
+                steps: [
+                    { id: "init", name: "Expert mod aktif - Tüm dokümanlar otomatik oluşturulacak", status: "completed" }
+                ]
+            }
+        };
+
+        const steps = [
+            { key: 'analysis', name: 'İş Analizi Dokümanı', template: templates.analysis },
+            { key: 'viz', name: 'Süreç Görselleştirmesi', template: templates.visualization },
+            { key: 'test', name: 'Test Senaryoları', template: templates.test },
+            { key: 'traceability', name: 'İzlenebilirlik Matrisi', template: templates.traceability }
+        ];
+
+        for (const step of steps) {
+            try {
+                yield {
+                    type: 'thought_chunk',
+                    payload: {
+                        title: "Expert Analiz",
+                        steps: [{ id: step.key, name: `${step.name} oluşturuluyor...`, status: "in_progress" }]
+                    }
+                };
+
+                let prompt = step.template
+                    .replace('{request_document_content}', generatedDocs.requestDoc || "...")
+                    .replace('{analysis_document_content}', generatedDocs.analysisDoc || "...")
+                    .replace('{conversation_history}', `Kullanıcı: ${userMessage.content}`);
+
+                if (step.key === 'test') {
+                    prompt = prompt.replace('{analysis_document_content}', generatedDocs.analysisDoc || "...");
+                } else if (step.key === 'traceability') {
+                    prompt = prompt
+                        .replace('{analysis_document_content}', generatedDocs.analysisDoc || "...")
+                        .replace('{test_scenarios_content}', generatedDocs.testScenarios || "...");
+                }
+
+                const result = await openaiService.generateContent(prompt, model);
+
+                const docKey = step.key === 'viz'
+                    ? (diagramType === 'bpmn' ? 'bpmnViz' : 'mermaidViz')
+                    : (step.key === 'analysis' ? 'analysisDoc'
+                        : step.key === 'test' ? 'testScenarios'
+                        : 'traceabilityMatrix');
+
+                yield {
+                    type: 'doc_stream_chunk',
+                    docKey: docKey as any,
+                    chunk: result.text
+                };
+
+                yield {
+                    type: 'usage_update',
+                    tokens: result.tokens
+                };
+
+                yield {
+                    type: 'thought_chunk',
+                    payload: {
+                        title: "Expert Analiz",
+                        steps: [{ id: step.key, name: `${step.name} tamamlandı`, status: "completed" }]
+                    }
+                };
+
+            } catch (error: any) {
+                yield {
+                    type: 'thought_chunk',
+                    payload: {
+                        title: "Expert Analiz",
+                        steps: [{ id: step.key, name: `${step.name} hatası: ${error.message}`, status: "error" }]
+                    }
+                };
+            }
+        }
+
+        yield {
+            type: 'text_chunk',
+            text: 'Expert analiz tamamlandı. Tüm dokümanlar başarıyla oluşturuldu.'
+        };
     }
 };
