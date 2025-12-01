@@ -127,6 +127,8 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         checkTokenLimit,
         handleNewConversation,
         handleGenerateDoc: documentServices.handleGenerateDoc,
+        aiProvider,
+        aiModel,
     });
     
     const handleSuggestNextFeature = async () => {
