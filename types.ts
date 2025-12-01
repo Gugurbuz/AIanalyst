@@ -10,15 +10,22 @@ export type AppMode = 'analyst';
 
 export type GeminiModel = 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.5-flash-lite';
 
+export type AIProvider = 'gemini' | 'openai';
+
+export type OpenAIModel = 'gpt-4-turbo' | 'gpt-4' | 'gpt-3.5-turbo';
+
+export type AIModel = GeminiModel | OpenAIModel;
+
 export type PlanID = 'free' | 'pro' | 'corporate';
 
 export interface UserProfile {
-    id: string; // Corresponds to auth.users.id
-    plan: PlanID;
-    token_limit: number;
-    tokens_used: number;
-    plan_start_date: string;
-    plan_end_date: string | null;
+    id: string;
+    email: string;
+    full_name: string | null;
+    created_at: string;
+    updated_at: string;
+    ai_provider: AIProvider;
+    ai_model: AIModel;
 }
 
 export interface Feedback {

@@ -1,6 +1,6 @@
 // services/authService.ts
 import { supabase } from './supabaseClient';
-import type { User, UserProfile, Template } from '../types';
+import type { User, UserProfile, Template, AIProvider, AIModel } from '../types';
 import type { Session } from '@supabase/supabase-js';
 
 export const authService = {
@@ -63,7 +63,9 @@ export const authService = {
                     .insert({
                         id: userId,
                         email: user.email,
-                        full_name: user.email?.split('@')[0] || 'User'
+                        full_name: user.email?.split('@')[0] || 'User',
+                        ai_provider: 'openai',
+                        ai_model: 'gpt-4-turbo'
                     })
                     .select()
                     .single();
@@ -90,6 +92,17 @@ export const authService = {
             throw new Error(`Şablonlar yüklenemedi: ${error.message}`);
         }
         return data as Template[];
+    },
+
+    updateModelPreference: async (userId: string, provider: AIProvider, model: AIModel): Promise<void> => {
+        const { error } = await supabase
+            .from('user_profiles')
+            .update({ ai_provider: provider, ai_model: model, updated_at: new Date().toISOString() })
+            .eq('id', userId);
+
+        if (error) {
+            throw new Error(`Model tercihi güncellenemedi: ${error.message}`);
+        }
     },
 
     loginWithTestUser: async (): Promise<User> => {
