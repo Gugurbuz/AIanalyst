@@ -5,6 +5,7 @@ import { useConversationState } from './useConversationState';
 import { useDocumentServices } from './useDocumentServices';
 import { useChatService } from './useChatService';
 import { geminiService } from '../services/geminiService';
+import { authService } from '../services/authService';
 import { v4 as uuidv4 } from 'uuid';
 import type {
     User,
@@ -14,7 +15,9 @@ import type {
     GeminiModel,
     Template,
     DocumentVersion,
-    DocumentType
+    DocumentType,
+    AIProvider,
+    AIModel
 } from '../types';
 import type { AppData } from '../index';
 import { supabase } from '../services/supabaseClient';
@@ -31,6 +34,13 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
 
     const [isProcessing, setIsProcessing] = useState(false);
     const [generatingDocType, setGeneratingDocType] = useState<'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | null>(null);
+
+    const [aiProvider, setAiProvider] = useState<AIProvider>(
+        conversationState.userProfile?.ai_provider || 'openai'
+    );
+    const [aiModel, setAiModel] = useState<AIModel>(
+        conversationState.userProfile?.ai_model || 'gpt-4-turbo'
+    );
 
     const activeModel = useCallback((): GeminiModel => {
         if (uiState.isDeepAnalysisMode) return 'gemini-2.5-pro';
@@ -152,7 +162,29 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
              chatService.sendMessage(content || '', file, false, newConvId);
         }
     };
-    
+
+    const handleProviderChange = useCallback(async (provider: AIProvider) => {
+        setAiProvider(provider);
+        const defaultModel = provider === 'openai' ? 'gpt-4-turbo' : 'gemini-2.5-pro';
+        setAiModel(defaultModel);
+        try {
+            await authService.updateModelPreference(user.id, provider, defaultModel);
+            conversationState.setUserProfile(prev => prev ? { ...prev, ai_provider: provider, ai_model: defaultModel } : null);
+        } catch (error: any) {
+            uiState.setError(error.message);
+        }
+    }, [user.id, conversationState, uiState]);
+
+    const handleModelChange = useCallback(async (model: AIModel) => {
+        setAiModel(model);
+        try {
+            await authService.updateModelPreference(user.id, aiProvider, model);
+            conversationState.setUserProfile(prev => prev ? { ...prev, ai_model: model } : null);
+        } catch (error: any) {
+            uiState.setError(error.message);
+        }
+    }, [user.id, aiProvider, conversationState, uiState]);
+
     return {
         ...uiState,
         ...conversationState,
@@ -161,13 +193,16 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         isProcessing,
         generatingDocType,
         onLogout,
+        aiProvider,
+        aiModel,
+        handleProviderChange,
+        handleModelChange,
         sendMessage: chatService.sendMessage,
         handleNewConversation: handleNewConversationAndSend,
         handleFeedbackUpdate,
         handleSuggestNextFeature,
         handleDeepAnalysisModeChange: (isOn: boolean) => uiState.setIsDeepAnalysisMode(isOn),
-        
-        // Stubs for props that need full implementation
+
         handleEditLastUserMessage: () => {
              const { activeConversation } = conversationState;
              if (!activeConversation) return;

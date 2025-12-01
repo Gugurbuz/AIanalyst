@@ -1,7 +1,8 @@
 import React from 'react';
-import type { User, Theme, UserProfile } from '../types';
+import type { User, Theme, UserProfile, AIProvider, AIModel } from '../types';
 import { ThemeSwitcher } from './ThemeSwitcher';
-import { Share2, Database, PanelRightOpen, PanelRightClose } from 'lucide-react';
+import { ModelSelector } from './ModelSelector';
+import { Share2, Database } from 'lucide-react';
 
 interface HeaderProps {
     user: User;
@@ -10,6 +11,10 @@ interface HeaderProps {
     onThemeChange: (theme: Theme) => void;
     onOpenShareModal: () => void;
     userProfile: UserProfile | null;
+    aiProvider: AIProvider;
+    aiModel: AIModel;
+    onProviderChange: (provider: AIProvider) => void;
+    onModelChange: (model: AIModel) => void;
 }
 
 const LogoIcon = ({ className }: { className?: string }) => (
@@ -28,23 +33,6 @@ const Logo = () => (
     </div>
 );
 
-const UserTokenIndicator: React.FC<{ profile: UserProfile }> = ({ profile }) => {
-    const { tokens_used, token_limit } = profile;
-    const usagePercentage = token_limit > 0 ? (tokens_used / token_limit) * 100 : 0;
-    const remainingTokens = token_limit - tokens_used;
-    let progressBarColor = 'bg-emerald-500';
-    if (usagePercentage > 90) progressBarColor = 'bg-red-500';
-    else if (usagePercentage > 75) progressBarColor = 'bg-amber-500';
-
-    return (
-        <div title={`Kalan: ${Math.max(0, remainingTokens).toLocaleString('tr-TR')} token`} className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400 w-32">
-            <Database className="h-4 w-4 flex-shrink-0" />
-            <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-                <div className={`${progressBarColor} h-2 rounded-full`} style={{ width: `${Math.min(usagePercentage, 100)}%` }}></div>
-            </div>
-        </div>
-    );
-};
 
 
 export const Header: React.FC<HeaderProps> = ({
@@ -54,6 +42,10 @@ export const Header: React.FC<HeaderProps> = ({
     onThemeChange,
     onOpenShareModal,
     userProfile,
+    aiProvider,
+    aiModel,
+    onProviderChange,
+    onModelChange,
 }) => {
     const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
     const userMenuRef = React.useRef<HTMLDivElement>(null);
@@ -76,8 +68,13 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             <div className="flex items-center gap-4 flex-shrink-0 mr-4">
-                {userProfile && <UserTokenIndicator profile={userProfile} />}
-                
+                <ModelSelector
+                    currentProvider={aiProvider}
+                    currentModel={aiModel}
+                    onProviderChange={onProviderChange}
+                    onModelChange={onModelChange}
+                />
+
                 <ThemeSwitcher theme={theme} onThemeChange={onThemeChange} />
 
                 <div className="relative" ref={userMenuRef}>
