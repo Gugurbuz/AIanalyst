@@ -1,15 +1,22 @@
-import OpenAI from 'openai';
 import type { OpenAIModel, Message, ThoughtProcess, StreamChunk } from '../types';
 
-const getOpenAIClient = () => {
-    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-    if (!apiKey) {
-        throw new Error('OpenAI API anahtarı bulunamadı. Lütfen .env dosyasında VITE_OPENAI_API_KEY değişkenini ayarlayın.');
+const getEdgeFunctionUrl = () => {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    if (!supabaseUrl) {
+        throw new Error('Supabase URL bulunamadı.');
     }
-    return new OpenAI({
-        apiKey,
-        dangerouslyAllowBrowser: true
-    });
+    return `${supabaseUrl}/functions/v1/openai-proxy`;
+};
+
+const getAuthHeaders = () => {
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    if (!anonKey) {
+        throw new Error('Supabase anon key bulunamadı.');
+    }
+    return {
+        'Authorization': `Bearer ${anonKey}`,
+        'Content-Type': 'application/json',
+    };
 };
 
 const convertMessagesToOpenAIFormat = (history: Message[]) => {
@@ -28,61 +35,96 @@ export const openaiService = {
         model: OpenAIModel = 'gpt-4-turbo'
     ): AsyncGenerator<StreamChunk> {
         try {
-            const client = getOpenAIClient();
+            const edgeFunctionUrl = getEdgeFunctionUrl();
+            const headers = getAuthHeaders();
             const openaiMessages = convertMessagesToOpenAIFormat(messages);
 
-            const stream = await client.chat.completions.create({
-                model: model,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    ...openaiMessages
-                ],
-                stream: true,
+            const response = await fetch(edgeFunctionUrl, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    model,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        ...openaiMessages
+                    ],
+                    stream: true,
+                }),
             });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'OpenAI API ile iletişimde hata oluştu');
+            }
+
+            if (!response.body) {
+                throw new Error('Yanıt gövdesi alınamadı');
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
 
             let buffer = '';
             let thoughtYielded = false;
             let totalTokens = 0;
 
-            for await (const chunk of stream) {
-                const delta = chunk.choices[0]?.delta?.content;
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
 
-                if (delta) {
-                    buffer += delta;
+                const text = decoder.decode(value, { stream: true });
+                const lines = text.split('\n');
 
-                    if (!thoughtYielded) {
-                        const startMarker = '```thinking';
-                        const endMarker = '```';
-                        const startIdx = buffer.indexOf(startMarker);
+                for (const line of lines) {
+                    if (!line.trim() || line.trim() === 'data: [DONE]') continue;
 
-                        if (startIdx !== -1) {
-                            const searchStart = startIdx + startMarker.length;
-                            const endIdx = buffer.indexOf(endMarker, searchStart);
+                    const jsonStr = line.replace(/^data: /, '').trim();
+                    if (!jsonStr) continue;
 
-                            if (endIdx !== -1) {
-                                const jsonStr = buffer.substring(searchStart, endIdx).trim();
-                                try {
-                                    const thoughtPayload: ThoughtProcess = JSON.parse(jsonStr);
-                                    yield { type: 'thought_chunk', payload: thoughtPayload };
-                                    thoughtYielded = true;
-                                    const remainingText = buffer.substring(endIdx + endMarker.length);
-                                    if (remainingText.trim()) {
-                                        yield { type: 'text_chunk', text: remainingText };
+                    try {
+                        const chunk = JSON.parse(jsonStr);
+                        const delta = chunk.choices?.[0]?.delta?.content;
+
+                        if (delta) {
+                            buffer += delta;
+
+                            if (!thoughtYielded) {
+                                const startMarker = '```thinking';
+                                const endMarker = '```';
+                                const startIdx = buffer.indexOf(startMarker);
+
+                                if (startIdx !== -1) {
+                                    const searchStart = startIdx + startMarker.length;
+                                    const endIdx = buffer.indexOf(endMarker, searchStart);
+
+                                    if (endIdx !== -1) {
+                                        const jsonStr = buffer.substring(searchStart, endIdx).trim();
+                                        try {
+                                            const thoughtPayload: ThoughtProcess = JSON.parse(jsonStr);
+                                            yield { type: 'thought_chunk', payload: thoughtPayload };
+                                            thoughtYielded = true;
+                                            const remainingText = buffer.substring(endIdx + endMarker.length);
+                                            if (remainingText.trim()) {
+                                                yield { type: 'text_chunk', text: remainingText };
+                                            }
+                                            buffer = '';
+                                        } catch (e) {
+                                            console.log("Failed to parse thought JSON (incomplete):", e);
+                                        }
                                     }
-                                    buffer = '';
-                                } catch (e) {
-                                    console.log("Failed to parse thought JSON (incomplete):", e);
                                 }
+                            } else {
+                                yield { type: 'text_chunk', text: buffer };
+                                buffer = '';
                             }
                         }
-                    } else {
-                        yield { type: 'text_chunk', text: buffer };
-                        buffer = '';
-                    }
-                }
 
-                if (chunk.usage) {
-                    totalTokens = chunk.usage.total_tokens;
+                        if (chunk.usage) {
+                            totalTokens = chunk.usage.total_tokens;
+                        }
+                    } catch (e) {
+                        console.error('JSON parse error:', e);
+                    }
                 }
             }
 
@@ -130,22 +172,34 @@ export const openaiService = {
         }
     },
 
-    generateContent: async (
+    generateContent: async function(
         prompt: string,
         model: OpenAIModel = 'gpt-4-turbo'
-    ): Promise<{ text: string, tokens: number }> => {
+    ): Promise<{ text: string, tokens: number }> {
         try {
-            const client = getOpenAIClient();
+            const edgeFunctionUrl = getEdgeFunctionUrl();
+            const headers = getAuthHeaders();
 
-            const response = await client.chat.completions.create({
-                model: model,
-                messages: [
-                    { role: 'user', content: prompt }
-                ],
+            const response = await fetch(edgeFunctionUrl, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    model,
+                    messages: [
+                        { role: 'user', content: prompt }
+                    ],
+                    stream: false,
+                }),
             });
 
-            const text = response.choices[0]?.message?.content || '';
-            const tokens = response.usage?.total_tokens || 0;
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'OpenAI API ile iletişimde hata oluştu');
+            }
+
+            const data = await response.json();
+            const text = data.choices?.[0]?.message?.content || '';
+            const tokens = data.usage?.total_tokens || 0;
 
             return { text, tokens };
         } catch (error: any) {
