@@ -1,11 +1,10 @@
 // hooks/useDocumentServices.ts
-// FIX: Import React to fix "Cannot find namespace 'React'" error for React.ChangeEvent type.
 import React, { useState, useCallback } from 'react';
 import { geminiService } from '../services/geminiService';
 import { promptService } from '../services/promptService';
 import type { useConversationState } from './useConversationState';
 import type { useUIState } from './useUIState';
-import type { GeminiModel, DocumentVersion, SourcedDocument, GeneratedDocs, DocumentType } from '../types';
+import type { GeminiModel, DocumentVersion, GeneratedDocs, DocumentType } from '../types';
 
 const simpleHash = (str: string): string => {
     if (!str) return '0';
@@ -23,7 +22,6 @@ const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs> = {
     analysis: 'analysisDoc',
     test: 'testScenarios',
     traceability: 'traceabilityMatrix',
-    mermaid: 'mermaidViz',
     bpmn: 'bpmnViz',
     maturity_report: 'maturityReport',
 };
@@ -33,8 +31,8 @@ interface DocumentServicesProps {
     uiState: ReturnType<typeof useUIState>;
     isProcessing: boolean;
     setIsProcessing: (isProcessing: boolean) => void;
-    generatingDocType: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | null;
-    setGeneratingDocType: (type: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | null) => void;
+    generatingDocType: 'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | null;
+    setGeneratingDocType: (type: 'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | null) => void;
     activeModel: () => GeminiModel;
     checkTokenLimit: () => boolean;
 }
@@ -52,7 +50,7 @@ export const useDocumentServices = ({
 
     const [inlineModificationState, setInlineModificationState] = useState<{ docKey: 'analysisDoc' | 'testScenarios'; originalText: string } | null>(null);
 
-    const handleGenerateDoc = useCallback(async (type: 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => {
+    const handleGenerateDoc = useCallback(async (type: 'request' | 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string) => {
         const activeConv = conversationState.activeConversation;
         if (!activeConv || isProcessing) return;
         if (!checkTokenLimit()) return;
@@ -60,29 +58,41 @@ export const useDocumentServices = ({
         setGeneratingDocType(type);
         setIsProcessing(true);
         
-        const diagramTypeToUse = newDiagramType || uiState.diagramType;
         const templates = {
             analysis: conversationState.allTemplates.find(t => t.id === (newTemplateId || conversationState.selectedTemplates.analysis))?.prompt || promptService.getPrompt('generateAnalysisDocument'),
             test: conversationState.allTemplates.find(t => t.id === (newTemplateId || conversationState.selectedTemplates.test))?.prompt || promptService.getPrompt('generateTestScenarios'),
             traceability: conversationState.allTemplates.find(t => t.id === (newTemplateId || conversationState.selectedTemplates.traceability))?.prompt || promptService.getPrompt('generateTraceabilityMatrix'),
-            visualization: promptService.getPrompt(diagramTypeToUse === 'bpmn' ? 'generateBPMN' : 'generateVisualization'),
+            visualization: promptService.getPrompt('generateBPMN'),
         };
 
+        // Access content safely using the normalized structure
+        const analysisContent = activeConv.generatedDocs.analysisDoc?.content || '';
+        const requestContent = activeConv.generatedDocs.requestDoc?.content || '';
+        const testContent = activeConv.generatedDocs.testScenarios?.content || '';
+
         const streamGenerators = {
-            analysis: () => geminiService.generateAnalysisDocument(activeConv.generatedDocs.requestDoc, activeConv.messages, templates.analysis, activeModel()),
-            test: () => geminiService.generateTestScenarios(activeConv.generatedDocs.analysisDoc, templates.test, activeModel()),
-            // FIX: Correctly access the .content property of the SourcedDocument type for testScenarios.
-            traceability: () => geminiService.generateTraceabilityMatrix(activeConv.generatedDocs.analysisDoc, activeConv.generatedDocs.testScenarios.content, templates.traceability, activeModel()),
+            analysis: () => geminiService.generateAnalysisDocument(requestContent, activeConv.messages, templates.analysis, activeModel()),
+            test: () => geminiService.generateTestScenarios(analysisContent, templates.test, activeModel()),
+            traceability: () => geminiService.generateTraceabilityMatrix(analysisContent, testContent, templates.traceability, activeModel()),
         };
 
         try {
-            if (type === 'viz') {
-                const { code, tokens } = await geminiService.generateDiagram(activeConv.generatedDocs.analysisDoc, diagramTypeToUse, templates.visualization, activeModel());
+            if (type === 'request') {
+                const historyText = activeConv.messages
+                    .filter(m => m.role !== 'system')
+                    .map(m => `${m.role === 'user' ? 'Kullanıcı' : 'Asistan'}: ${m.content}`)
+                    .join('\n\n');
+                
+                const { jsonString, tokens } = await geminiService.parseTextToRequestDocument(historyText);
                 conversationState.commitTokenUsage(tokens);
-                const sourceHash = simpleHash(activeConv.generatedDocs.analysisDoc);
+                await conversationState.saveDocumentVersion('requestDoc', jsonString, "Sohbet geçmişinden oluşturuldu", undefined, undefined, tokens);
+            } else if (type === 'viz') {
+                const { code, tokens } = await geminiService.generateDiagram(analysisContent, templates.visualization, activeModel());
+                conversationState.commitTokenUsage(tokens);
+                const sourceHash = simpleHash(analysisContent);
                 const vizData = { code, sourceHash };
-                const docKey = diagramTypeToUse === 'bpmn' ? 'bpmnViz' : 'mermaidViz';
-                await conversationState.saveDocumentVersion(docKey, vizData, `Diyagram oluşturuldu (${diagramTypeToUse})`, undefined, undefined, tokens);
+                const docKey = 'bpmnViz';
+                await conversationState.saveDocumentVersion(docKey, vizData, `Diyagram oluşturuldu (BPMN)`, undefined, undefined, tokens);
             } else if (type === 'analysis' || type === 'test' || type === 'traceability') {
                 const stream = streamGenerators[type]();
                 let isFirstChunk = true;
@@ -97,6 +107,24 @@ export const useDocumentServices = ({
                 }
                 conversationState.commitTokenUsage(finalTokenCount);
                 await conversationState.finalizeStreamedDocuments(newTemplateId, finalTokenCount);
+
+                if (type === 'analysis') {
+                    // Slight delay to ensure state update propagates
+                    setTimeout(() => {
+                        const currentMessages = conversationState.activeConversation?.messages || [];
+                        const latestAnalysis = conversationState.activeConversation?.documents.find(d=>d.document_type === 'analysis')?.content || '';
+                        
+                        geminiService.checkAnalysisMaturity(
+                            currentMessages, 
+                            { ...activeConv.generatedDocs, analysisDoc: { content: latestAnalysis, isStale: false } as any }, 
+                            activeModel()
+                        ).then(({ report, tokens }) => {
+                            conversationState.commitTokenUsage(tokens);
+                            conversationState.saveDocumentVersion('maturityReport', report as any, 'Otomatik olgunluk değerlendirmesi');
+                        }).catch(e => console.warn("Auto maturity check failed:", e));
+                    }, 1000);
+                }
+
             }
         } catch(e: any) {
             uiState.setError(e.message);
@@ -123,10 +151,10 @@ export const useDocumentServices = ({
         if (!activeConv) return;
         
         const docKeyMap = { analysis: 'analysisDoc', test: 'testScenarios', traceability: 'traceabilityMatrix' };
-        const docKey = docKeyMap[docType];
+        const docKey = docKeyMap[docType] as keyof GeneratedDocs;
         
-        const docContent = activeConv.generatedDocs[docKey];
-        const contentExists = typeof docContent === 'string' ? docContent.trim() !== '' : !!(docContent as SourcedDocument)?.content?.trim();
+        const doc = activeConv.generatedDocs[docKey];
+        const contentExists = !!doc?.content?.trim();
 
         if (contentExists) {
             uiState.regenerateModalData.current = { docType, newTemplateId };
@@ -143,10 +171,10 @@ export const useDocumentServices = ({
         const { docType, newTemplateId } = data;
         
         if (saveCurrent) {
-            const docKey = { analysis: 'analysisDoc', test: 'testScenarios', traceability: 'traceabilityMatrix' }[docType];
-            const content = conversationState.activeConversation?.generatedDocs[docKey as keyof GeneratedDocs];
+            const docKey = { analysis: 'analysisDoc', test: 'testScenarios', traceability: 'traceabilityMatrix' }[docType] as keyof GeneratedDocs;
+            const content = conversationState.activeConversation?.generatedDocs[docKey]?.content;
             if (content) {
-                conversationState.saveDocumentVersion(docKey as keyof GeneratedDocs, content, "Yeni şablon seçimi öncesi arşivlendi");
+                conversationState.saveDocumentVersion(docKey, content, "Yeni şablon seçimi öncesi arşivlendi");
             }
         }
         uiState.setIsRegenerateModalOpen(false);

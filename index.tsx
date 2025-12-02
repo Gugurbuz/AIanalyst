@@ -8,6 +8,7 @@ import type { User, Conversation, Document, DocumentVersion, Message, UserProfil
 import type { Session } from '@supabase/supabase-js';
 import { PublicView } from './components/PublicView';
 import { LandingPage } from './components/LandingPage';
+import { PublicFlowStudio } from './components/PublicFlowStudio';
 
 
 const LoadingSpinner = () => (
@@ -45,6 +46,11 @@ const Main = () => {
         publicConversation?: Conversation;
         appData?: AppData;
     }>({});
+    
+    // Check for the public /studio route first.
+    if (window.location.pathname.startsWith('/studio')) {
+        return <PublicFlowStudio />;
+    }
 
     // This effect handles getting the initial session and subscribing to auth changes.
     useEffect(() => {
@@ -78,7 +84,7 @@ const Main = () => {
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const shareId = urlParams.get('share');
-
+        
         const fetchData = async () => {
             // Reset previous results before fetching new ones
             setLoadResult({});
@@ -156,6 +162,7 @@ const Main = () => {
                                 return {
                                     ...msg,
                                     thought,
+                                    groundingMetadata: msg.grounding_metadata, // Map snake_case to camelCase
                                 };
                             })
                             .sort(
@@ -190,8 +197,7 @@ const Main = () => {
 
         fetchData();
 
-    }, [session?.user.id]); // <-- *** THE FIX IS HERE *** Changed from [session]
-
+    }, [session?.user.id]);
 
     if (isLoading) {
       return <LoadingSpinner />;

@@ -1,7 +1,6 @@
 // components/BacklogGenerationView.tsx
 import React, { useState, useCallback } from 'react';
-// FIX: Add GeneratedDocs to the type import to correctly type component props.
-import type { Conversation, BacklogSuggestion, Task, GeneratedDocs, SourcedDocument, TaskType } from '../types';
+import type { Conversation, BacklogSuggestion, Task, GeneratedDocs, TaskType } from '../types';
 import { supabase } from '../services/supabaseClient';
 import { geminiService } from '../services/geminiService';
 import { CheckSquare, LoaderCircle, Square, Layers, FileText, Beaker, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
@@ -86,23 +85,25 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
     // This is now derived from the conversation object which has the generatedDocs property added in the parent
     const generatedDocs = (conversation as any).generatedDocs as GeneratedDocs;
 
+    const requestContent = generatedDocs.requestDoc?.content || '';
+    const analysisContent = generatedDocs.analysisDoc?.content || '';
+    const testContent = generatedDocs.testScenarios?.content || '';
+    const traceContent = generatedDocs.traceabilityMatrix?.content || '';
+
     const isReadyForGeneration = 
-        !!generatedDocs.analysisDoc &&
-        !!generatedDocs.testScenarios.content &&
-        !!generatedDocs.traceabilityMatrix.content;
+        !!analysisContent &&
+        !!testContent &&
+        !!traceContent;
 
     const handleGenerateSuggestions = useCallback(async () => {
         setIsGenerating(true);
         setError(null);
         try {
-            const testScenariosContent = generatedDocs.testScenarios.content;
-            const traceabilityMatrixContent = generatedDocs.traceabilityMatrix.content;
-
             const { suggestions: result, reasoning, tokens } = await geminiService.generateBacklogSuggestions(
-                generatedDocs.requestDoc,
-                generatedDocs.analysisDoc,
-                testScenariosContent,
-                traceabilityMatrixContent,
+                requestContent,
+                analysisContent,
+                testContent,
+                traceContent,
                 'gemini-2.5-pro' // Use a more powerful model for this complex task
             );
 
@@ -131,7 +132,7 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
         } finally {
             setIsGenerating(false);
         }
-    }, [conversation.id, conversation.total_tokens_used, generatedDocs, onUpdateConversation]);
+    }, [conversation.id, conversation.total_tokens_used, requestContent, analysisContent, testContent, traceContent, onUpdateConversation]);
     
     const handleToggleSelection = useCallback((id: string, toggledSuggestion: BacklogSuggestion) => {
         const newSelection = new Set(selectedIds);
@@ -194,7 +195,7 @@ export const BacklogGenerationView: React.FC<BacklogGenerationViewProps> = ({ co
                         description: suggestion.description,
                         status: 'todo',
                         priority: suggestion.priority,
-                        type: suggestion.type,
+                        type: suggestion.type as TaskType,
                         assignee: null,
                     };
 

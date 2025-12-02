@@ -1,21 +1,29 @@
 // types.ts
 import type { User as SupabaseUser } from '@supabase/supabase-js';
-// FIX: Added import for @tiptap/core to make module augmentation work.
-import '@tiptap/core';
+import { z } from 'zod';
+import { 
+    ThinkingStepSchema, 
+    ThoughtProcessSchema, 
+    LintingIssueSchema, 
+    BacklogItemSchema, 
+    MaturityReportSchema,
+    IsBirimiTalepSchema
+} from './services/schemas';
 
 // Re-exporting Supabase user type for convenience
 export type User = SupabaseUser;
 
 export type Theme = 'light' | 'dark' | 'system';
+export type FontSize = 'small' | 'medium' | 'large';
 
-export type AppMode = 'analyst';
+export type AppMode = 'analyst' | 'backlog';
 
-export type GeminiModel = 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.5-flash-lite';
+export type GeminiModel = 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.5-flash-lite' | 'gemini-3-pro-preview';
 
 export type PlanID = 'free' | 'pro' | 'corporate';
 
 export interface UserProfile {
-    id: string; // Corresponds to auth.users.id
+    id: string;
     plan: PlanID;
     token_limit: number;
     tokens_used: number;
@@ -28,31 +36,25 @@ export interface Feedback {
     comment?: string;
 }
 
-export interface ThinkingStep {
-  id: string;
-  name: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'error';
-  details?: string;
-  description?: string;
-}
-
-// YENİ Birleşik Düşünce Tipi (ExpertStep'ten uyarlandı)
-export interface ThoughtProcess {
-  title: string;
-  steps: ThinkingStep[];
-}
-
-// FIX: Define ExpertStep as an alias for ThinkingStep to resolve missing type errors.
+export type ThinkingStep = z.infer<typeof ThinkingStepSchema>;
+export type ThoughtProcess = z.infer<typeof ThoughtProcessSchema>;
 export type ExpertStep = ThinkingStep;
-
 
 export interface GenerativeSuggestion {
     title: string;
-    suggestions: string[]; // The list of suggestions from the AI
-    targetSection: string; // The section of the doc to be replaced (e.g., "Hedefler")
-    context: string; // The user's original command (e.g., "hedefleri genişlet")
+    suggestions: string[];
+    targetSection: string;
+    context: string;
 }
 
+export interface WebSource {
+  uri: string;
+  title: string;
+}
+
+export interface GroundingChunk {
+  web: WebSource;
+}
 
 export interface Message {
     id:string;
@@ -62,56 +64,34 @@ export interface Message {
     created_at: string;
     isStreaming?: boolean;
     error?: { name: string; message: string; } | null;
-    thought?: ThoughtProcess | null; // <-- YENİ ALAN (Veritabanıyla eşleşecek)
+    thought?: ThoughtProcess | null;
     feedback?: Feedback | null;
     documentType?: DocumentType | null;
-    imageUrl?: string; // To display user-uploaded images in chat history
-    // DEPRECATED:
-    timestamp?: string;
+    imageUrl?: string;
+    groundingMetadata?: GroundingChunk[];
     expertRunChecklist?: ExpertStep[]; 
     generativeSuggestion?: GenerativeSuggestion;
-    thoughts?: string | null; // Legacy DB field
 }
 
-
-// StreamChunk'ı bu yeni tipi kullanacak şekilde güncelleyin
 export type StreamChunk =
   | { type: 'text_chunk'; text: string }
-  | { type: 'thought_chunk'; payload: ThoughtProcess } // YENİ TİP (expert_run_update yerine)
+  | { type: 'thought_chunk'; payload: ThoughtProcess }
   | { type: 'doc_stream_chunk'; docKey: keyof GeneratedDocs; chunk: any }
   | { type: 'stream_complete'; finalMessage?: string }
   | { type: 'stream_error'; error: { name: string; message: string; } }
   | { type: 'function_call'; name: string; args: any }
   | { type: 'doc_lint_result'; results: LintingIssue[] }
-  // expert_run_update kaldırıldı
-  | { type: 'chat_stream_chunk'; chunk: string } // for backward compatibility in geminiService
-  | { type: 'expert_run_update'; checklist: ExpertStep[]; isComplete: boolean; finalMessage?: string; } // for expert mode
+  | { type: 'chat_stream_chunk'; chunk: string }
+  | { type: 'expert_run_update'; checklist: ExpertStep[]; isComplete: boolean; finalMessage?: string; }
   | { type: 'usage_update'; tokens: number }
   | { type: 'visualization_update', content: string }
-  | { type: 'error', message: string };
-
-
+  | { type: 'error', message: string }
+  | { type: 'grounding_chunk'; payload: GroundingChunk[] };
 
 export type MaturityLevel = 'Zayıf' | 'Gelişime Açık' | 'İyi' | 'Mükemmel';
+export type MaturityReport = z.infer<typeof MaturityReportSchema>;
 
-export interface MaturityReport {
-    isSufficient: boolean;
-    summary: string;
-    missingTopics: string[];
-    suggestedQuestions: string[];
-    scores: {
-        comprehensiveness: number; // Kapsamlılık
-        clarity: number;           // Netlik
-        consistency: number;       // Tutarlılık
-        testability: number;       // Test Edilebilirlik
-        completeness: number;      // Bütünlük
-    };
-    overallScore: number; // The average/weighted score for a quick glance
-    justification: string; // Puanın kısa açıklaması
-    maturity_level: MaturityLevel; // Kalitatif değerlendirme
-}
-
-export type DocumentType = 'analysis' | 'test' | 'traceability' | 'mermaid' | 'bpmn' | 'maturity_report' | 'request';
+export type DocumentType = 'analysis' | 'test' | 'traceability' | 'bpmn' | 'maturity_report' | 'request';
 
 export interface DocumentVersion {
     id: string;
@@ -126,7 +106,6 @@ export interface DocumentVersion {
     tokens_used?: number;
 }
 
-
 export interface Document {
     id: string;
     conversation_id: string;
@@ -140,7 +119,24 @@ export interface Document {
     template_id?: string | null;
 }
 
+// Normalized Document Structure for UI
+export interface GeneratedDocument {
+    content: string;
+    isStale: boolean;
+    metadata?: any; // For structured data like BPMN sourceHash, parsed JSON objects, etc.
+}
 
+export interface GeneratedDocs {
+    requestDoc: GeneratedDocument | null;
+    analysisDoc: GeneratedDocument | null;
+    testScenarios: GeneratedDocument | null;
+    bpmnViz: GeneratedDocument | null;
+    traceabilityMatrix: GeneratedDocument | null;
+    maturityReport: GeneratedDocument | null;
+    backlog: GeneratedDocument | null; // Placeholder for future use if backlog becomes a doc
+}
+
+// Legacy types support (can be removed later if fully cleaned up)
 export interface VizData {
     code: string;
     sourceHash: string;
@@ -149,23 +145,6 @@ export interface VizData {
 export interface SourcedDocument {
     content: string;
     sourceHash: string;
-}
-
-export interface GeneratedDocs {
-    requestDoc: string;
-    analysisDoc: string;
-    testScenarios: SourcedDocument;
-    visualization: string; // Legacy, for backward compatibility
-    visualizationType?: 'mermaid' | 'bpmn'; // Legacy
-    mermaidViz?: VizData;
-    bpmnViz?: VizData;
-    traceabilityMatrix: SourcedDocument;
-    maturityReport?: MaturityReport | null;
-    // --- New flags for impact analysis ---
-    isVizStale?: boolean;
-    isTestStale?: boolean;
-    isTraceabilityStale?: boolean;
-    isBacklogStale?: boolean;
 }
 
 export interface Conversation {
@@ -182,11 +161,9 @@ export interface Conversation {
     backlogSuggestions?: BacklogSuggestion[];
 }
 
-// --- Project Board Types ---
 export type TaskStatus = 'todo' | 'inprogress' | 'done';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
 export type TaskType = 'epic' | 'story' | 'test_case' | 'task';
-
 
 export interface Task {
     id: string;
@@ -201,26 +178,24 @@ export interface Task {
     type: TaskType;
     assignee: string | null;
     created_at: string;
-    // Client-side property for rendering hierarchy
     children?: Task[];
 }
 
+// BacklogSuggestion inferred from Zod schema but needs manual interface for recursive structure if strict types needed in components
 export interface BacklogSuggestion {
-    id: string; // Temporary ID for UI key
-    type: TaskType;
+    id: string;
+    type: string; // Zod enum result
     title: string;
     description: string;
     priority: TaskPriority;
     children?: BacklogSuggestion[];
 }
 
-
-// Types for prompt management
 export interface Template {
     id: string;
     user_id: string | null;
     name: string;
-    document_type: 'analysis' | 'test' | 'traceability' | 'mermaid' | 'bpmn';
+    document_type: 'analysis' | 'test' | 'traceability' | 'bpmn';
     prompt: string;
     is_system_template: boolean;
 }
@@ -250,47 +225,19 @@ export interface PromptCategory {
 
 export type PromptData = PromptCategory[];
 
-// A type for the structured feedback data passed to the dashboard
 export interface FeedbackItem {
     message: Message;
     conversationTitle: string;
 }
 
-// A type for structural issues found in a document
-export interface LintingIssue {
-    type: 'BROKEN_SEQUENCE';
-    section: string; // e.g., "Fonksiyonel Gereksinimler"
-    details: string; // e.g., "FR-001'den sonra FR-003 geliyor."
-}
+export type LintingIssue = z.infer<typeof LintingIssueSchema>;
 
-export interface IsBirimiTalep {
-  dokumanTipi: "IsBirimiTalep";
-  dokumanNo: string;
-  tarih: string;
-  revizyon: string;
-  talepAdi: string;
-  talepSahibi: string;
-  mevcutDurumProblem: string;
-  talepAmaciGerekcesi: string;
-  kapsam: {
-    inScope: string[];
-    outOfScope: string[];
-  };
-  beklenenIsFaydalari: string[];
-}
+export type IsBirimiTalep = z.infer<typeof IsBirimiTalepSchema>;
 
 export function isIsBirimiTalep(obj: any): obj is IsBirimiTalep {
-    return obj &&
-        obj.dokumanTipi === "IsBirimiTalep" &&
-        typeof obj.dokumanNo === 'string' &&
-        typeof obj.talepAdi === 'string' &&
-        typeof obj.kapsam === 'object' &&
-        Array.isArray(obj.kapsam.inScope) &&
-        Array.isArray(obj.kapsam.outOfScope);
+    return IsBirimiTalepSchema.safeParse(obj).success;
 }
 
-
-// NEW: Structured types for JSON-based document generation
 export interface StructuredTestScenario {
     "Test Senaryo ID": string;
     "İlgili Gereksinim": string;
@@ -302,27 +249,5 @@ export interface StructuredTestScenario {
 export interface StructuredTraceabilityRow {
     "Gereksinim ID": string;
     "Gereksinim Açıklaması": string;
-    "İlgili Test Senaryo ID'leri": string; // Comma separated string
-}
-// ... diğer tipler
-
-// FIX: Tiptap module augmentation is defined here. Importing '@tiptap/core'
-// in this file ensures TypeScript can find and augment the module correctly.
-declare module '@tiptap/core' {
-  interface Commands<ReturnType> {
-    fontSize: {
-      setFontSize: (size: string) => ReturnType;
-      unsetFontSize: () => ReturnType;
-    };
-    fontFamily: {
-      setFontFamily: (fontFamily: string) => ReturnType;
-      unsetFontFamily: () => ReturnType;
-    };
-    highlight: {
-        toggleHighlight: (options?: { color: string }) => ReturnType;
-    };
-    textAlign: {
-        setTextAlign: (alignment: string) => ReturnType;
-    };
-  }
+    "İlgili Test Senaryo ID'leri": string;
 }

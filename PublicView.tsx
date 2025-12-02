@@ -1,10 +1,10 @@
 // components/PublicView.tsx
 import React, { useState, useEffect } from 'react';
-import type { Conversation, Theme, User, Message, GeneratedDocs, Document, DocumentType, GeneratedDocument } from '../types';
-import { ChatMessageHistory } from './ChatMessageHistory';
-import { DocumentCanvas } from './DocumentCanvas';
-import { Visualizations } from './Visualizations';
-import { ThemeSwitcher } from './ThemeSwitcher';
+import type { Conversation, Theme, User, Message, GeneratedDocs, Document, DocumentType, GeneratedDocument } from './types';
+import { ChatMessageHistory } from './components/ChatMessageHistory';
+import { DocumentCanvas } from './components/DocumentCanvas';
+import { Visualizations } from './components/Visualizations';
+import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { FileText, GanttChartSquare, Beaker, GitBranch, MessageSquare } from 'lucide-react';
 
 interface PublicViewProps {
@@ -114,20 +114,19 @@ export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
     const { title, messages } = conversation;
     const generatedDocs = buildGeneratedDocs(conversation.documents);
     
-    const analysisContent = generatedDocs.analysisDoc?.content || '';
-    const vizContent = generatedDocs.bpmnViz?.content || '';
-    const testContent = generatedDocs.testScenarios?.content || '';
-    const traceContent = generatedDocs.traceabilityMatrix?.content || '';
+    const vizContent = generatedDocs.bpmnViz?.content ?? '';
+    const testScenariosContent = generatedDocs.testScenarios?.content ?? '';
+    const traceabilityMatrixContent = generatedDocs.traceabilityMatrix?.content ?? '';
 
     const noOp = async () => {};
     const noOpWithArgs = (...args: any[]) => {};
     
     const tabs = [
         { id: 'chat', name: 'Sohbet', icon: MessageSquare, content: messages.length > 0 },
-        { id: 'analysis', name: 'Analiz', icon: FileText, content: !!analysisContent },
+        { id: 'analysis', name: 'Analiz', icon: FileText, content: !!generatedDocs.analysisDoc },
         { id: 'viz', name: 'Görselleştirme', icon: GanttChartSquare, content: !!vizContent },
-        { id: 'test', name: 'Test', icon: Beaker, content: !!testContent },
-        { id: 'traceability', name: 'İzlenebilirlik', icon: GitBranch, content: !!traceContent },
+        { id: 'test', name: 'Test', icon: Beaker, content: !!testScenariosContent },
+        { id: 'traceability', name: 'İzlenebilirlik', icon: GitBranch, content: !!traceabilityMatrixContent },
     ].filter(tab => tab.content);
 
 
@@ -179,7 +178,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
                     )}
                     {activeTab === 'analysis' && (
                         <DocumentCanvas
-                            content={analysisContent} onContentChange={noOpWithArgs} docKey="analysisDoc" onModifySelection={noOpWithArgs}
+                            content={generatedDocs.analysisDoc?.content || ''} onContentChange={noOpWithArgs} docKey="analysisDoc" onModifySelection={noOpWithArgs}
                             inlineModificationState={null} isGenerating={false} isStreaming={false} documentVersions={conversation.documentVersions}
                             onAddTokens={noOpWithArgs} onRestoreVersion={noOpWithArgs} filename={`${title}-analiz`}
                             onExplainSelection={noOpWithArgs}
@@ -188,12 +187,12 @@ export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
                      {activeTab === 'viz' && (
                         <Visualizations
                             content={vizContent} onModifyDiagram={noOp} onGenerateDiagram={noOp} isLoading={false} error={null}
-                            isAnalysisDocReady={!!analysisContent}
+                            isAnalysisDocReady={!!generatedDocs.analysisDoc}
                         />
                      )}
                      {activeTab === 'test' && (
                         <DocumentCanvas
-                            content={testContent} onContentChange={noOpWithArgs} docKey="testScenarios" onModifySelection={noOpWithArgs}
+                            content={testScenariosContent} onContentChange={noOpWithArgs} docKey="testScenarios" onModifySelection={noOpWithArgs}
                             inlineModificationState={null} isGenerating={false} isStreaming={false} documentVersions={conversation.documentVersions}
                             onAddTokens={noOpWithArgs} onRestoreVersion={noOpWithArgs} filename={`${title}-test-senaryolari`} isTable
                             onExplainSelection={noOpWithArgs}
@@ -201,7 +200,7 @@ export const PublicView: React.FC<PublicViewProps> = ({ conversation }) => {
                      )}
                     {activeTab === 'traceability' && (
                         <DocumentCanvas
-                            content={traceContent} onContentChange={noOpWithArgs} docKey="traceabilityMatrix" onModifySelection={noOpWithArgs}
+                            content={traceabilityMatrixContent} onContentChange={noOpWithArgs} docKey="traceabilityMatrix" onModifySelection={noOpWithArgs}
                             inlineModificationState={null} isGenerating={false} isStreaming={false} documentVersions={conversation.documentVersions}
                             onAddTokens={noOpWithArgs} onRestoreVersion={noOpWithArgs} filename={`${title}-izlenebilirlik`} isTable
                             onExplainSelection={noOpWithArgs}

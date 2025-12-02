@@ -89,6 +89,7 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
 - **KURAL 1 (SOHBET):** Eğer niyet 'SOHBET' ise, yanıtında ÖNCE JSON içeren <dusunce> bloğu, SONRA kullanıcıya yönelik metin olmalıdır.
 - **KURAL 2 (SOHBET):** KULLANICIYA YÖNELİK CEVABINI ASLA <dusunce> etiketleri içine yazma.
 - **KURAL 3 (GÖREV):** Eğer niyet 'GÖREV' ise, ASLA metin yanıtı veya <dusunce> bloğu üretme. Sadece araç çağrısı yap.
+- **KURAL 4 (BOŞ DOKÜMAN):** Kullanıcı bir doküman oluşturulmasını (örneğin 'talep dokümanı oluştur') isterse, aşağıda sana verilen **Mevcut Doküman** içeriğini kontrol et. Eğer içerik BOŞ ise, geçmişte oluşturmuş olsan bile (kullanıcı manuel silmiş olabilir), "Zaten var" DEME. İlgili aracı kullanarak dokümanı YENİDEN OLUŞTUR.
 - Araçları ('functions') proaktif olarak kullan.
 - Kullanıcıya ASLA doğrudan JSON veya tam bir Markdown dokümanı GÖSTERME. Bunun yerine ARAÇLARI KULLAN.
 - Araçları kullandıktan sonra, kullanıcıya 'Dokümanı güncelledim' gibi kısa bir onay mesajı ver (bu, araç çağrısından *sonraki* adımda senin görevin).
@@ -287,44 +288,6 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
         activeVersionId: 'default',
       },
       {
-        id: 'generateVisualization',
-        name: 'Süreç Görselleştirme',
-        description: 'Analiz dokümanından Mermaid.js diyagramı oluşturur.',
-        is_system_template: true,
-        document_type: 'mermaid',
-        versions: [
-          {
-            versionId: 'default',
-            name: 'Varsayılan',
-            createdAt: new Date().toISOString(),
-            prompt: `Bir uzman iş analisti olarak, verilen iş analizi dokümanını analiz et ve süreci anlatan bir Mermaid.js diyagram kodu oluştur.
-
-**ÇOK ÖNEMLİ KURALLAR:**
-1.  Çıktın **SADECE VE SADECE** \`\`\`mermaid ... \`\`\` kod bloğu içinde olmalıdır. Başka HİÇBİR metin, başlık, açıklama veya not ekleme.
-2.  Diyagram tipi **MUTLAKA** \`graph TD\` (Yukarıdan Aşağıya Akış Şeması) olmalıdır.
-3.  **METİNLERİ TIRNAK İÇİNE AL:** Diyagramdaki **TÜM** metinleri (kutu içi, bağlantı üzeri vb.) **MUTLAKA** çift tırnak (" ") içine al. Bu kural, parantez \`()\`, köşeli parantez \`[]\` veya tire \`-\` gibi özel karakterlerin hataya yol açmasını engeller.
-    - **DOĞRU:** \`A["Metin (Detay)"]\`
-    - **YANLIŞ:** \`A[Metin (Detay)]\`
-    - **DOĞRU:** \`C -- "Evet" --> D\`
-    - **YANLIŞ:** \`C -- Evet --> D\`
-4.  **SATIR ATLAMA:** Kutu metinlerinde satır atlamak için **SADECE** \`<br>\` etiketini kullan.
-5.  **BAĞLANTILAR:** Akışları göstermek için **SADECE** \`-->\` operatörünü kullan.
-6.  **KUTU ŞEKİLLERİ:** Kutuları basit tut. Metinleri kural #3'e göre tırnak içine almayı unutma.
-    - Dikdörtgen: \`A["Metin"]\`
-    - Yuvarlak Köşeli Dikdörtgen: \`B("Metin")\`
-    - Karar (eşkenar dörtgen): \`C{"Metin"}\`
-7.  Kodun ayrıştırılabilir (parsable) ve sözdizimsel olarak (syntactically) doğru olduğundan emin ol. Hatalı kod üretme.
-
-**İş Analizi Dokümanı:**
----
-{analysis_document_content}
----
-`,
-          },
-        ],
-        activeVersionId: 'default',
-      },
-      {
         id: 'generateBPMN',
         name: 'BPMN Süreç Diyagramı',
         description: 'Analiz dokümanından BPMN 2.0 XML diyagramı oluşturur.',
@@ -415,7 +378,7 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
         <bpmndi:BPMNLabel>
           <dc:Bounds x="672" y="202" width="56" height="14" />
         </bpmndi:BPMNLabel>
-      </bpmndi:BPMNShape>
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4">
         <di:waypoint x="450" y="202" />
         <di:waypoint x="450" y="250" />
@@ -492,6 +455,36 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
 ---
 `
             }
+        ],
+        activeVersionId: 'default'
+      },
+       {
+        id: 'updateBpmnDiagram',
+        name: 'BPMN Diyagramını Güncelle',
+        description: 'Mevcut bir BPMN diyagramını kullanıcı komutuna göre günceller.',
+        is_system_template: true,
+        document_type: 'bpmn',
+        versions: [
+          {
+            versionId: 'default',
+            name: 'Varsayılan',
+            createdAt: new Date().toISOString(),
+            prompt: `Sen bir BPMN 2.0 uzmanısın. Görevin, sana verilen mevcut BPMN XML'ini, kullanıcının isteği doğrultusunda güncellemektir. Hem proses mantığını (\`process\`) hem de diyagram düzenini (\`BPMNDiagram\`) tutarlı bir şekilde değiştirmelisin.
+
+**KURALLAR:**
+1.  **SADECE XML DÖNDÜR:** Yanıtın, sadece ve sadece güncellenmiş, tam ve geçerli BPMN 2.0 XML kodunu içeren bir \`\`\`xml ... \`\`\` kod bloğu olmalıdır. Başka HİÇBİR metin, açıklama veya not ekleme.
+2.  **TUTARLILIK:** \`process\` bölümünde yaptığın her mantıksal değişikliğin (yeni görev, akış vb.) \`BPMNDiagram\` bölümünde bir karşılığı olmalıdır. Yeni elemanlar için koordinatları mantıklı bir şekilde ata.
+3.  **MEVCUT YAPIYI KORU:** Mevcut XML yapısını bozma, sadece kullanıcının istediği değişiklikleri ekle veya güncelle. ID'leri korumaya çalış, sadece yeni elemanlar için yeni ID'ler oluştur.
+
+**Kullanıcının İsteği:**
+"{user_prompt}"
+
+**Mevcut BPMN XML:**
+---
+{current_xml}
+---
+`
+          }
         ],
         activeVersionId: 'default'
       },
@@ -609,9 +602,25 @@ Her yanıtın iki ayrı bölümü OLMALIDIR:
 **KURALLAR:**
 1.  En üst seviyede **Epikler** oluştur. Epikler, projenin büyük ve ana işlevsel alanlarını temsil etmelidir.
 2.  Her epikin altına, o epiki gerçekleştirmek için gereken **Kullanıcı Hikayeleri (Story)** ekle.
-3.  Her hikayenin altına, o hikayenin tamamlanması için gereken **Görevler (Task)** ve/veya hikayeyi doğrulayacak **Test Senaryoları (Test Case)** ekle.
+3.  Her hikayenin altına, o hikayenin tamamlanması için gereken **Görevler (Task)** ve/ya hikayeyi doğrulayacak **Test Senaryoları (Test Case)** ekle.
 4.  Her bir madde için (epic, story, task, test_case) bir başlık, kısa bir açıklama ve bir öncelik (low, medium, high, critical) belirle.
-5.  Çıktıyı, iç içe geçmiş bir JSON yapısında, "suggestions" ve "reasoning" anahtarlarıyla birlikte döndür. "reasoning" alanına, bu backlog yapısını neden böyle oluşturduğuna dair kısa bir açıklama ekle.
+5.  Çıktı **SADECE** aşağıdaki formatta bir JSON olmalıdır. Başka hiçbir metin, açıklama veya sohbet cümlesi ekleme.
+
+**İSTENEN JSON FORMATI:**
+{
+  "reasoning": "Kısa bir açıklama",
+  "suggestions": [
+    {
+      "type": "epic",
+      "title": "...",
+      "description": "...",
+      "priority": "high",
+      "children": [
+        { "type": "story", ... }
+      ]
+    }
+  ]
+}
 
 **PROJE ARTEFAKTLARI:**
 ---
@@ -781,7 +790,7 @@ const getSystemDocumentTemplates = (): Template[] => {
                         id: prompt.id,
                         user_id: null,
                         name: prompt.name,
-                        document_type: prompt.document_type as 'analysis' | 'test' | 'traceability' | 'mermaid' | 'bpmn',
+                        document_type: prompt.document_type as 'analysis' | 'test' | 'traceability' | 'bpmn',
                         prompt: activeVersion.prompt,
                         is_system_template: true
                     });

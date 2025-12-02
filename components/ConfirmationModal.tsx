@@ -10,6 +10,7 @@ interface ConfirmationModalProps {
     message: string;
     confirmButtonText?: string;
     cancelButtonText?: string;
+    confirmButtonVariant?: 'danger' | 'primary';
 }
 
 export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
@@ -20,8 +21,13 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     message,
     confirmButtonText = "Sil",
     cancelButtonText = "İptal",
+    confirmButtonVariant = 'danger',
 }) => {
     if (!isOpen) return null;
+
+    const confirmButtonClasses = confirmButtonVariant === 'danger'
+        ? "bg-red-600 text-white hover:bg-red-700 focus:ring-red-500"
+        : "bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500";
 
     return (
         <div 
@@ -55,7 +61,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
                 <div className="bg-slate-50 dark:bg-slate-900/50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse rounded-b-lg">
                     <button
                         type="button"
-                        className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
+                        className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm ${confirmButtonClasses}`}
                         onClick={onConfirm}
                     >
                         {confirmButtonText}

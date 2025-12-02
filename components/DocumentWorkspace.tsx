@@ -1,17 +1,18 @@
 // components/DocumentWorkspace.tsx
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react';
 import type { Conversation, Template, MaturityReport, GeneratedDocs, Document, DocumentType, SourcedDocument, DocumentVersion, IsBirimiTalep } from '../types';
 import { DocumentCanvas } from './DocumentCanvas';
-import { Visualizations } from './Visualizations';
-import { MaturityCheckReport } from './MaturityCheckReport';
-import { BacklogGenerationView } from './BacklogGenerationView';
-import { DocumentEmptyState } from './DocumentEmptyState'; // Import the new component
+import { DocumentEmptyState } from './DocumentEmptyState'; 
 import { geminiService } from '../services/geminiService';
 import type { DocumentImpactAnalysis } from '../services/geminiService';
 import { supabase } from '../services/supabaseClient';
-import { GanttChartSquare, Projector, RefreshCw, Check, FileText, Beaker, GitBranch, FileInput, CheckSquare } from 'lucide-react';
-import { RequestDocumentViewer } from './RequestDocumentViewer';
+import { GanttChartSquare, Projector, RefreshCw, Check, FileText, Beaker, GitBranch, FileInput, CheckSquare, LoaderCircle } from 'lucide-react';
 import { isIsBirimiTalep } from '../types';
+
+// Lazy load heavy components
+const Visualizations = React.lazy(() => import('./Visualizations').then(m => ({ default: m.Visualizations })));
+const MaturityCheckReport = React.lazy(() => import('./MaturityCheckReport').then(m => ({ default: m.MaturityCheckReport })));
+const BacklogGenerationView = React.lazy(() => import('./BacklogGenerationView').then(m => ({ default: m.BacklogGenerationView })));
 
 
 function usePrevious<T>(value: T): T | undefined {
@@ -22,27 +23,15 @@ function usePrevious<T>(value: T): T | undefined {
     return ref.current;
 }
 
-const simpleHash = (str: string): string => {
-    let hash = 0;
-    if (str.length === 0) return hash.toString();
-    for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = (hash << 5) - hash + char;
-        hash |= 0; // Convert to 32bit integer
-    }
-    return hash.toString();
-};
-
-
 interface DocumentWorkspaceProps {
     conversation: Conversation & { generatedDocs: GeneratedDocs };
     onUpdateConversation: (id: string, updates: Partial<Conversation>) => void;
-    isProcessing: boolean; // This is now the GLOBAL processing state (e.g., for chat)
-    generatingDocType: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | null;
-    onUpdateDocument: (docKey: keyof GeneratedDocs, newContent: string | SourcedDocument, reason: string) => void;
+    isProcessing: boolean;
+    generatingDocType: 'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | null;
+    onUpdateDocument: (docKey: keyof GeneratedDocs, newContent: string, reason: string) => void;
     onModifySelection: (selectedText: string, userPrompt: string, docKey: 'analysisDoc' | 'testScenarios') => Promise<void>;
     onModifyDiagram: (userPrompt: string) => Promise<void>;
-    onGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => void;
+    onGenerateDoc: (type: 'request' | 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string) => void;
     inlineModificationState: { docKey: 'analysisDoc' | 'testScenarios'; originalText: string } | null;
     templates: {
         analysis: Template[];
@@ -62,8 +51,6 @@ interface DocumentWorkspaceProps {
     activeDocTab: 'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation';
     setActiveDocTab: (tab: 'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation') => void;
     onPrepareQuestionForAnswer: (question: string) => void;
-    diagramType: 'mermaid' | 'bpmn';
-    setDiagramType: (type: 'mermaid' | 'bpmn') => void;
     onAddTokens: (tokens: number) => void;
     onRestoreVersion: (version: DocumentVersion) => void;
 }
@@ -72,14 +59,18 @@ const StaleIndicator: React.FC<{ isStale?: boolean }> = ({ isStale }) => {
     if (!isStale) return null;
     return (
         <span 
-            className="ml-2 flex items-center gap-1.5 px-2 py-0.5 bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-200 rounded-full text-xs font-semibold stale-pulse"
+            className="ml-2 w-2.5 h-2.5 rounded-full bg-amber-500 stale-pulse shadow-sm"
             title="Bu bölüm, analiz dokümanındaki son değişiklikler nedeniyle güncel olmayabilir. Görüntülemek için tıkladığınızda otomatik olarak güncellenecektir."
-        >
-            <RefreshCw className="h-3 w-3" />
-            Güncel Değil
-        </span>
+        />
     );
 };
+
+const TabSpinner = () => (
+    <div className="flex flex-col items-center justify-center h-full text-slate-500">
+        <LoaderCircle className="animate-spin h-8 w-8 mb-2" />
+        <span className="text-sm">Yükleniyor...</span>
+    </div>
+);
 
 export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     conversation,
@@ -97,8 +88,6 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     activeDocTab,
     setActiveDocTab,
     onPrepareQuestionForAnswer,
-    diagramType,
-    setDiagramType,
     onAddTokens,
     onRestoreVersion,
 }) => {
@@ -106,10 +95,10 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     const [isVisualizing, setIsVisualizing] = useState(false);
     const [vizError, setVizError] = useState<string | null>(null);
     const [isAnalyzingChange, setIsAnalyzingChange] = useState(false);
-    const [parsedRequestDoc, setParsedRequestDoc] = useState<IsBirimiTalep | null>(null);
     
     const { generatedDocs, id: conversationId } = conversation;
-    const prevAnalysisDoc = usePrevious(generatedDocs.analysisDoc);
+    const currentAnalysisContent = generatedDocs.analysisDoc?.content;
+    const prevAnalysisDoc = usePrevious(currentAnalysisContent);
     
     const updateDocumentStaleness = useCallback(async (docType: DocumentType, isStale: boolean) => {
         const { error } = await supabase
@@ -121,37 +110,18 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     }, [conversationId]);
 
     useEffect(() => {
-        if (generatedDocs.requestDoc) {
-            try {
-                const parsed = JSON.parse(generatedDocs.requestDoc);
-                if (isIsBirimiTalep(parsed)) {
-                    setParsedRequestDoc(parsed);
-                } else {
-                    setParsedRequestDoc(null);
-                }
-            } catch (e) {
-                setParsedRequestDoc(null);
-            }
-        } else {
-            setParsedRequestDoc(null);
-        }
-    }, [generatedDocs.requestDoc]);
-
-    useEffect(() => {
-        if (prevAnalysisDoc !== undefined && generatedDocs.analysisDoc !== prevAnalysisDoc && !isProcessing) {
+        if (prevAnalysisDoc !== undefined && currentAnalysisContent !== prevAnalysisDoc && !isProcessing) {
             const analyze = async () => {
                 setIsAnalyzingChange(true);
                 try {
-                    const { impact, tokens } = await geminiService.analyzeDocumentChange(prevAnalysisDoc || '', generatedDocs.analysisDoc, 'gemini-2.5-flash-lite');
+                    const { impact, tokens } = await geminiService.analyzeDocumentChange(prevAnalysisDoc || '', currentAnalysisContent || '', 'gemini-2.5-flash-lite');
                     onAddTokens(tokens);
-                    if (impact.isVisualizationImpacted) await updateDocumentStaleness('mermaid', true);
                     if (impact.isVisualizationImpacted) await updateDocumentStaleness('bpmn', true);
                     if (impact.isTestScenariosImpacted) await updateDocumentStaleness('test', true);
                     if (impact.isTraceabilityImpacted) await updateDocumentStaleness('traceability', true);
                 } catch (error) {
                     console.error("Impact analysis failed:", error);
                     await Promise.all([
-                        updateDocumentStaleness('mermaid', true),
                         updateDocumentStaleness('bpmn', true),
                         updateDocumentStaleness('test', true),
                         updateDocumentStaleness('traceability', true)
@@ -162,59 +132,53 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             };
             analyze();
         }
-    }, [generatedDocs.analysisDoc, prevAnalysisDoc, conversationId, isProcessing, onAddTokens, updateDocumentStaleness]);
+    }, [currentAnalysisContent, prevAnalysisDoc, conversationId, isProcessing, onAddTokens, updateDocumentStaleness]);
 
     const handleRegenerate = useCallback((docType: 'viz' | 'test' | 'traceability' | 'backlog-generation') => {
         if (docType === 'viz') {
-            const dbDocType = diagramType; // 'mermaid' or 'bpmn'
-            updateDocumentStaleness(dbDocType, false);
+            updateDocumentStaleness('bpmn', false);
         } else {
             const typeMap: Record<string, DocumentType> = { test: 'test', traceability: 'traceability' };
             const dbDocType = typeMap[docType];
             if (dbDocType) updateDocumentStaleness(dbDocType, false);
         }
         onGenerateDoc(docType as any);
-    }, [diagramType, onGenerateDoc, updateDocumentStaleness]);
+    }, [onGenerateDoc, updateDocumentStaleness]);
 
     useEffect(() => {
         if (isProcessing) return; 
 
+        // Auto-regenerate stale docs if user switches to their tab
         let staleAction: (() => void) | null = null;
-        if (activeDocTab === 'viz' && generatedDocs.isVizStale) {
+        if (activeDocTab === 'viz' && generatedDocs.bpmnViz?.isStale) {
             staleAction = () => handleRegenerate('viz');
-        } else if (activeDocTab === 'test' && generatedDocs.isTestStale) {
+        } else if (activeDocTab === 'test' && generatedDocs.testScenarios?.isStale) {
             staleAction = () => handleRegenerate('test');
-        } else if (activeDocTab === 'traceability' && generatedDocs.isTraceabilityStale) {
+        } else if (activeDocTab === 'traceability' && generatedDocs.traceabilityMatrix?.isStale) {
             staleAction = () => handleRegenerate('traceability');
         }
 
         if (staleAction) {
             staleAction();
         }
-    }, [activeDocTab, generatedDocs.isVizStale, generatedDocs.isTestStale, generatedDocs.isTraceabilityStale, isProcessing, handleRegenerate]);
+    }, [activeDocTab, generatedDocs, isProcessing, handleRegenerate]);
 
 
-    const vizContent = diagramType === 'bpmn'
-        ? generatedDocs.bpmnViz?.code ?? (generatedDocs.visualizationType === 'bpmn' ? generatedDocs.visualization : '')
-        : generatedDocs.mermaidViz?.code ?? (generatedDocs.visualizationType !== 'bpmn' ? generatedDocs.visualization : '');
+    const vizContent = generatedDocs.bpmnViz?.content || '';
+    const testScenariosContent = generatedDocs.testScenarios?.content || '';
+    const traceabilityMatrixContent = generatedDocs.traceabilityMatrix?.content || '';
+    const requestDocContent = generatedDocs.requestDoc?.content || '';
+    const analysisDocContent = generatedDocs.analysisDoc?.content || '';
 
-    const testScenariosContent = typeof generatedDocs.testScenarios === 'object' 
-        ? generatedDocs.testScenarios.content 
-        : generatedDocs.testScenarios;
-        
-    const traceabilityMatrixContent = typeof generatedDocs.traceabilityMatrix === 'object'
-        ? generatedDocs.traceabilityMatrix.content 
-        : generatedDocs.traceabilityMatrix;
-
-    const isAnalysisDocReady = !!generatedDocs.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
+    const isAnalysisDocReady = !!analysisDocContent && !analysisDocContent.includes("Bu bölüme projenin temel hedefini");
 
     const allTabs = [
-        { id: 'request', name: 'Talep', icon: FileInput, content: generatedDocs.requestDoc, isStale: false },
-        { id: 'analysis', name: 'İş Analizi', icon: FileText, content: generatedDocs.analysisDoc, isStale: false },
-        { id: 'viz', name: 'Görselleştirme', icon: GanttChartSquare, content: vizContent, isStale: generatedDocs.isVizStale },
-        { id: 'test', name: 'Test Senaryoları', icon: Beaker, content: testScenariosContent, isStale: generatedDocs.isTestStale },
-        { id: 'traceability', name: 'İzlenebilirlik', icon: GitBranch, content: traceabilityMatrixContent, isStale: generatedDocs.isTraceabilityStale },
-        { id: 'backlog-generation', name: 'Backlog', icon: CheckSquare, content: true, isStale: generatedDocs.isBacklogStale },
+        { id: 'request', name: 'Talep', icon: FileInput, content: requestDocContent, isStale: false },
+        { id: 'analysis', name: 'İş Analizi', icon: FileText, content: analysisDocContent, isStale: false },
+        { id: 'viz', name: 'Görselleştirme', icon: GanttChartSquare, content: vizContent, isStale: generatedDocs.bpmnViz?.isStale },
+        { id: 'test', name: 'Test Senaryoları', icon: Beaker, content: testScenariosContent, isStale: generatedDocs.testScenarios?.isStale },
+        { id: 'traceability', name: 'İzlenebilirlik', icon: GitBranch, content: traceabilityMatrixContent, isStale: generatedDocs.traceabilityMatrix?.isStale },
+        { id: 'backlog-generation', name: 'Backlog', icon: CheckSquare, content: true, isStale: false },
         { id: 'maturity', name: 'Olgunluk', icon: Check, content: true, isStale: false },
     ];
 
@@ -223,7 +187,7 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
         setVizError(null);
         try {
             if (prompt) await onModifyDiagram(prompt);
-            else await onGenerateDoc('viz', undefined, diagramType);
+            else await onGenerateDoc('viz');
         } catch (e: any) {
             setVizError(e.message || "Diyagram oluşturulurken bilinmeyen bir hata oluştu.");
         } finally {
@@ -231,23 +195,15 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
         }
     };
 
-    const handleDiagramTypeChange = (newType: 'mermaid' | 'bpmn') => {
-        if (newType === diagramType) return;
-        setDiagramType(newType);
-        const analysisHash = simpleHash(conversation.generatedDocs.analysisDoc);
-        const targetVizData = newType === 'mermaid' ? conversation.generatedDocs.mermaidViz : conversation.generatedDocs.bpmnViz;
-        if (!targetVizData || targetVizData.sourceHash !== analysisHash) {
-            onGenerateDoc('viz', undefined, newType);
-        }
-    };
-
     const handleDismissMaturityQuestion = (questionToRemove: string) => {
-        if (!conversation.generatedDocs.maturityReport) return;
+        if (!conversation.generatedDocs.maturityReport?.metadata) return;
+        const currentReport = conversation.generatedDocs.maturityReport.metadata as MaturityReport;
+        
         const newReport: MaturityReport = {
-            ...conversation.generatedDocs.maturityReport,
-            suggestedQuestions: conversation.generatedDocs.maturityReport.suggestedQuestions.filter(q => q !== questionToRemove),
+            ...currentReport,
+            suggestedQuestions: currentReport.suggestedQuestions.filter(q => q !== questionToRemove),
         };
-        onUpdateDocument('maturityReport', newReport as any, 'Kullanıcı soruyu reddetti');
+        onUpdateDocument('maturityReport', JSON.stringify(newReport), 'Kullanıcı soruyu reddetti');
     };
     
     const handleExplainSelection = (text: string) => {
@@ -278,10 +234,10 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
             
             <div className="flex-1 overflow-y-auto relative min-h-0">
                 {activeDocTab === 'request' && (
-                    generatedDocs.requestDoc ? (
+                    requestDocContent ? (
                         <DocumentCanvas
                             key="request"
-                            content={generatedDocs.requestDoc}
+                            content={requestDocContent}
                             onContentChange={(newContent, reason) => onUpdateDocument('requestDoc', newContent, reason)}
                             docKey="requestDoc"
                             onModifySelection={onModifySelection}
@@ -295,26 +251,30 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                             onExplainSelection={handleExplainSelection}
                         />
                     ) : (
-                        <DocumentEmptyState icon={<FileInput />} title="Talep Dokümanı" description="Yeni bir sohbete başladığınızda veya uzun bir metin yapıştırdığınızda burası otomatik olarak dolacaktır." buttonText="" onAction={()=>{}} isDisabled={true} />
+                        <DocumentEmptyState 
+                            icon={<FileInput />} 
+                            title="Talep Dokümanı" 
+                            description="Henüz bir talep dokümanı yok. Sohbet geçmişini kullanarak otomatik olarak oluşturabilirsiniz." 
+                            buttonText="Sohbetten Oluştur" 
+                            onAction={() => onGenerateDoc('request')} 
+                            isDisabled={isProcessing || conversation.messages.length <= 1}
+                            isLoading={generatingDocType === 'request'}
+                        />
                     )
                 )}
-                {activeDocTab === 'analysis' && (generatedDocs.analysisDoc ?
-                    <DocumentCanvas key="analysis" content={generatedDocs.analysisDoc} onContentChange={(newContent, reason) => onUpdateDocument('analysisDoc', newContent, reason)} docKey="analysisDoc" onModifySelection={onModifySelection} inlineModificationState={inlineModificationState} isGenerating={isProcessing} isStreaming={generatingDocType === 'analysis'} templates={templates.analysis} selectedTemplate={selectedTemplates.analysis} onTemplateChange={onTemplateChange.analysis} filename={`${conversation.title}-analiz`} documentVersions={conversation.documentVersions} onAddTokens={onAddTokens} onRestoreVersion={onRestoreVersion} onExplainSelection={handleExplainSelection} />
-                    : <DocumentEmptyState icon={<FileText />} title="İş Analizi Dokümanı" description="Analistle sohbet ederek gereksinimleri olgunlaştırın. Yeterli bilgi toplandığında, AI doküman oluşturmayı önerecektir." buttonText="Analiz Dokümanı Oluştur" onAction={() => onGenerateDoc('analysis')} isDisabled={isProcessing || !generatedDocs.requestDoc} disabledTooltip="Önce bir talep dokümanı gereklidir." isLoading={generatingDocType === 'analysis'}/>
+                {activeDocTab === 'analysis' && (analysisDocContent ?
+                    <DocumentCanvas key="analysis" content={analysisDocContent} onContentChange={(newContent, reason) => onUpdateDocument('analysisDoc', newContent, reason)} docKey="analysisDoc" onModifySelection={onModifySelection} inlineModificationState={inlineModificationState} isGenerating={isProcessing} isStreaming={generatingDocType === 'analysis'} templates={templates.analysis} selectedTemplate={selectedTemplates.analysis} onTemplateChange={onTemplateChange.analysis} filename={`${conversation.title}-analiz`} documentVersions={conversation.documentVersions} onAddTokens={onAddTokens} onRestoreVersion={onRestoreVersion} onExplainSelection={handleExplainSelection} />
+                    : <DocumentEmptyState icon={<FileText />} title="İş Analizi Dokümanı" description="Analistle sohbet ederek gereksinimleri olgunlaştırın. Yeterli bilgi toplandığında, AI doküman oluşturmayı önerecektir." buttonText="Analiz Dokümanı Oluştur" onAction={() => onGenerateDoc('analysis')} isDisabled={isProcessing || !requestDocContent} disabledTooltip="Önce bir talep dokümanı gereklidir." isLoading={generatingDocType === 'analysis'}/>
                 )}
-                 {activeDocTab === 'viz' && (generatedDocs.analysisDoc ?
-                    <div className="relative h-full flex flex-col">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
-                            <div className="flex items-center gap-4">
-                                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Süreç Görselleştirmesi</h3>
-                                <div className="flex items-center p-1 bg-slate-200 dark:bg-slate-700 rounded-lg">
-                                    <button onClick={() => handleDiagramTypeChange('mermaid')} disabled={isVisualizing} className={`px-2 py-1 text-xs flex items-center gap-1.5 sm:px-3 sm:py-1 sm:text-sm font-semibold rounded-md transition-colors disabled:cursor-not-allowed ${diagramType === 'mermaid' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}><GanttChartSquare className="h-4 w-4" /> Mermaid</button>
-                                    <button onClick={() => handleDiagramTypeChange('bpmn')} disabled={isVisualizing} className={`px-2 py-1 text-xs flex items-center gap-1.5 sm:px-3 sm:py-1 sm:text-sm font-semibold rounded-md transition-colors disabled:cursor-not-allowed ${diagramType === 'bpmn' ? 'bg-white dark:bg-slate-800 shadow-sm text-indigo-600' : 'text-slate-600 dark:text-slate-300'}`}><Projector className="h-4 w-4" /> BPMN</button>
-                                </div>
+                 {activeDocTab === 'viz' && (analysisDocContent ?
+                    <Suspense fallback={<TabSpinner />}>
+                        <div className="relative h-full flex flex-col">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
+                                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Süreç Görselleştirmesi (BPMN)</h3>
                             </div>
+                            <Visualizations content={vizContent} onModifyDiagram={(prompt) => handleGenerateOrModifyViz(prompt)} onGenerateDiagram={() => handleGenerateOrModifyViz()} isLoading={isVisualizing || generatingDocType === 'viz'} error={vizError} isAnalysisDocReady={isAnalysisDocReady}/>
                         </div>
-                        <Visualizations content={vizContent} onModifyDiagram={(prompt) => handleGenerateOrModifyViz(prompt)} onGenerateDiagram={() => handleGenerateOrModifyViz()} isLoading={isVisualizing || generatingDocType === 'viz'} error={vizError} diagramType={diagramType} isAnalysisDocReady={isAnalysisDocReady}/>
-                    </div>
+                    </Suspense>
                     : <DocumentEmptyState icon={<GanttChartSquare />} title="Süreç Görselleştirmesi" description="Görselleştirme oluşturmak için önce bir iş analizi dokümanı gereklidir." buttonText="Analiz Dokümanı Oluştur" onAction={() => setActiveDocTab('analysis')} />
                 )}
                 {activeDocTab === 'test' && (testScenariosContent ?
@@ -325,8 +285,16 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
                     <DocumentCanvas key="traceability" content={traceabilityMatrixContent} onContentChange={(newContent, reason) => onUpdateDocument('traceabilityMatrix', newContent, reason)} docKey="traceabilityMatrix" onModifySelection={async () => {}} inlineModificationState={inlineModificationState} isGenerating={isProcessing} isStreaming={generatingDocType === 'traceability'} isTable filename={`${conversation.title}-izlenebilirlik`} documentVersions={conversation.documentVersions} onAddTokens={onAddTokens} templates={templates.traceability} selectedTemplate={selectedTemplates.traceability} onTemplateChange={onTemplateChange.traceability} onRestoreVersion={onRestoreVersion} onExplainSelection={handleExplainSelection} />
                     : <DocumentEmptyState icon={<GitBranch />} title="İzlenebilirlik Matrisi" description="Gereksinimler ile test senaryoları arasındaki ilişkiyi kurun." buttonText="Matris Oluştur" onAction={() => onGenerateDoc('traceability')} isDisabled={isProcessing || !isAnalysisDocReady || !testScenariosContent} disabledTooltip="Önce analiz ve test dokümanları oluşturmalısınız." isLoading={generatingDocType === 'traceability'}/>
                 )}
-                {activeDocTab === 'backlog-generation' && <BacklogGenerationView conversation={conversation} onUpdateConversation={onUpdateConversation} />}
-                {activeDocTab === 'maturity' && <MaturityCheckReport report={generatedDocs.maturityReport || null} onPrepareQuestionForAnswer={onPrepareQuestionForAnswer} onDismissQuestion={handleDismissMaturityQuestion} isLoading={isProcessing && generatingDocType === 'maturity'} />}
+                {activeDocTab === 'backlog-generation' && (
+                    <Suspense fallback={<TabSpinner />}>
+                        <BacklogGenerationView conversation={conversation} onUpdateConversation={onUpdateConversation} />
+                    </Suspense>
+                )}
+                {activeDocTab === 'maturity' && (
+                    <Suspense fallback={<TabSpinner />}>
+                        <MaturityCheckReport report={generatedDocs.maturityReport?.metadata || null} onPrepareQuestionForAnswer={onPrepareQuestionForAnswer} onDismissQuestion={handleDismissMaturityQuestion} isLoading={isProcessing && generatingDocType === 'maturity'} />
+                    </Suspense>
+                )}
             </div>
         </div>
     );

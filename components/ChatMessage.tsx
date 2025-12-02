@@ -1,7 +1,8 @@
+
 // components/ChatMessage.tsx
-import React, { useState, useEffect } from 'react';
-import { Message, GenerativeSuggestion, ThinkingStep, ThoughtProcess } from '../types';
-import { User, Bot, Copy, Check } from 'lucide-react';
+import React, { useState, useEffect, memo } from 'react';
+import { Message, GenerativeSuggestion, ThinkingStep, ThoughtProcess, GroundingChunk } from '../types';
+import { User, Bot, Copy, Check, ExternalLink } from 'lucide-react';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { Feedback } from './Feedback';
 import ThinkingProcess from './ThinkingProcess';
@@ -18,13 +19,46 @@ interface ChatMessageProps {
   isLastInGroup: boolean;
 }
 
-export const ChatMessage: React.FC<ChatMessageProps> = ({
+const Sources: React.FC<{ chunks?: GroundingChunk[] }> = ({ chunks }) => {
+    if (!chunks || chunks.length === 0) return null;
+    
+    // Filter out potential non-web chunks if the type is expanded later
+    const webChunks = chunks.filter(chunk => chunk.web);
+
+    if (webChunks.length === 0) return null;
+
+    return (
+        <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700/50">
+            <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2">Kaynaklar</h4>
+            <ol className="space-y-1.5">
+                {webChunks.map((chunk, index) => (
+                    <li key={index} className="text-sm flex items-start gap-2">
+                        <span className="text-slate-400 dark:text-slate-500 text-xs font-medium mt-0.5">{index + 1}.</span>
+                        <a 
+                            href={chunk.web.uri} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-indigo-600 hover:underline dark:text-indigo-400 group/link inline-flex items-center gap-1.5"
+                            title={chunk.web.title}
+                        >
+                            <span className="truncate">{chunk.web.title || new URL(chunk.web.uri).hostname}</span>
+                            <ExternalLink className="h-3.5 w-3.5 opacity-0 group-hover/link:opacity-100 transition-opacity flex-shrink-0" />
+                        </a>
+                    </li>
+                ))}
+            </ol>
+        </div>
+    );
+};
+
+
+export const ChatMessage = memo(({
   message,
   onFeedback,
   onRetry,
   isFirstInGroup,
   isLastInGroup
-}) => {
+}: ChatMessageProps) => {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const [copyText, setCopyText] = useState('');
@@ -150,8 +184,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                         </div>
                     )
                 )}
+                 <Sources chunks={message.groundingMetadata} />
              </div>
         </div>
     </div>
   );
-};
+});

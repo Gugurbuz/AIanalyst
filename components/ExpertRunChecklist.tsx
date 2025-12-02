@@ -1,6 +1,6 @@
+
 // components/ExpertRunChecklist.tsx
 import React from 'react';
-// FIX: Import the 'ExpertStep' type, which is now an alias for 'ThinkingStep'.
 import type { ExpertStep } from '../types';
 import { CheckCircle2, LoaderCircle, Circle, AlertTriangle } from 'lucide-react';
 
@@ -24,11 +24,29 @@ const statusTextStyles: Record<ExpertStep['status'], string> = {
 };
 
 export const ExpertRunChecklist: React.FC<ExpertRunChecklistProps> = ({ steps, initialMessage }) => {
+    const completedCount = steps.filter(s => s.status === 'completed').length;
+    const totalCount = steps.length;
+    const progressPercentage = (completedCount / totalCount) * 100;
+
     return (
-        <div className="p-4 space-y-3">
+        <div className="p-4 space-y-4">
             {initialMessage && (
                 <p className="text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{initialMessage}</p>
             )}
+            
+            <div className="space-y-1">
+                <div className="flex justify-between text-xs font-medium text-slate-500 dark:text-slate-400">
+                    <span>İlerleme</span>
+                    <span>%{Math.round(progressPercentage)}</span>
+                </div>
+                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
+                    <div 
+                        className="bg-indigo-600 dark:bg-indigo-500 h-2 rounded-full transition-all duration-500 ease-out" 
+                        style={{ width: `${progressPercentage}%` }}
+                    ></div>
+                </div>
+            </div>
+
             <div className="border-t border-slate-300 dark:border-slate-600 pt-3 space-y-2">
                 {steps.map(step => (
                     <div key={step.id} className="flex items-start gap-3">

@@ -1,5 +1,6 @@
+
 // components/MarkdownRenderer.tsx
-import React, { useMemo } from 'react';
+import React, { memo } from 'react';
 
 interface MarkdownRendererProps {
     content: string;
@@ -147,7 +148,7 @@ const parseMarkdown = (text: string, highlightedLines: number[], rephrasingText:
 };
 
 
-export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, highlightedLines = [], rephrasingText = null, highlightedUserSelectionText = null }) => {
+export const MarkdownRenderer = memo(({ content, highlightedLines = [], rephrasingText = null, highlightedUserSelectionText = null }: MarkdownRendererProps) => {
     const htmlContent = parseMarkdown(content, highlightedLines, rephrasingText, highlightedUserSelectionText);
 
     return (
@@ -163,4 +164,4 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, hig
             dangerouslySetInnerHTML={{ __html: htmlContent }}
         />
     );
-};
+});

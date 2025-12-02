@@ -30,7 +30,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
     const conversationState = useConversationState({ user, initialData, setError: uiState.setError });
 
     const [isProcessing, setIsProcessing] = useState(false);
-    const [generatingDocType, setGeneratingDocType] = useState<'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | null>(null);
+    const [generatingDocType, setGeneratingDocType] = useState<'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | null>(null);
 
     const activeModel = useCallback((): GeminiModel => {
         if (uiState.isDeepAnalysisMode) return 'gemini-2.5-pro';
@@ -148,9 +148,9 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
     const handleNewConversationAndSend = async (content?: string, file?: File | null) => {
         const { newConvId, initialContent, initialFile } = await handleNewConversation(content);
         if (newConvId && initialContent) {
-            chatService.sendMessage(initialContent, initialFile, false, newConvId);
+            chatService.sendMessage(initialContent, initialFile, false, newConvId, uiState.isSearchEnabled);
         } else if (newConvId && file) {
-             chatService.sendMessage(content || '', file, false, newConvId);
+             chatService.sendMessage(content || '', file, false, newConvId, uiState.isSearchEnabled);
         }
         return { newConvId };
     };
@@ -163,7 +163,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         isProcessing,
         generatingDocType,
         onLogout,
-        sendMessage: chatService.sendMessage,
+        sendMessage: (text: string, file: File | null) => chatService.sendMessage(text, file, false, undefined, uiState.isSearchEnabled),
         handleNewConversation: handleNewConversationAndSend,
         handleFeedbackUpdate,
         handleSuggestNextFeature,
@@ -180,7 +180,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         },
         handleApplySuggestion: () => {},
         handlePrepareQuestionForAnswer: (question: string) => {
-            chatService.sendMessage(question);
+            chatService.sendMessage(question, null, false, undefined, uiState.isSearchEnabled);
         },
         handleEvaluateDocument: () => {},
         handleConfirmReset: () => {},

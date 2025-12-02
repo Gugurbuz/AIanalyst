@@ -1,33 +1,40 @@
+
 // layouts/MainAppLayout.tsx
-import React, { useMemo, useEffect, useState, useRef } from 'react';
+import React, { useMemo, useEffect, useState, useRef, Suspense } from 'react';
 import { useAppContext } from '../contexts/AppContext';
 import { ChatInterface } from '../components/ChatInterface';
 import { ChatMessageHistory } from '../components/ChatMessageHistory';
 import { PromptSuggestions } from '../components/PromptSuggestions';
-import { ShareModal } from '../components/ShareModal';
 import { DocumentWorkspace } from '../components/DocumentWorkspace';
-import { FeatureSuggestionsModal } from '../components/FeatureSuggestionsModal';
-import { RegenerateConfirmationModal } from '../components/RegenerateConfirmationModal';
-import { DeveloperPanel } from '../components/DeveloperPanel';
-import { FeedbackDashboard } from '../components/FeedbackDashboard';
-import { UpgradeModal } from '../components/UpgradeModal';
-import { LongTextModal } from '../components/LongTextModal';
-import { ResetConfirmationModal } from '../components/ResetConfirmationModal';
 import { ProjectBoard } from '../components/ProjectBoard';
-import { AlertTriangle, FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, X, PanelRightClose, PanelRightOpen, PanelLeft } from 'lucide-react';
+import { ChatbotWidget } from '../components/ChatbotWidget';
+import { FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, PanelRightClose, PanelRightOpen, PanelLeft } from 'lucide-react';
 import { MainSidebar } from './MainSidebar';
 import { ConfirmationModal } from '../components/ConfirmationModal';
+import { Toast } from '../components/Toast';
+
+// Lazy load modals
+const ShareModal = React.lazy(() => import('../components/ShareModal').then(m => ({ default: m.ShareModal })));
+const FeatureSuggestionsModal = React.lazy(() => import('../components/FeatureSuggestionsModal').then(m => ({ default: m.FeatureSuggestionsModal })));
+const RegenerateConfirmationModal = React.lazy(() => import('../components/RegenerateConfirmationModal').then(m => ({ default: m.RegenerateConfirmationModal })));
+const DeveloperPanel = React.lazy(() => import('../components/DeveloperPanel').then(m => ({ default: m.DeveloperPanel })));
+const FeedbackDashboard = React.lazy(() => import('../components/FeedbackDashboard').then(m => ({ default: m.FeedbackDashboard })));
+const UpgradeModal = React.lazy(() => import('../components/UpgradeModal').then(m => ({ default: m.UpgradeModal })));
+const LongTextModal = React.lazy(() => import('../components/LongTextModal').then(m => ({ default: m.LongTextModal })));
+const ResetConfirmationModal = React.lazy(() => import('../components/ResetConfirmationModal').then(m => ({ default: m.ResetConfirmationModal })));
+
 
 const AnalystWorkspace = () => {
     const context = useAppContext();
-    const { activeConversation, isWorkspaceVisible } = context;
+    const { activeConversation, isWorkspaceVisible, fontSize } = context;
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        if (scrollContainerRef.current) {
-            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-        }
-    }, [activeConversation?.messages]);
+    // Font scaling classes
+    const fontClasses = {
+        small: 'text-sm',
+        medium: 'text-base',
+        large: 'text-lg',
+    };
 
     const nextBestAction = useNextBestAction(activeConversation, {
         onGenerateDoc: context.handleGenerateDoc,
@@ -42,8 +49,6 @@ const AnalystWorkspace = () => {
             callback: (choice: 'analyze' | 'save') => {
                 const saveAsAnalysisDoc = async (isNew: boolean) => {
                     let convId = context.activeConversationId;
-                    // FIX: Correctly create a new conversation, get its ID, and then update the title.
-                    // This avoids a logic bug where the title was parsed as content and fixes the type error.
                     if (isNew || !convId) {
                         const result = await context.handleNewConversation();
                         convId = result?.newConvId ?? null;
@@ -82,7 +87,7 @@ const AnalystWorkspace = () => {
     const gridLayoutClass = isWorkspaceVisible ? 'grid-cols-1 lg:grid-cols-5' : 'grid-cols-1';
 
     return (
-        <div className={`grid ${gridLayoutClass} h-full w-full`}>
+        <div className={`grid ${gridLayoutClass} h-full w-full ${fontClasses[fontSize] || 'text-base'}`}>
             <div className={`relative flex flex-col overflow-hidden bg-slate-100 dark:bg-slate-900 ${isWorkspaceVisible ? 'lg:col-span-2' : 'col-span-1'}`}>
                  <button
                     onClick={() => context.setIsWorkspaceVisible(!context.isWorkspaceVisible)}
@@ -91,8 +96,8 @@ const AnalystWorkspace = () => {
                 >
                     {context.isWorkspaceVisible ? <PanelRightClose className="h-5 w-5" /> : <PanelRightOpen className="h-5 w-5" />}
                 </button>
-                <main ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4">
-                     <div className="max-w-4xl mx-auto w-full">
+                <main ref={scrollContainerRef} className="flex-1 p-4 h-full relative">
+                     <div className="max-w-4xl mx-auto w-full h-full flex flex-col">
                          {activeConversation && activeConversation.messages.filter(m => m.role !== 'system').length > 0 ? (
                             <ChatMessageHistory
                                 user={context.user}
@@ -104,7 +109,7 @@ const AnalystWorkspace = () => {
                             />
                         ) : (
                             <div className="flex flex-col items-center justify-center h-full pt-10">
-                                <PromptSuggestions onSelectPrompt={(p) => context.sendMessage(p)} />
+                                <PromptSuggestions onSelectPrompt={(p) => context.sendMessage(p, null)} />
                             </div>
                         )}
                     </div>
@@ -122,6 +127,8 @@ const AnalystWorkspace = () => {
                             nextAction={nextBestAction}
                             isDeepAnalysisMode={context.isDeepAnalysisMode}
                             onDeepAnalysisModeChange={context.handleDeepAnalysisModeChange}
+                            isSearchEnabled={context.isSearchEnabled}
+                            onSearchModeChange={context.setIsSearchEnabled}
                             isExpertMode={context.isExpertMode}
                             setIsExpertMode={context.setIsExpertMode}
                             onLongTextPaste={handleLongTextPaste}
@@ -152,8 +159,6 @@ const AnalystWorkspace = () => {
                         activeDocTab={context.activeDocTab}
                         setActiveDocTab={context.setActiveDocTab}
                         onPrepareQuestionForAnswer={context.handlePrepareQuestionForAnswer}
-                        diagramType={context.diagramType}
-                        setDiagramType={context.setDiagramType}
                         onAddTokens={context.commitTokenUsage}
                         onRestoreVersion={context.handleRestoreVersion}
                      />
@@ -167,22 +172,22 @@ const useNextBestAction = (conversation: any, callbacks: any) => {
     if (!conversation) return { label: "Başlamak için bir mesaj gönderin", action: () => {}, icon: <Sparkles className="h-5 w-5" />, disabled: true };
     
     const { generatedDocs, messages } = conversation;
-    const hasRealAnalysisDoc = !!generatedDocs?.analysisDoc && !generatedDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
+    const hasRealAnalysisDoc = !!generatedDocs?.analysisDoc && !generatedDocs.analysisDoc.content.includes("Bu bölüme projenin temel hedefini");
     const hasMessages = messages.filter((m: any) => m.role !== 'system').length > 0;
 
     if (hasRealAnalysisDoc && !hasMessages) {
          return { label: "Dokümanı Değerlendir ve Soru Sor", action: () => callbacks.onEvaluateDocument(), icon: <Search className="h-5 w-5" />, disabled: false, tooltip: "AI'nın mevcut dokümanı analiz etmesini ve iyileştirme için sorular sormasını sağlayın." };
     }
     
-    const hasVisualization = generatedDocs?.mermaidViz?.code || generatedDocs?.bpmnViz?.code || generatedDocs?.visualization;
+    const hasVisualization = generatedDocs?.mermaidViz?.content || generatedDocs?.bpmnViz?.content || generatedDocs?.visualization;
     const hasTestScenarios = typeof generatedDocs.testScenarios === 'object' ? !!generatedDocs.testScenarios.content : !!generatedDocs.testScenarios;
 
     if (hasRealAnalysisDoc && hasVisualization && hasTestScenarios) return { label: "Proje Görevleri Oluştur", action: () => callbacks.onNavigateToBacklogGeneration(), icon: <PlusSquare className="h-5 w-5" />, disabled: false };
     if (hasRealAnalysisDoc && hasVisualization && !hasTestScenarios) return { label: "Test Senaryoları Oluştur", action: () => callbacks.onGenerateDoc('test'), icon: <Beaker className="h-5 w-5" />, disabled: false };
     if (hasRealAnalysisDoc && !hasVisualization) return { label: "Süreç Akışını Görselleştir", action: () => callbacks.onGenerateDoc('viz'), icon: <GanttChartSquare className="h-5 w-5" />, disabled: false };
-    if (generatedDocs?.maturityReport?.isSufficient && !hasRealAnalysisDoc) return { label: "İş Analizi Dokümanı Oluştur", action: () => callbacks.onGenerateDoc('analysis'), icon: <FileText className="h-5 w-5" />, disabled: false };
+    if (generatedDocs?.maturityReport?.metadata?.isSufficient && !hasRealAnalysisDoc) return { label: "İş Analizi Dokümanı Oluştur", action: () => callbacks.onGenerateDoc('analysis'), icon: <FileText className="h-5 w-5" />, disabled: false };
     
-    const firstQuestion = generatedDocs?.maturityReport?.suggestedQuestions?.[0];
+    const firstQuestion = generatedDocs?.maturityReport?.metadata?.suggestedQuestions?.[0];
     if (firstQuestion) return { label: "Analizi Derinleştir", action: () => callbacks.onSendMessage(firstQuestion, false), icon: <Sparkles className="h-5 w-5" />, disabled: false, tooltip: `Öneri: "${firstQuestion}" sorusunu sorun.` };
     
     if (hasMessages) return { label: "Analizi Derinleştirmek İçin Soru Sorun", action: () => {}, icon: <Sparkles className="h-5 w-5" />, disabled: true, tooltip: "Daha fazla detay için soru sorabilir veya olgunluk kontrolü yapabilirsiniz." };
@@ -208,15 +213,12 @@ export const MainAppLayout: React.FC = () => {
 
     return (
         <div className="font-sans bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 h-screen flex overflow-hidden">
-             {context.error && (
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-lg z-50 flex items-center gap-2 error-banner-enter dark:bg-red-900/80 dark:text-red-200 dark:border-red-600">
-                    <AlertTriangle className="h-5 w-5"/>
-                    <span>{context.error}</span>
-                    <button onClick={() => context.setError(null)} className="ml-4 p-1 rounded-full hover:bg-red-200 dark:hover:bg-red-800">
-                        <X className="h-4 w-4"/>
-                    </button>
-                </div>
-            )}
+            {/* Toast Container */}
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[60] flex flex-col gap-2 w-full max-w-sm pointer-events-none px-4">
+                {context.toasts.map(toast => (
+                    <Toast key={toast.id} toast={toast} onClose={context.removeToast} />
+                ))}
+            </div>
             
             <div className={`h-full flex-shrink-0 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-80' : 'w-0'} overflow-hidden`}>
                 <MainSidebar
@@ -242,24 +244,29 @@ export const MainAppLayout: React.FC = () => {
                 {context.appMode === 'backlog' && context.user && <ProjectBoard user={context.user} />}
             </div>
 
-            {context.isShareModalOpen && context.activeConversation && <ShareModal isOpen={context.isShareModalOpen} onClose={() => context.setIsShareModalOpen(false)} conversation={context.activeConversation} onUpdateShareSettings={(id, updates) => context.updateConversation(id, updates)} />}
-            {context.showUpgradeModal && <UpgradeModal isOpen={context.showUpgradeModal} onClose={() => context.setShowUpgradeModal(false)} />}
-            {context.isFeatureSuggestionsModalOpen && <FeatureSuggestionsModal isOpen={context.isFeatureSuggestionsModalOpen} onClose={() => context.setIsFeatureSuggestionsModalOpen(false)} isLoading={context.isFetchingSuggestions} suggestions={context.featureSuggestions} onSelectSuggestion={(s) => context.sendMessage(s)} error={context.suggestionError} onRetry={context.handleSuggestNextFeature} />}
-            {context.isRegenerateModalOpen && context.regenerateModalData.current && (
-                <RegenerateConfirmationModal isOpen={context.isRegenerateModalOpen} onClose={() => context.setIsRegenerateModalOpen(false)} onConfirm={context.handleConfirmRegenerate} documentName={context.regenerateModalData.current.docType === 'analysis' ? 'Analiz Dokümanı' : context.regenerateModalData.current.docType === 'test' ? 'Test Senaryoları' : 'İzlenebilirlik Matrisi'} templateName={(context.regenerateModalData.current.docType === 'analysis' ? context.analysisTemplates : context.regenerateModalData.current.docType === 'test' ? context.testTemplates : context.traceabilityTemplates).find(t => t.id === context.regenerateModalData.current!.newTemplateId)?.name || ''} />
-            )}
-             {context.isDeveloperPanelOpen && (
-                <DeveloperPanel onClose={context.handleToggleDeveloperPanel} modelName={localStorage.getItem('geminiModel') || 'gemini-2.5-flash'} onModelNameChange={(name) => localStorage.setItem('geminiModel', name)} supabaseUrl={localStorage.getItem('supabaseUrl') || ''} onSupabaseUrlChange={(url) => localStorage.setItem('supabaseUrl', url)} supabaseAnonKey={localStorage.getItem('supabaseAnonKey') || ''} onSupabaseAnonKeyChange={(key) => localStorage.setItem('supabaseAnonKey', key)} testUserEmail={localStorage.getItem('devTestUserEmail') || ''} onTestUserEmailChange={(email) => localStorage.setItem('devTestUserEmail', email)} testUserPassword={localStorage.getItem('devTestUserPassword') || ''} onTestUserPasswordChange={(pw) => localStorage.setItem('devTestUserPassword', pw)} isFetchingFeedback={context.isFetchingFeedback} onToggleFeedbackDashboard={context.fetchAllFeedback} />
-            )}
-            {context.isFeedbackDashboardOpen && (
-                <FeedbackDashboard isOpen={context.isFeedbackDashboardOpen} onClose={() => context.setIsFeedbackDashboardOpen(false)} feedbackData={context.allFeedback} />
-            )}
-             {context.longTextPrompt && (
-                <LongTextModal isOpen={!!context.longTextPrompt} onClose={() => context.setLongTextPrompt(null)} onSelectChoice={(choice) => { context.longTextPrompt?.callback(choice); }} />
-            )}
-            {context.resetConfirmation && (
-                 <ResetConfirmationModal isOpen={!!context.resetConfirmation} onClose={() => context.setResetConfirmation(null)} onConfirm={context.handleConfirmReset} documentName={context.resetConfirmation.changedDocName} impactedDocs={context.resetConfirmation.impactedDocNames} />
-            )}
+            <ChatbotWidget />
+
+            <Suspense fallback={null}>
+                {context.isShareModalOpen && context.activeConversation && <ShareModal isOpen={context.isShareModalOpen} onClose={() => context.setIsShareModalOpen(false)} conversation={context.activeConversation} onUpdateShareSettings={(id, updates) => context.updateConversation(id, updates)} />}
+                {context.showUpgradeModal && <UpgradeModal isOpen={context.showUpgradeModal} onClose={() => context.setShowUpgradeModal(false)} />}
+                {context.isFeatureSuggestionsModalOpen && <FeatureSuggestionsModal isOpen={context.isFeatureSuggestionsModalOpen} onClose={() => context.setIsFeatureSuggestionsModalOpen(false)} isLoading={context.isFetchingSuggestions} suggestions={context.featureSuggestions} onSelectSuggestion={(s) => context.sendMessage(s, null)} error={context.suggestionError} onRetry={context.handleSuggestNextFeature} />}
+                {context.isRegenerateModalOpen && context.regenerateModalData.current && (
+                    <RegenerateConfirmationModal isOpen={context.isRegenerateModalOpen} onClose={() => context.setIsRegenerateModalOpen(false)} onConfirm={context.handleConfirmRegenerate} documentName={context.regenerateModalData.current.docType === 'analysis' ? 'Analiz Dokümanı' : context.regenerateModalData.current.docType === 'test' ? 'Test Senaryoları' : 'İzlenebilirlik Matrisi'} templateName={(context.regenerateModalData.current.docType === 'analysis' ? context.analysisTemplates : context.regenerateModalData.current.docType === 'test' ? context.testTemplates : context.traceabilityTemplates).find(t => t.id === context.regenerateModalData.current!.newTemplateId)?.name || ''} />
+                )}
+                 {context.isDeveloperPanelOpen && (
+                    <DeveloperPanel onClose={context.handleToggleDeveloperPanel} modelName={localStorage.getItem('geminiModel') || 'gemini-2.5-flash'} onModelNameChange={(name) => localStorage.setItem('geminiModel', name)} supabaseUrl={localStorage.getItem('supabaseUrl') || ''} onSupabaseUrlChange={(url) => localStorage.setItem('supabaseUrl', url)} supabaseAnonKey={localStorage.getItem('supabaseAnonKey') || ''} onSupabaseAnonKeyChange={(key) => localStorage.setItem('supabaseAnonKey', key)} testUserEmail={localStorage.getItem('devTestUserEmail') || ''} onTestUserEmailChange={(email) => localStorage.setItem('devTestUserEmail', email)} testUserPassword={localStorage.getItem('devTestUserPassword') || ''} onTestUserPasswordChange={(pw) => localStorage.setItem('devTestUserPassword', pw)} isFetchingFeedback={context.isFetchingFeedback} onToggleFeedbackDashboard={context.fetchAllFeedback} />
+                )}
+                {context.isFeedbackDashboardOpen && (
+                    <FeedbackDashboard isOpen={context.isFeedbackDashboardOpen} onClose={() => context.setIsFeedbackDashboardOpen(false)} feedbackData={context.allFeedback} />
+                )}
+                 {context.longTextPrompt && (
+                    <LongTextModal isOpen={!!context.longTextPrompt} onClose={() => context.setLongTextPrompt(null)} onSelectChoice={(choice) => { context.longTextPrompt?.callback(choice); }} />
+                )}
+                {context.resetConfirmation && (
+                     <ResetConfirmationModal isOpen={!!context.resetConfirmation} onClose={() => context.setResetConfirmation(null)} onConfirm={context.handleConfirmReset} documentName={context.resetConfirmation.changedDocName} impactedDocs={context.resetConfirmation.impactedDocNames} />
+                )}
+            </Suspense>
+            
             {context.confirmation && (
                 <ConfirmationModal
                     isOpen={!!context.confirmation}
@@ -272,6 +279,9 @@ export const MainAppLayout: React.FC = () => {
                         context.setConfirmation(null);
                     }}
                     onClose={() => context.setConfirmation(null)}
+                    confirmButtonText={context.confirmation.confirmButtonText}
+                    cancelButtonText={context.confirmation.cancelButtonText}
+                    confirmButtonVariant={context.confirmation.confirmButtonVariant}
                 />
             )}
         </div>

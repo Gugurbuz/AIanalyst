@@ -1,10 +1,12 @@
+
 // components/Visualizations.tsx
-import React, { useEffect, useRef, useState, useCallback, useId } from 'react';
-import mermaid from 'mermaid';
+import React, { useEffect, useRef, useState, useCallback, Suspense } from 'react';
 import { TransformWrapper, TransformComponent, useControls } from 'react-zoom-pan-pinch';
 import { ZoomIn, ZoomOut, RotateCcw, AlertTriangle, LoaderCircle, Sparkles, GanttChartSquare, Maximize, Minimize, PanelRight, X } from 'lucide-react';
-import { BPMNViewer } from './BPMNViewer';
 import { ExportDropdown } from './ExportDropdown';
+
+// Lazy load BPMNViewer to avoid bundling bpmn-js in the main bundle
+const BPMNViewer = React.lazy(() => import('./BPMNViewer').then(module => ({ default: module.BPMNViewer })));
 
 interface VisualizationsProps {
     content: string;
@@ -12,7 +14,6 @@ interface VisualizationsProps {
     onGenerateDiagram: () => void;
     isLoading: boolean;
     error: string | null;
-    diagramType: 'mermaid' | 'bpmn';
     isAnalysisDocReady: boolean;
 }
 
@@ -51,111 +52,12 @@ const EmptyState: React.FC<{ onGenerate: () => void; disabled: boolean }> = ({ o
     </div>
 );
 
-const MermaidControls = () => {
-  const { zoomIn, zoomOut, resetTransform } = useControls();
-  return (
-    <div className="absolute top-2 left-2 z-10 flex gap-1 p-1 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm rounded-lg shadow-md">
-      <button onClick={() => zoomIn()} title="Yakınlaş" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"><ZoomIn className="h-4 w-4" /></button>
-      <button onClick={() => zoomOut()} title="Uzaklaş" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"><ZoomOut className="h-4 w-4" /></button>
-      <button onClick={() => resetTransform()} title="Sıfırla" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"><RotateCcw className="h-4 w-4" /></button>
-    </div>
-  );
-};
-
-const MermaidDiagram: React.FC<{ 
-    content: string, 
-    setSvgContentGetter?: (getter: () => Promise<string | null>) => void; 
-}> = ({ content, setSvgContentGetter }) => {
-    const [diagramSvg, setDiagramSvg] = useState('');
-    const [isRendering, setIsRendering] = useState(false);
-    const [renderError, setRenderError] = useState<string | null>(null);
-    const diagramContainerRef = useRef<HTMLDivElement>(null);
-    const diagramId = `mermaid-diagram-${useId()}`;
-
-    const renderDiagram = useCallback(async (code: string) => {
-        if (!code.trim()) {
-            setDiagramSvg('');
-            setRenderError(null);
-            return;
-        }
-        
-        setIsRendering(true);
-        setRenderError(null);
-
-        try {
-            // Mermaid's parse function can throw an error for invalid syntax.
-            // We await it to catch it properly.
-            await mermaid.parse(code);
-            const { svg } = await mermaid.render(diagramId, code);
-            setDiagramSvg(svg);
-        } catch (e: any) {
-            console.error("Mermaid.js hatası:", e);
-            const errorMessage = e.message || "Geçersiz diyagram sözdizimi. Lütfen kodu kontrol edin.";
-            setRenderError(errorMessage);
-            setDiagramSvg('');
-        } finally {
-            setIsRendering(false);
-        }
-    }, [diagramId]);
-    
-    const getSvg = useCallback(async () => {
-        const svgElement = diagramContainerRef.current?.querySelector('svg');
-        if (svgElement) {
-            const svgClone = svgElement.cloneNode(true) as SVGElement;
-            if (!svgClone.getAttribute('xmlns')) {
-                svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-            }
-            
-            const style = document.createElement('style');
-            const isDark = document.documentElement.classList.contains('dark');
-            style.innerHTML = `svg { background-color: ${isDark ? '#0f172a' : '#ffffff'}; }`;
-            svgClone.prepend(style);
-
-            return new XMLSerializer().serializeToString(svgClone);
-        }
-        return null;
-    }, []);
-
-    useEffect(() => {
-        if (setSvgContentGetter) {
-            setSvgContentGetter(getSvg);
-        }
-    }, [setSvgContentGetter, getSvg]);
-
-    useEffect(() => {
-        const isDark = document.documentElement.classList.contains('dark');
-        mermaid.initialize({
-            startOnLoad: false,
-            theme: isDark ? 'dark' : 'default',
-            themeVariables: {
-                 background: isDark ? '#0f172a' : '#f8fafc', // slate-900 or slate-50
-            },
-            securityLevel: 'loose',
-        });
-        renderDiagram(content);
-    }, [content, renderDiagram]);
-
-    if (isRendering) return <VizSpinner text="Diyagram işleniyor..."/>;
-    if (renderError) return <VizError message={renderError} onRetry={() => renderDiagram(content)} />;
-    
-    return (
-        <TransformWrapper minScale={0.1} maxScale={10} initialScale={1} limitToBounds={false}>
-            <MermaidControls />
-            <TransformComponent wrapperClass="!w-full !h-full cursor-grab" contentClass="!w-full !h-full flex items-center justify-center">
-                <div ref={diagramContainerRef} id="mermaid-diagram-container" className="w-full h-full" dangerouslySetInnerHTML={{ __html: diagramSvg }} />
-            </TransformComponent>
-        </TransformWrapper>
-    );
-};
-
-
 export const Visualizations: React.FC<VisualizationsProps> = ({ 
     content, 
     onModifyDiagram, 
     onGenerateDiagram,
     isLoading,
     error,
-    diagramType,
     isAnalysisDocReady,
 }) => {
     const [modificationPrompt, setModificationPrompt] = useState('');
@@ -187,31 +89,26 @@ export const Visualizations: React.FC<VisualizationsProps> = ({
         if (error) return <VizError message={error} onRetry={onGenerateDiagram} />;
         if (!content) return <EmptyState onGenerate={onGenerateDiagram} disabled={!isAnalysisDocReady} />;
 
-        return diagramType === 'bpmn' ? (
-            <BPMNViewer 
-                xml={content} 
-                setSvgContentGetter={setSvgContentGetterCallback}
-                isPaletteVisible={isPaletteVisibleOverride ?? isPaletteVisible}
-            />
-        ) : (
-            <MermaidDiagram 
-                content={content} 
-                setSvgContentGetter={setSvgContentGetterCallback}
-            />
+        return (
+            <Suspense fallback={<VizSpinner text="Editör yükleniyor..." />}>
+                <BPMNViewer 
+                    xml={content} 
+                    setSvgContentGetter={setSvgContentGetterCallback}
+                    isPaletteVisible={isPaletteVisibleOverride ?? isPaletteVisible}
+                />
+            </Suspense>
         );
     }
     
     const DiagramControls = () => (
         <div className="absolute top-4 right-4 z-10 flex gap-2">
-            {diagramType === 'bpmn' && (
-                <button onClick={() => setIsPaletteVisible(!isPaletteVisible)} title="Araç Kutusunu Gizle/Göster" className="p-2 rounded-md bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400">
-                    <PanelRight className="h-5 w-5" />
-                </button>
-            )}
+            <button onClick={() => setIsPaletteVisible(!isPaletteVisible)} title="Araç Kutusunu Gizle/Göster" className="p-2 rounded-md bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400">
+                <PanelRight className="h-5 w-5" />
+            </button>
              <ExportDropdown 
                 content={content} 
-                filename={`diagram-${diagramType}`} 
-                diagramType={diagramType}
+                filename="diagram-bpmn" 
+                diagramType="bpmn"
                 getSvgContent={getSvgContentForExport}
             />
              <button onClick={() => setIsFullScreen(true)} title="Tam Ekran" className="p-2 rounded-md bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400">

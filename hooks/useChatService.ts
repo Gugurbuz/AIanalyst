@@ -1,3 +1,4 @@
+
 // hooks/useChatService.ts
 import { useState, useCallback, useRef } from 'react';
 import { geminiService } from '../services/geminiService';
@@ -6,49 +7,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../services/supabaseClient';
 import type { useConversationState } from './useConversationState';
 import type { useUIState } from './useUIState';
-import type { Message, GeminiModel, ThoughtProcess, StreamChunk, Document, GeneratedDocs, SourcedDocument } from '../types';
-
-const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
-    // FIX: Initialize SourcedDocument properties correctly.
-    const defaultGeneratedDocs: GeneratedDocs = {
-        requestDoc: '', analysisDoc: '', testScenarios: { content: '', sourceHash: '' }, visualization: '',
-        traceabilityMatrix: { content: '', sourceHash: '' }, isVizStale: false, isTestStale: false,
-        isTraceabilityStale: false, isBacklogStale: false,
-    };
-    const documentTypeToKeyMap = {
-        request: 'requestDoc', analysis: 'analysisDoc', test: 'testScenarios',
-        traceability: 'traceabilityMatrix', mermaid: 'mermaidViz', bpmn: 'bpmnViz',
-        maturity_report: 'maturityReport',
-    };
-    
-    const docs: GeneratedDocs = { ...defaultGeneratedDocs };
-    if (!documents) return docs;
-
-    const findDoc = (type: any) => documents.find(d => d.document_type === type);
-
-    for (const doc of documents) {
-        const key = documentTypeToKeyMap[doc.document_type as keyof typeof documentTypeToKeyMap];
-        if (key) {
-             if (['mermaidViz', 'bpmnViz', 'maturityReport', 'testScenarios', 'traceabilityMatrix'].includes(key)) {
-                try {
-                    (docs as any)[key] = JSON.parse(doc.content);
-                } catch (e) {
-                    if (['testScenarios', 'traceabilityMatrix'].includes(key)) {
-                        (docs as any)[key] = { content: doc.content, sourceHash: 'legacy' };
-                    }
-                }
-            } else {
-                 (docs as any)[key] = doc.content;
-            }
-        }
-    }
-    
-    docs.isVizStale = findDoc('mermaid')?.is_stale || findDoc('bpmn')?.is_stale || false;
-    docs.isTestStale = findDoc('test')?.is_stale || false;
-    docs.isTraceabilityStale = findDoc('traceability')?.is_stale || false;
-    
-    return docs;
-};
+import type { Message, GeminiModel, ThoughtProcess, StreamChunk, BacklogSuggestion } from '../types';
+import confetti from 'canvas-confetti';
 
 // Helper to read file content as a promise
 const readFileAsText = (file: File): Promise<string> => {
@@ -69,17 +29,25 @@ const fileToBase64 = (file: File): Promise<string> => {
     });
 };
 
+const triggerSuccessConfetti = () => {
+    confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
+    });
+};
+
 
 interface ChatServiceProps {
     conversationState: ReturnType<typeof useConversationState>;
     uiState: ReturnType<typeof useUIState>;
     isProcessing: boolean;
     setIsProcessing: (isProcessing: boolean) => void;
-    setGeneratingDocType: (type: 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | null) => void;
+    setGeneratingDocType: (type: 'request' | 'analysis' | 'viz' | 'test' | 'maturity' | 'traceability' | 'backlog-generation' | null) => void;
     activeModel: () => GeminiModel;
     checkTokenLimit: () => boolean;
     handleNewConversation: (content?: string, title?: string) => Promise<{newConvId: string | null, initialContent: string | null, initialFile: File | null}>;
-    handleGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string, newDiagramType?: 'mermaid' | 'bpmn') => Promise<void>;
+    handleGenerateDoc: (type: 'analysis' | 'test' | 'viz' | 'traceability' | 'backlog-generation', newTemplateId?: string) => Promise<void>;
 }
 
 
@@ -114,6 +82,7 @@ export const useChatService = ({
                 const { jsonString, tokens } = await geminiService.parseTextToRequestDocument(summary);
                 conversationState.commitTokenUsage(tokens);
                 await conversationState.saveDocumentVersion('requestDoc', jsonString, "İlk talep AI tarafından oluşturuldu");
+                triggerSuccessConfetti(); // Celebration!
                 return "Talebinizi anladım ve 'Talep Dokümanı' olarak kaydettim. Çalışma alanındaki 'Talep' sekmesinden inceleyebilirsiniz. Şimdi analizi derinleştirmek için devam edelim mi?";
             } catch (e: any) {
                 console.error("Error handling saveRequestDocument:", e);
@@ -145,7 +114,7 @@ export const useChatService = ({
         return null;
     }, [conversationState, handleGenerateDoc]);
     
-    const sendMessage = useCallback(async (text: string, file: File | null = null, isRetry = false, forceConversationId?: string) => {
+    const sendMessage = useCallback(async (text: string, file: File | null = null, isRetry = false, forceConversationId?: string, isSearchEnabled?: boolean) => {
         if (!checkTokenLimit()) return;
         
         let activeId = forceConversationId || conversationState.activeConversationId;
@@ -161,37 +130,20 @@ export const useChatService = ({
         generationController.current = new AbortController();
 
         const isImageMessage = file && file.type.startsWith('image/');
-        
-        // --- IMAGE MESSAGE LOGIC ---
+        let base64Image: string | null = null;
+
         if (isImageMessage) {
-            const userImageUrl = URL.createObjectURL(file);
-            const userMessage: Message = { id: uuidv4(), conversation_id: activeId, role: 'user', content: text, imageUrl: userImageUrl, created_at: new Date().toISOString() };
-            conversationState.updateConversation(activeId, { messages: [...(conversationState.activeConversation?.messages || []), userMessage] });
-            supabase.from('conversation_details').insert(userMessage).then(({error}) => { if(error) uiState.setError(`Mesajınız kaydedilemedi: ${error.message}`); });
-
-            const assistantMessageId = uuidv4();
-            const assistantMessage: Message = { id: assistantMessageId, conversation_id: activeId, role: 'assistant', content: '', created_at: new Date().toISOString(), isStreaming: true };
-            conversationState.updateConversation(activeId, { messages: [...(conversationState.activeConversation?.messages || []), assistantMessage] });
-            
             try {
-                const base64Data = await fileToBase64(file);
-                const { base64Image, tokens } = await geminiService.editImage(base64Data, file.type, text);
-                conversationState.commitTokenUsage(tokens);
-
-                const finalAssistantMessage: Partial<Message> = { content: `data:image/png;base64,${base64Image}`, isStreaming: false };
-                conversationState.updateMessage(assistantMessageId, finalAssistantMessage);
-                supabase.from('conversation_details').insert({ ...assistantMessage, ...finalAssistantMessage }).then(({error}) => { if(error) uiState.setError(`AI yanıtı kaydedilemedi: ${error.message}`); });
-            } catch (e: any) {
-                 conversationState.updateMessage(assistantMessageId, { error: { name: 'ImageGenerationError', message: e.message }, isStreaming: false });
-            } finally {
+                base64Image = await fileToBase64(file);
+            } catch(e) {
+                uiState.setError("Görsel işlenirken bir hata oluştu.");
                 setIsProcessing(false);
+                return;
             }
-            return;
         }
 
-        // --- TEXT MESSAGE LOGIC ---
         let messageContent = text;
-        if (file) { // It's a text file
+        if (file && !isImageMessage) { // It's a text file
             try {
                 const fileContent = await readFileAsText(file);
                 messageContent = `[EK DOSYA İÇERİĞİ: ${file.name}]\n\n---\n\n${fileContent}\n\n---\n\n${text}`;
@@ -202,14 +154,32 @@ export const useChatService = ({
             }
         }
         
-        const userMessage: Message = { id: uuidv4(), conversation_id: activeId, role: 'user', content: messageContent, created_at: new Date().toISOString() };
+        const userMessage: any = { 
+            id: uuidv4(), 
+            conversation_id: activeId, 
+            role: 'user', 
+            content: messageContent, 
+            created_at: new Date().toISOString() 
+        };
+
+        if (isImageMessage && base64Image) {
+            userMessage.imageUrl = URL.createObjectURL(file);
+            userMessage.base64Image = base64Image;
+            userMessage.imageMimeType = file.type;
+        }
+        
         let historyForApi: Message[];
         
         const currentConv = conversationState.conversations.find(c => c.id === activeId);
         if (!isRetry) {
             historyForApi = [...(currentConv?.messages || []), userMessage];
             conversationState.updateConversation(activeId, { messages: historyForApi });
-            supabase.from('conversation_details').insert(userMessage).then(({error}) => {
+            
+            const dbMessage = { ...userMessage };
+            delete dbMessage.base64Image;
+            delete dbMessage.imageMimeType;
+
+            supabase.from('conversation_details').insert(dbMessage).then(({error}) => {
                 if(error) uiState.setError(`Mesajınız kaydedilemedi: ${error.message}`);
             });
         } else {
@@ -220,111 +190,93 @@ export const useChatService = ({
         const assistantMessage: Message = { id: assistantMessageId, conversation_id: activeId, role: 'assistant', content: '', created_at: new Date().toISOString(), isStreaming: true };
         conversationState.updateConversation(activeId, { messages: [...historyForApi, assistantMessage] });
         
-        const finalAssistantMessage: Message = { ...assistantMessage };
-        
         try {
             const streamConv = conversationState.conversations.find(c => c.id === activeId)!;
-            const streamGeneratedDocs = buildGeneratedDocs(streamConv.documents);
+            const streamGeneratedDocs = streamConv.generatedDocs;
 
             const stream = uiState.isExpertMode 
                 ? geminiService.runExpertAnalysisStream(userMessage, streamGeneratedDocs, {
                     analysis: promptService.getPrompt('generateAnalysisDocument'),
                     test: promptService.getPrompt('generateTestScenarios'),
                     traceability: promptService.getPrompt('generateTraceabilityMatrix'),
-                    visualization: promptService.getPrompt(uiState.diagramType === 'bpmn' ? 'generateBPMN' : 'generateVisualization'),
-                }, uiState.diagramType)
+                    visualization: promptService.getPrompt('generateBPMN'),
+                }, {
+                    streamDocument: conversationState.streamDocument,
+                    saveDocument: (docKey, content, reason, template, convIdOverride, tokens) => 
+                        conversationState.saveDocumentVersion(docKey, content, reason, template, activeId, tokens),
+                    commitTokens: conversationState.commitTokenUsage,
+                    updateConversation: (updates: { backlogSuggestions: BacklogSuggestion[] }) => {
+                        conversationState.updateConversation(activeId, updates);
+                    },
+                })
                 : geminiService.handleUserMessageStream(historyForApi, streamGeneratedDocs, {
                     analysis: conversationState.allTemplates.find(t => t.id === conversationState.selectedTemplates.analysis)?.prompt || promptService.getPrompt('generateAnalysisDocument'),
                     test: conversationState.allTemplates.find(t => t.id === conversationState.selectedTemplates.test)?.prompt || promptService.getPrompt('generateTestScenarios'),
                     traceability: conversationState.allTemplates.find(t => t.id === conversationState.selectedTemplates.traceability)?.prompt || promptService.getPrompt('generateTraceabilityMatrix'),
-                    visualization: promptService.getPrompt(uiState.diagramType === 'bpmn' ? 'generateBPMN' : 'generateVisualization'),
-                }, activeModel());
+                    visualization: promptService.getPrompt('generateBPMN'),
+                }, activeModel(), isSearchEnabled);
             
-            let accumulatedContent = '';
-            let accumulatedThought: ThoughtProcess | null = null;
             let functionCallHandled = false;
-            const docStreamFirstChunkTracker: Partial<Record<keyof GeneratedDocs, boolean>> = {};
             
             for await (const chunk of stream) {
                 if (generationController.current?.signal.aborted) break;
 
-                switch (chunk.type) {
-                    case 'thought_chunk':
-                        accumulatedThought = chunk.payload;
-                        finalAssistantMessage.thought = accumulatedThought;
-                        conversationState.updateStreamingMessage(assistantMessageId, chunk);
-                        break;
-                    
-                    case 'text_chunk':
-                        accumulatedContent += chunk.text;
-                        finalAssistantMessage.content = accumulatedContent;
-                        conversationState.updateStreamingMessage(assistantMessageId, { type: 'chat_stream_chunk', chunk: chunk.text });
-                        break;
-                    
-                    case 'function_call':
-                        if (!functionCallHandled) {
-                             const responseText = await handleFunctionCall(chunk.name, chunk.args, assistantMessageId);
-                            if (responseText) {
-                                accumulatedContent += responseText;
-                                finalAssistantMessage.content = accumulatedContent;
-                                conversationState.updateStreamingMessage(assistantMessageId, { type: 'chat_stream_chunk', chunk: responseText });
-                            }
-                            functionCallHandled = true;
-                        }
-                        break;
+                conversationState.updateStreamingMessage(assistantMessageId, chunk);
 
-                    case 'doc_stream_chunk':
-                        const isFirstChunk = !docStreamFirstChunkTracker[chunk.docKey];
-                        if (isFirstChunk) {
-                            docStreamFirstChunkTracker[chunk.docKey] = true;
-                        }
-                        conversationState.streamDocument(chunk.docKey, chunk.chunk, isFirstChunk);
-                        break;
-                    case 'usage_update':
-                        conversationState.commitTokenUsage(chunk.tokens);
-                        break;
-                    case 'error':
-                        throw new Error(chunk.message);
+                // Handle expert mode completion
+                if (chunk.type === 'expert_run_update' && chunk.isComplete && !chunk.finalMessage?.includes('hata')) {
+                    triggerSuccessConfetti();
+                }
+
+                if (chunk.type === 'function_call' && !functionCallHandled) {
+                    const responseText = await handleFunctionCall(chunk.name, chunk.args, assistantMessageId);
+                    if (responseText) {
+                        conversationState.updateStreamingMessage(assistantMessageId, { type: 'text_chunk', text: responseText });
+                    }
+                    functionCallHandled = true;
                 }
             }
         } catch (e: any) {
             console.error("Streaming error:", e);
-            finalAssistantMessage.error = { name: "StreamError", message: e.message };
+            const errorMessage = `Bir hata oluştu: ${e.message}`;
+            conversationState.updateMessage(assistantMessageId, { 
+                error: { name: "StreamError", message: errorMessage },
+                isStreaming: false
+            });
         } finally {
+            if (generationController.current?.signal.aborted) {
+                const finalContent = (conversationState.getMessageById(assistantMessageId)?.content || "") + "\n\nKullanıcı tarafından durduruldu.";
+                conversationState.updateMessage(assistantMessageId, { isStreaming: false, content: finalContent });
+            }
+            
             setIsProcessing(false);
             setGeneratingDocType(null);
-            finalAssistantMessage.isStreaming = false;
-            
-            if (finalAssistantMessage.thought && Array.isArray(finalAssistantMessage.thought.steps)) {
-                finalAssistantMessage.thought.steps.forEach(step => step.status = step.status === 'error' ? 'error' : 'completed');
-            }
 
-            conversationState.updateMessage(assistantMessageId, { ...finalAssistantMessage });
+            const finalAssistantMessage = conversationState.getMessageById(assistantMessageId);
             
-            if (!finalAssistantMessage.error) {
-                await supabase.from('conversation_details').insert({
-                    id: finalAssistantMessage.id, conversation_id: finalAssistantMessage.conversation_id,
-                    role: finalAssistantMessage.role, content: finalAssistantMessage.content,
-                    created_at: finalAssistantMessage.created_at, thought: finalAssistantMessage.thought || null,
-                    feedback: finalAssistantMessage.feedback || null,
-                });
-                
-                await conversationState.finalizeStreamedDocuments();
-                if (!uiState.isExpertMode) {
-                    const updatedConv = conversationState.conversations.find(c => c.id === activeId);
-                    if (updatedConv) {
-                        const currentDocs = buildGeneratedDocs(updatedConv.documents);
-                        const hasRealAnalysisDoc = !!currentDocs.analysisDoc && !currentDocs.analysisDoc.includes("Bu bölüme projenin temel hedefini");
-                        if (hasRealAnalysisDoc) {
-                             geminiService.checkAnalysisMaturity(updatedConv.messages, currentDocs, activeModel())
-                                .then(({ report, tokens }) => {
-                                    conversationState.commitTokenUsage(tokens);
-                                    conversationState.saveDocumentVersion('maturityReport', report as any, 'AI tarafından olgunluk değerlendirmesi yapıldı');
-                                }).catch(maturityError => {
-                                    console.warn("Maturity check failed in the background:", maturityError);
-                                });
-                        }
-                    }
+            if (finalAssistantMessage) {
+                const finalUpdates: Partial<Message> = { isStreaming: false };
+                if (finalAssistantMessage.thought && Array.isArray(finalAssistantMessage.thought.steps)) {
+                    finalUpdates.thought = {
+                        ...finalAssistantMessage.thought,
+                        steps: finalAssistantMessage.thought.steps.map(step => ({ ...step, status: step.status === 'error' ? 'error' : 'completed' }))
+                    };
+                }
+                conversationState.updateMessage(assistantMessageId, finalUpdates);
+
+                if (!finalAssistantMessage.error) {
+                    await supabase.from('conversation_details').insert({
+                        id: finalAssistantMessage.id,
+                        conversation_id: finalAssistantMessage.conversation_id,
+                        role: finalAssistantMessage.role,
+                        content: finalAssistantMessage.content,
+                        created_at: finalAssistantMessage.created_at,
+                        thought: finalAssistantMessage.thought || null,
+                        feedback: finalAssistantMessage.feedback || null,
+                        grounding_metadata: finalAssistantMessage.groundingMetadata || null
+                    });
+                    
+                    await conversationState.finalizeStreamedDocuments();
                 }
             }
         }

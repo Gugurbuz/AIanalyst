@@ -1,24 +1,20 @@
 // hooks/useConversationState.ts
 import { useState, useMemo, useCallback, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
-// FIX: StreamChunk is a type and should be imported from types.ts
 import { geminiService } from '../services/geminiService';
 import { promptService } from '../services/promptService';
 import { v4 as uuidv4 } from 'uuid';
 import type { AppData } from '../index';
-// FIX: Import StreamChunk type
-import type { User, Conversation, Message, GeneratedDocs, FeedbackItem, Template, DocumentVersion, Document, DocumentType, UserProfile, SourcedDocument, StreamChunk } from '../types';
+import type { User, Conversation, Message, GeneratedDocs, FeedbackItem, Template, DocumentVersion, Document, DocumentType, UserProfile, GeneratedDocument, StreamChunk } from '../types';
 
 const defaultGeneratedDocs: GeneratedDocs = {
-    requestDoc: '',
-    analysisDoc: '',
-    testScenarios: { content: '', sourceHash: '' },
-    visualization: '',
-    traceabilityMatrix: { content: '', sourceHash: '' },
-    isVizStale: false,
-    isTestStale: false,
-    isTraceabilityStale: false,
-    isBacklogStale: false,
+    requestDoc: null,
+    analysisDoc: null,
+    testScenarios: null,
+    bpmnViz: null,
+    traceabilityMatrix: null,
+    maturityReport: null,
+    backlog: null,
 };
 
 const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs> = {
@@ -26,7 +22,6 @@ const documentTypeToKeyMap: Record<DocumentType, keyof GeneratedDocs> = {
     analysis: 'analysisDoc',
     test: 'testScenarios',
     traceability: 'traceabilityMatrix',
-    mermaid: 'mermaidViz',
     bpmn: 'bpmnViz',
     maturity_report: 'maturityReport',
 };
@@ -36,59 +31,56 @@ const keyToDocumentTypeMap: Record<keyof GeneratedDocs, DocumentType | null> = {
     analysisDoc: 'analysis',
     testScenarios: 'test',
     traceabilityMatrix: 'traceability',
-    mermaidViz: 'mermaid',
     bpmnViz: 'bpmn',
     maturityReport: 'maturity_report',
-    visualization: null,
-    visualizationType: null,
-    isVizStale: null,
-    isTestStale: null,
-    isTraceabilityStale: null,
-    isBacklogStale: null,
+    backlog: null,
 };
 
+// Robust function to normalize DB documents into GeneratedDocument structure
 const buildGeneratedDocs = (documents: Document[]): GeneratedDocs => {
     const docs: GeneratedDocs = { ...defaultGeneratedDocs };
     if (!documents) return docs;
-
-    const findDoc = (type: DocumentType) => documents.find(d => d.document_type === type);
 
     for (const doc of documents) {
         const key = documentTypeToKeyMap[doc.document_type];
         if (!key) continue;
 
-        if (key === 'testScenarios' || key === 'traceabilityMatrix') {
-            try {
-                const parsed = JSON.parse(doc.content);
-                if (parsed && typeof parsed.content === 'string' && typeof parsed.sourceHash === 'string') {
-                    (docs as any)[key] = parsed;
+        const generatedDoc: GeneratedDocument = {
+            content: doc.content,
+            isStale: doc.is_stale,
+            metadata: {}
+        };
+
+        // Handle specific parsing needs for metadata
+        try {
+            if (key === 'bpmnViz') {
+                // BPMN might be stored as raw XML string or JSON { code, sourceHash }
+                if (doc.content.trim().startsWith('{')) {
+                    const parsed = JSON.parse(doc.content);
+                    generatedDoc.content = parsed.code || '';
+                    generatedDoc.metadata = { sourceHash: parsed.sourceHash };
                 } else {
-                    (docs as any)[key] = { content: doc.content, sourceHash: 'legacy_json' };
+                    generatedDoc.content = doc.content;
                 }
-            } catch (e) {
-                (docs as any)[key] = { content: doc.content, sourceHash: 'legacy_string' };
+            } else if (key === 'testScenarios' || key === 'traceabilityMatrix') {
+                // These might be stored as JSON { content, sourceHash } or raw markdown string
+                if (doc.content.trim().startsWith('{')) {
+                    const parsed = JSON.parse(doc.content);
+                    if (parsed && typeof parsed.content === 'string') {
+                        generatedDoc.content = parsed.content;
+                        generatedDoc.metadata = { sourceHash: parsed.sourceHash };
+                    }
+                }
+            } else if (key === 'maturityReport') {
+                // Maturity report is typically JSON string
+                generatedDoc.metadata = JSON.parse(doc.content);
             }
-        } else if (key === 'mermaidViz' || key === 'bpmnViz') {
-             try {
-                (docs as any)[key] = JSON.parse(doc.content);
-             } catch(e) {
-                (docs as any)[key] = { code: doc.content, sourceHash: 'legacy_string' };
-             }
-        } else if (key === 'maturityReport') {
-            try {
-                (docs as any)[key] = JSON.parse(doc.content);
-            } catch (e) {
-                console.error(`Error parsing JSON for ${key}:`, e);
-                (docs as any)[key] = null;
-            }
-        } else {
-             (docs as any)[key] = doc.content;
+        } catch (e) {
+            console.warn(`Error parsing metadata for ${key}, using raw content.`, e);
         }
+
+        docs[key] = generatedDoc;
     }
-    
-    docs.isVizStale = findDoc('mermaid')?.is_stale || findDoc('bpmn')?.is_stale || false;
-    docs.isTestStale = findDoc('test')?.is_stale || false;
-    docs.isTraceabilityStale = findDoc('traceability')?.is_stale || false;
     
     return docs;
 };
@@ -126,7 +118,8 @@ export const useConversationState = ({ user, initialData, setError }: UseConvers
 
     const saveConversation = useCallback(async (conv: Partial<Conversation> & { id: string }) => {
         setSaveStatus('saving');
-        const { messages, documentVersions, documents, backlogSuggestions, ...updatePayload } = conv;
+        // Filter out generatedDocs which is a runtime derived property
+        const { messages, documentVersions, documents, backlogSuggestions, generatedDocs, ...updatePayload } = conv as any;
         const { error } = await supabase.from('conversations').update(updatePayload).eq('id', conv.id);
         if (error) {
             setSaveStatus('error');
@@ -187,7 +180,6 @@ export const useConversationState = ({ user, initialData, setError }: UseConvers
         }
     }, [activeConversationId, triggerProfileSave, triggerSave]);
     
-    // FIX: Add optional `conversationIdOverride` parameter to handle new conversations correctly and prevent race conditions.
     const saveDocumentVersion = useCallback(async (docKey: keyof GeneratedDocs, newContent: any, reason: string, templateId?: string | null, conversationIdOverride?: string, tokensUsed?: number) => {
         const conversationId = conversationIdOverride || activeConversationId;
         if (!conversationId) return Promise.reject("No active conversation");
@@ -201,6 +193,7 @@ export const useConversationState = ({ user, initialData, setError }: UseConvers
             return Promise.reject(`Unknown docKey "${String(docKey)}"`);
         }
         
+        // Handle content serialization for storage if it's an object (like for BPMN Viz with hash)
         const newContentString = typeof newContent === 'string' ? newContent : JSON.stringify(newContent);
         
         let newVersionNumber = 1;
@@ -223,7 +216,8 @@ export const useConversationState = ({ user, initialData, setError }: UseConvers
         
         const { error: upsertError } = await supabase.from('documents').upsert({
             conversation_id: conversationId, user_id: user.id, document_type: document_type,
-            content: newContentString, current_version_id: newVersionDb.id, template_id: validTemplateId
+            content: newContentString, current_version_id: newVersionDb.id, template_id: validTemplateId,
+            is_stale: false // Reset stale status on update
         }, { onConflict: 'conversation_id, document_type' }).select().single();
         if (upsertError) throw new Error("Ana doküman kaydedilemedi: " + (upsertError?.message || 'Bilinmeyen hata'));
 
@@ -267,6 +261,7 @@ export const useConversationState = ({ user, initialData, setError }: UseConvers
             const updatedDocuments = (updatedConv.documents || []).map(doc => {
                 if (doc.document_type === document_type) {
                     docFound = true;
+                    // For streaming, we treat content as string. Complex objects are finalized later.
                     const newContent = isFirstChunk ? chunk : (doc.content || '') + chunk;
                     return { ...doc, content: newContent, updated_at: new Date().toISOString() };
                 }
@@ -338,8 +333,9 @@ export const useConversationState = ({ user, initialData, setError }: UseConvers
                 if (m.id !== messageId) return m;
     
                 const newMessage = { ...m };
-                if (chunk.type === 'text_chunk') {
-                    newMessage.content = (newMessage.content || '') + chunk.text;
+                if (chunk.type === 'text_chunk' || chunk.type === 'chat_stream_chunk') {
+                    const text = chunk.type === 'text_chunk' ? chunk.text : chunk.chunk;
+                    newMessage.content = (newMessage.content || '') + text;
                 } else if (chunk.type === 'thought_chunk') {
                     newMessage.thought = chunk.payload;
                 } else if (chunk.type === 'expert_run_update') {
@@ -349,6 +345,8 @@ export const useConversationState = ({ user, initialData, setError }: UseConvers
                     }
                 } else if (chunk.type === 'usage_update') {
                     commitTokenUsage(chunk.tokens);
+                } else if (chunk.type === 'grounding_chunk') {
+                    newMessage.groundingMetadata = [...(newMessage.groundingMetadata || []), ...chunk.payload];
                 }
                 return newMessage;
             });
@@ -378,46 +376,28 @@ export const useConversationState = ({ user, initialData, setError }: UseConvers
         const { error } = await supabase.from('conversations').update({ title }).eq('id', id);
         if (error) {
             console.error("Failed to update title:", error);
-            // Optionally revert UI change
         }
     }, [updateConversation]);
 
     const deleteConversation = useCallback(async (id: string) => {
-        // Keep original states for potential revert on error
         const originalConversations = conversations;
         const originalActiveId = activeConversationId;
 
-        // Perform optimistic UI updates using functional forms
         setConversations(prev => prev.filter(c => c.id !== id));
         setActiveConversationId(prevActiveId => {
-            // If the deleted conversation was not the active one, do nothing
-            if (prevActiveId !== id) {
-                return prevActiveId;
-            }
-            
-            // If the active conversation was deleted, find a new one
+            if (prevActiveId !== id) return prevActiveId;
             const updatedConversations = originalConversations.filter(c => c.id !== id);
-            
-            // If no conversations are left, set active to null
-            if (updatedConversations.length === 0) {
-                return null;
-            }
-
-            // Otherwise, select a new active conversation
+            if (updatedConversations.length === 0) return null;
             const currentIndex = originalConversations.findIndex(c => c.id === id);
             const newIndex = Math.min(currentIndex, updatedConversations.length - 1);
             return updatedConversations[newIndex].id;
         });
 
-        // Perform the async database operation
         const { error } = await supabase.from('conversations').delete().eq('id', id);
 
-        // Handle error case by reverting the optimistic updates
         if (error) {
             console.error("Failed to delete conversation:", error);
-            setError(`Analiz silinemedi: ${error.message}. Bu genellikle veritabanı izinlerinden (RLS) kaynaklanır.`);
-            
-            // Revert UI changes
+            setError(`Analiz silinemedi: ${error.message}`);
             setConversations(originalConversations);
             setActiveConversationId(originalActiveId);
         }

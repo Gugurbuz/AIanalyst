@@ -77,7 +77,6 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({ isOpen, onClos
                         <div className="flex flex-col gap-1">
                              <div className="flex items-center gap-3">
                                 <span className={taskTypeInfo.color} title={taskTypeInfo.name}>
-                                    {/* FIX: Render the icon component directly with the desired props, avoiding the `cloneElement` type issue. */}
                                     <IconComponent className="h-5 w-5" />
                                 </span>
                                 <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200">{task ? 'Görevi Düzenle' : 'Yeni Görev Oluştur'}</h2>

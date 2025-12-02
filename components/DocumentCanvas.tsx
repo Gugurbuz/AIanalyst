@@ -1,17 +1,14 @@
+
 // components/DocumentCanvas.tsx
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { MarkdownRenderer } from './MarkdownRenderer';
-import { StreamingIndicator } from './StreamingIndicator';
-import { TemplateSelector } from './TemplateSelector';
-import { ExportDropdown } from './ExportDropdown';
 import { Template, DocumentVersion, LintingIssue, IsBirimiTalep, isIsBirimiTalep } from '../types';
-import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, Edit, Eye, Wrench, X, History, Pencil, Check } from 'lucide-react';
+import { LoaderCircle } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 import { VersionHistoryModal } from './VersionHistoryModal';
-import { RequestDocumentViewer } from './RequestDocumentViewer';
-import { RequestDocumentEditor } from './RequestDocumentEditor'; // <-- YENİ İMPORT
 import { TiptapEditor } from './TiptapEditor';
-import { TokenCostIndicator } from './TokenCostIndicator';
+import { DocumentToolbar } from './document/DocumentToolbar';
+import { LintingSuggestionsBar } from './document/LintingSuggestionsBar';
+import { DocumentSkeleton } from './DocumentSkeleton';
 
 interface DocumentCanvasProps {
     content: string;
@@ -37,8 +34,6 @@ interface DocumentCanvasProps {
     onExplainSelection: (text: string) => void;
 }
 
-// --- Helper Functions for Structured Document Conversion ---
-
 const jsonToMarkdownTable = (content: string): string => {
     const trimmedContent = (content || '').trim();
     if (!trimmedContent.startsWith('[') && !trimmedContent.startsWith('{')) return content;
@@ -53,29 +48,46 @@ const jsonToMarkdownTable = (content: string): string => {
         const bodyLines = data.map(row => `| ${headers.map(header => (row[header] === null || row[header] === undefined ? '' : row[header]).toString().replace(/\n/g, '<br/>')).join(' | ')} |`);
         return [headerLine, separatorLine, ...bodyLines].join('\n');
     } catch (error) {
-        console.warn("Could not parse table content as JSON, returning as is.", error);
         return content;
     }
 };
 
-// Bu fonksiyon artık TiptapEditor'e geçtiği için RequestDocumentEditor tarafından kullanılmayacak
-// Ancak Tiptap'a geçiş iptal edilirse diye burada tutulabilir. Şimdilik kalsın.
-function requestDocToMarkdown(doc: IsBirimiTalep): string {
-    if (!doc) return '';
-    let md = `# ${doc.talepAdi}\n\n`;
-    md += `**Doküman No:** ${doc.dokumanNo}  \n`;
-    md += `**Revizyon:** ${doc.revizyon}  \n`;
-    md += `**Tarih:** ${doc.tarih}  \n`;
-    md += `**Talep Sahibi:** ${doc.talepSahibi}\n\n---\n\n`;
-    md += `## Mevcut Durum & Problem\n\n${doc.mevcutDurumProblem}\n\n`;
-    md += `## Talebin Amacı ve Gerekçesi\n\n${doc.talepAmaciGerekcesi}\n\n`;
-    md += `## Kapsam\n\n### Kapsam Dahili\n${doc.kapsam.inScope.map(item => `- ${item}`).join('\n')}\n\n`;
-    md += `### Kapsam Dışı\n${doc.kapsam.outOfScope.map(item => `- ${item}`).join('\n')}\n\n`;
-    // FIX: Corrected typo in property name from 'beklenenIsFaydaları' to 'beklenenIsFaydalari'.
-    md += `## Beklenen İş Faydaları\n\n${doc.beklenenIsFaydalari.map(item => `- ${item}`).join('\n')}\n\n`;
-    return md;
-}
+// Helper to convert strict JSON Request Doc to professional Markdown
+const convertRequestJsonToMarkdown = (json: any): string => {
+    // Helper to safely get string values
+    const val = (v: any) => v || 'Belirtilmemiş';
+    const list = (arr: any[]) => Array.isArray(arr) && arr.length > 0 ? arr.map(item => `- ${item}`).join('\n') : '- Belirtilmemiş';
 
+    return `
+# ${val(json.talepAdi)}
+
+| Doküman Bilgileri | Detay |
+| :--- | :--- |
+| **Doküman No** | ${val(json.dokumanNo)} |
+| **Tarih** | ${val(json.tarih)} |
+| **Revizyon** | ${val(json.revizyon)} |
+| **Talep Sahibi** | ${val(json.talepSahibi)} |
+
+---
+
+## 1. Mevcut Durum ve Problem
+> ${val(json.mevcutDurumProblem)}
+
+## 2. Talebin Amacı ve Gerekçesi
+${val(json.talepAmaciGerekcesi)}
+
+## 3. Kapsam
+
+### 3.1. Kapsam Dahili
+${list(json.kapsam?.inScope)}
+
+### 3.2. Kapsam Dışı
+${list(json.kapsam?.outOfScope)}
+
+## 4. Beklenen İş Faydaları
+${list(json.beklenenIsFaydalari)}
+    `.trim();
+};
 
 const AiAssistantModal: React.FC<{ selectedText: string; onGenerate: (prompt: string) => void; onClose: () => void; isLoading: boolean; }> = ({ selectedText, onGenerate, onClose, isLoading }) => {
     const [prompt, setPrompt] = useState('');
@@ -103,26 +115,9 @@ const AiAssistantModal: React.FC<{ selectedText: string; onGenerate: (prompt: st
     );
 };
 
-const LintingSuggestionsBar: React.FC<{ issues: LintingIssue[]; onFix: (issue: LintingIssue) => void; onDismiss: (issue: LintingIssue) => void; isFixing: boolean; }> = ({ issues, onFix, onDismiss, isFixing }) => {
-    if (issues.length === 0) return null;
-    const issue = issues[0];
-    return (
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-2xl mt-2 z-20">
-            <div className="bg-amber-100 dark:bg-amber-900/50 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 px-4 py-2 rounded-lg shadow-lg flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2"><Wrench className="h-5 w-5 flex-shrink-0" /><p className="text-sm font-medium">"{issue.section}" bölümündeki numaralandırmada bir tutarsızlık fark ettik. Otomatik olarak düzeltmek ister misiniz?</p></div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                     <button onClick={() => onFix(issue)} disabled={isFixing} className="px-3 py-1 text-xs font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50">{isFixing ? 'Düzeltiliyor...' : 'Düzelt'}</button>
-                    <button onClick={() => onDismiss(issue)} className="p-1.5 rounded-full hover:bg-amber-200 dark:hover:bg-amber-800"><X className="h-4 w-4" /></button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
 export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const { content, onContentChange, docKey, onModifySelection, inlineModificationState, isGenerating, isStreaming = false, placeholder, templates, selectedTemplate, onTemplateChange, filename, isTable, documentVersions, onAddTokens, onRestoreVersion, onExplainSelection } = props;
 
-    // localContent artık hem Markdown (Tiptap için) hem de JSON string (RequestDocumentEditor için) tutabilir
     const [localContent, setLocalContent] = useState('');
     const [isEditing, setIsEditing] = useState(false);
     const [selection, setSelection] = useState<{ start: number, end: number, text: string } | null>(null);
@@ -140,8 +135,48 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const docNameMap: Record<string, string> = { analysisDoc: 'Analiz Dokümanı', requestDoc: 'Talep Dokümanı', testScenarios: 'Test Senaryoları', traceabilityMatrix: 'İzlenebilirlik Matrisi' };
     const documentName = docNameMap[docKey] || 'Doküman';
 
-    // DEĞİŞİKLİK: 'content' değiştiğinde 'localContent'i GÜNCELLE
-    // Düzenleme modunda değilsek, dışarıdan gelen 'content' her zaman 'localContent'i güncellemeli.
+    // Unified content processing logic
+    const processedContent = useMemo(() => {
+        const rawContent = isEditing ? localContent : content;
+        
+        // 1. If it's a Request Doc and looks like JSON, convert to Markdown
+        if (docKey === 'requestDoc' && rawContent) {
+            try {
+                // Aggressive cleaning to handle markdown code blocks or extra text
+                let jsonToParse = rawContent.trim();
+                
+                // If it looks like a markdown code block, extract the content
+                const codeBlockMatch = jsonToParse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+                if (codeBlockMatch) {
+                    jsonToParse = codeBlockMatch[1];
+                }
+
+                // Or find the first { and last }
+                const firstBrace = jsonToParse.indexOf('{');
+                const lastBrace = jsonToParse.lastIndexOf('}');
+                if (firstBrace !== -1 && lastBrace !== -1) {
+                    jsonToParse = jsonToParse.substring(firstBrace, lastBrace + 1);
+                }
+
+                const parsed = JSON.parse(jsonToParse);
+                // Check if it has at least one key field to verify it's a request doc, rather than strict schema check
+                if (parsed && (parsed.talepAdi || parsed.mevcutDurumProblem || parsed.kapsam)) {
+                    return convertRequestJsonToMarkdown(parsed);
+                }
+            } catch (e) {
+                // Not valid JSON, or not matching schema, treat as text
+            }
+        }
+
+        // 2. If it's a Table view (Test/Traceability) and not streaming, convert JSON array to Markdown Table
+        if (isTable && !isStreaming) {
+            return jsonToMarkdownTable(rawContent);
+        }
+
+        return rawContent;
+    }, [content, isEditing, localContent, docKey, isTable, isStreaming]);
+
+
     useEffect(() => { 
         if (!isEditing) {
             setLocalContent(content || ''); 
@@ -150,40 +185,22 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
 
     useEffect(() => { setLintIssues([]); }, [content]);
 
-    // Talep dokümanı (JSON) veya diğer dokümanlar (Markdown) için ayrıştırılmış içeriği hafızada tut
-    const parsedRequestDoc = useMemo(() => {
-        if (docKey === 'requestDoc') {
-            try {
-                // localContent, düzenleme sırasında güncel JSON string'i tutar
-                // content ise prop'tan gelen son kaydedilmiş JSON string'i tutar
-                const contentToParse = isEditing ? localContent : content;
-                const parsed = JSON.parse(contentToParse);
-                return isIsBirimiTalep(parsed) ? parsed : null;
-            } catch { return null; }
-        }
-        return null;
-    }, [docKey, content, localContent, isEditing]);
-
-
     const handleToggleEditing = async () => {
         if (isEditing) {
-            // --- DÜZENLEMEDEN ÇIK ---
             setIsEditing(false);
-            if (localContent === originalContentRef.current) return; // Değişiklik yoksa çık
+            if (localContent === originalContentRef.current) return;
 
             setSaveState('saving');
             try {
+                // For Request Doc, we simply save the text changes. 
+                // We NO LONGER convert back to JSON. The source of truth becomes the text.
                 if (docKey === 'requestDoc') {
-                    // DEĞİŞİKLİK: Artık Markdown dönüşümü yok. localContent zaten JSON string.
                     onContentChange(localContent, "Talep dokümanı manuel olarak düzenlendi.", 0);
                 } else {
-                    // Diğer dokümanlar için özetleme
                     const { summary: aiSummary, tokens } = await geminiService.summarizeDocumentChange(originalContentRef.current, localContent);
                     onAddTokens(tokens);
                     
-                    // AI tarafından oluşturulan özetin başındaki olası yanlış ön ekleri temizle
                     let cleanSummary = aiSummary.replace(/^(Manuel Düzenleme:\s*|AI Tarafından Düzeltme:\s*)/i, '');
-                    // Her zaman doğru olan "Manuel Düzenleme:" ön ekini ekle
                     const finalReason = `Manuel Düzenleme: ${cleanSummary}`;
 
                     onContentChange(localContent, finalReason, tokens);
@@ -203,11 +220,8 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                 setTimeout(() => setSaveState('idle'), 2000);
             }
         } else {
-            // --- DÜZENLEMEYE GİR ---
-            originalContentRef.current = content;
-            // DEĞİŞİKLİK: localContent'i 'content' (JSON string veya Markdown string) olarak ayarla.
-            // requestDocToMarkdown dönüşümüne gerek yok.
-            setLocalContent(content); 
+            originalContentRef.current = processedContent;
+            setLocalContent(processedContent); 
             setIsEditing(true);
         }
     };
@@ -251,86 +265,43 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         if (!filteredHistory || filteredHistory.length === 0) return null;
         return filteredHistory.reduce((latest, v) => (v.version_number > latest.version_number ? v : latest), filteredHistory[0]);
     }, [filteredHistory]);
-
-    // DEĞİŞİKLİK: displayContent artık sadece Tiptap'a (veya tabloya) giden Markdown'u hazırlıyor
-    const displayContent = useMemo(() => {
-        if (docKey === 'requestDoc') return content; // requestDoc için Tiptap kullanmıyoruz
-
-        const contentToDisplay = isEditing ? localContent : content;
-        if (isTable && !isStreaming) return jsonToMarkdownTable(contentToDisplay);
-        return contentToDisplay;
-    }, [isEditing, isStreaming, isTable, localContent, content, docKey]);
     
     const showAiButton = (docKey === 'analysisDoc' || docKey === 'testScenarios');
-    
-    const renderSaveButtonContent = () => {
-        if (saveState === 'saving') {
-            return <><LoaderCircle className="h-4 w-4 animate-spin" /> Kaydediliyor...</>;
-        }
-        if (saveState === 'saved') {
-            return <><Check className="h-4 w-4" /> Kaydedildi</>;
-        }
-        return isEditing 
-            ? <><Eye className="h-4 w-4" /> Görünüm</> 
-            : <><Edit className="h-4 w-4" /> Düzenle</>;
-    };
+
+    // Determine if we should show the skeleton loader
+    // Show skeleton ONLY if we are generating AND there is no content yet (first chunk hasn't arrived)
+    const showSkeleton = isGenerating && (!processedContent || processedContent.trim() === '');
 
     return (
         <div className="flex flex-col h-full relative">
             <LintingSuggestionsBar issues={lintIssues} onFix={handleFixIssue} onDismiss={(issue) => setLintIssues(prev => prev.filter(i => i !== issue))} isFixing={isFixing} />
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-2 md:p-4 sticky top-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm z-10 border-b border-slate-200 dark:border-slate-700">
-                <div className="flex items-center gap-2 flex-wrap">
-                     {showAiButton && isEditing && (
-                        <button onClick={() => setIsAiModalOpen(true)} disabled={!selection} title="AI ile düzenle" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center gap-1 text-indigo-600 dark:text-indigo-400 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed">
-                            <Sparkles className="h-4 w-4" /> <span className="text-sm font-semibold">Seçimi Düzenle</span>
-                        </button>
-                     )}
-                </div>
-                <div className="flex items-center gap-4">
-                     <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded-md">v{latestVersion?.version_number || 0}</span>
-                        {latestVersion?.tokens_used && latestVersion.tokens_used > 0 && (
-                            <TokenCostIndicator tokens={latestVersion.tokens_used} />
-                        )}
-                        <button onClick={() => setIsHistoryModalOpen(true)} title="Versiyon Geçmişi" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400" disabled={filteredHistory.length === 0}><History className="h-4 w-4"/></button>
-                     </div>
-                    {templates && selectedTemplate && onTemplateChange && <TemplateSelector label="Şablon" templates={templates} selectedValue={selectedTemplate} onChange={onTemplateChange} disabled={isGenerating} />}
-                     {isStreaming && <div className="flex items-center gap-2"><LoaderCircle className="animate-spin h-5 w-5 text-indigo-500" /><span className="text-sm font-medium text-slate-600 dark:text-slate-400">Oluşturuluyor</span></div>}
-                     <button 
-                        onClick={handleToggleEditing} 
-                        disabled={saveState === 'saving' || isStreaming} 
-                        className={`px-3 py-1.5 text-sm font-medium rounded-md flex items-center gap-2 disabled:opacity-50 transition-colors
-                            ${saveState === 'saved' 
-                                ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300' 
-                                : 'text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600'
-                            }`}
-                    >
-                        {renderSaveButtonContent()}
-                    </button>
-                    <ExportDropdown content={displayContent} filename={filename} isTable={isTable} />
-                </div>
-            </div>
             
-            {/* --- DEĞİŞEN RENDERİNG ALANI --- */}
+            <DocumentToolbar
+                latestVersion={latestVersion}
+                filteredHistory={filteredHistory}
+                onHistoryClick={() => setIsHistoryModalOpen(true)}
+                templates={templates}
+                selectedTemplate={selectedTemplate}
+                onTemplateChange={onTemplateChange}
+                isGenerating={isGenerating}
+                isStreaming={!!isStreaming}
+                saveState={saveState}
+                isEditing={isEditing}
+                onToggleEditing={handleToggleEditing}
+                onAiEditClick={() => setIsAiModalOpen(true)}
+                hasSelection={!!selection}
+                showAiButton={showAiButton}
+                content={processedContent}
+                filename={filename}
+                isTable={isTable}
+            />
+            
             <div className="flex-1 relative min-h-0">
-                {docKey === 'requestDoc' ? (
-                    // Talep Dokümanı: Düzenleme için RequestDocumentEditor, görüntüleme için RequestDocumentViewer
-                    parsedRequestDoc ? (
-                        isEditing ? (
-                            <RequestDocumentEditor
-                                document={parsedRequestDoc}
-                                onChange={(newDoc) => setLocalContent(JSON.stringify(newDoc))}
-                            />
-                        ) : (
-                            <RequestDocumentViewer document={parsedRequestDoc} />
-                        )
-                    ) : (
-                        <div className="p-6 text-slate-500">Talep dokümanı yüklenemedi veya geçersiz formatta.</div>
-                    )
+                {showSkeleton ? (
+                    <DocumentSkeleton />
                 ) : (
-                    // Diğer Tüm Dokümanlar: Görüntüleme ve düzenleme için TiptapEditor
                     <TiptapEditor
-                        content={displayContent}
+                        content={processedContent}
                         onChange={setLocalContent}
                         onSelectionUpdate={handleTiptapSelection}
                         isEditable={isEditing}
@@ -340,7 +311,6 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
                     />
                 )}
             </div>
-            {/* --- DEĞİŞİKLİK SONU --- */}
 
              {isAiModalOpen && selection && <AiAssistantModal selectedText={selection.text} onGenerate={handleAiModify} onClose={() => { setIsAiModalOpen(false); setSelection(null); }} isLoading={!!inlineModificationState} />}
             {isHistoryModalOpen && <VersionHistoryModal isOpen={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)} versions={filteredHistory} documentName={documentName} onRestore={onRestoreVersion} />}

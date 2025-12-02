@@ -15,18 +15,6 @@ const exportAsMarkdown = (content: string, filename: string): void => {
   URL.revokeObjectURL(url);
 };
 
-const exportAsMermaid = (content: string, filename: string): void => {
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-};
-
 const exportAsSvg = (svgContent: string, filename: string): void => {
     const blob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -77,53 +65,6 @@ const exportAsPng = (svgContent: string, filename: string): void => {
     // The trick `unescape(encodeURIComponent(svgContent))` is to handle multi-byte characters correctly before base64 encoding.
     const dataUri = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgContent)))}`;
     img.src = dataUri;
-};
-
-
-const exportAsHtml = (mermaidCode: string, filename: string): void => {
-    const htmlContent = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${filename}</title>
-    <style>
-        body { 
-            font-family: sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f8fafc;
-        }
-        @media (prefers-color-scheme: dark) {
-            body {
-                background-color: #0f172a;
-            }
-        }
-    </style>
-</head>
-<body>
-    <pre class="mermaid">
-${mermaidCode.replace(/</g, "&lt;").replace(/>/g, "&gt;")}
-    </pre>
-    <script type="module">
-        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-        mermaid.initialize({ startOnLoad: true });
-    </script>
-</body>
-</html>`;
-    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${filename}.html`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
 };
 
 const exportBpmnAsHtml = (bpmnXml: string, filename: string): void => {
@@ -334,4 +275,4 @@ const exportAsDocx = (content: string, filename: string): void => {
 };
 
 
-export const exportService = { exportAsMarkdown, exportAsPdf, exportAsSvg, exportAsPng, exportAsHtml, exportAsDocx, exportBpmnAsHtml };
+export const exportService = { exportAsMarkdown, exportAsPdf, exportAsSvg, exportAsPng, exportAsDocx, exportBpmnAsHtml };

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, CheckCircle2, MessagesSquare, FileText, FilePenLine, Zap, PlugZap, Workflow, Sparkles, Mail, Github } from 'lucide-react';
+import { X, CheckCircle2, MessagesSquare, FileText, FilePenLine, Zap, PlugZap, Workflow, Sparkles, Mail, Github, Share2 } from 'lucide-react';
 
 interface LandingPageProps {
     onLoginClick: () => void;
@@ -19,6 +19,53 @@ const LogoIcon = ({ className, theme = 'light' }: { className?: string; theme?: 
     );
 };
 
+// --- START: Flow Viewer Example Data ---
+const SAMPLE_BPMN_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_1" isExecutable="false">
+    <bpmn:startEvent id="StartEvent_1" name="Talep Geldi">
+      <bpmn:outgoing>Flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="Task_1" name="Analizi Yap">
+      <bpmn:incoming>Flow_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="StartEvent_1" targetRef="Task_1" />
+    <bpmn:exclusiveGateway id="Gateway_1" name="Onay Gerekli mi?">
+      <bpmn:incoming>Flow_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_3</bpmn:outgoing>
+      <bpmn:outgoing>Flow_4</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_1" targetRef="Gateway_1" />
+    <bpmn:task id="Task_2" name="Onay Al">
+      <bpmn:incoming>Flow_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_5</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:sequenceFlow id="Flow_3" name="Evet" sourceRef="Gateway_1" targetRef="Task_2" />
+    <bpmn:endEvent id="EndEvent_1" name="Süreç Bitti">
+      <bpmn:incoming>Flow_4</bpmn:incoming>
+      <bpmn:incoming>Flow_5</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_4" name="Hayır" sourceRef="Gateway_1" targetRef="EndEvent_1" />
+    <bpmn:sequenceFlow id="Flow_5" sourceRef="Task_2" targetRef="EndEvent_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
+        <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartEvent_1"><dc:Bounds x="179" y="159" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="168" y="202" width="59" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+        <bpmndi:BPMNShape id="Activity_1u4m5ru_di" bpmnElement="Task_1"><dc:Bounds x="270" y="137" width="100" height="80" /></bpmndi:BPMNShape>
+        <bpmndi:BPMNShape id="Gateway_131l51q_di" bpmnElement="Gateway_1" isMarkerVisible="true"><dc:Bounds x="425" y="152" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="408" y="122" width="84" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+        <bpmndi:BPMNShape id="Activity_013k5rc_di" bpmnElement="Task_2"><dc:Bounds x="530" y="137" width="100" height="80" /></bpmndi:BPMNShape>
+        <bpmndi:BPMNShape id="Event_1i8w541_di" bpmnElement="EndEvent_1"><dc:Bounds x="682" y="159" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="672" y="202" width="56" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+        <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1"><di:waypoint x="215" y="177" /><di:waypoint x="270" y="177" /></bpmndi:BPMNEdge>
+        <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2"><di:waypoint x="370" y="177" /><di:waypoint x="425" y="177" /></bpmndi:BPMNEdge>
+        <bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3"><di:waypoint x="475" y="177" /><di:waypoint x="530" y="177" /><bpmndi:BPMNLabel><dc:Bounds x="495" y="159" width="22" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+        <bpmndi:BPMNEdge id="Flow_5_di" bpmnElement="Flow_5"><di:waypoint x="630" y="177" /><di:waypoint x="682" y="177" /></bpmndi:BPMNEdge>
+        <bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4"><di:waypoint x="450" y="202" /><di:waypoint x="450" y="250" /><di:waypoint x="700" y="250" /><di:waypoint x="700" y="195" /><bpmndi:BPMNLabel><dc:Bounds x="565" y="223" width="20" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+const flowViewerUrl = `/studio?type=bpmn&data=${encodeURIComponent(btoa(unescape(encodeURIComponent(SAMPLE_BPMN_XML))))}`;
+// --- END: Flow Viewer Example Data ---
 
 const AuthModal = ({ onClose, onProceed }: { onClose: () => void; onProceed: () => void; }) => {
     return (
@@ -67,7 +114,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
     useEffect(() => {
         document.title = "Asisty.AI - İş Analizinizi Yapay Zeka ile Güçlendirin";
     }, []);
-
+    
     const pageStyles = `
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         
@@ -151,6 +198,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                             <div className="hidden md:flex items-center gap-6">
                                 <a href="#features" className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">Özellikler</a>
                                 <a href="#pricing" className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">Fiyatlandırma</a>
+                                <a href={flowViewerUrl} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors">
+                                    Süreç Tasarımcısı
+                                </a>
                             </div>
                             <div className="flex items-center gap-4">
                                 <button onClick={onLoginClick} className="text-sm font-semibold text-gray-700 hover:text-indigo-600 transition-colors">Giriş Yap</button>
@@ -242,6 +292,24 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                                     Mevcut dokümanlarınızı "Özetle", "Basitleştir" veya "Devam Et" komutlarıyla anında düzenleyin.
                                 </p>
                             </div>
+                             <div className="flex flex-col">
+                                <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+                                    <Workflow className="w-6 h-6" />
+                                </div>
+                                <h3 className="mt-5 text-xl font-semibold text-gray-900">Otomatik Görselleştirme</h3>
+                                <p className="mt-2 text-base text-gray-600">
+                                    Analizlerinizi ve iş akışlarınızı otomatik olarak Mermaid veya BPMN diyagramlarına dönüştürün.
+                                </p>
+                            </div>
+                            <div className="flex flex-col">
+                                <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
+                                    <Share2 className="w-6 h-6" />
+                                </div>
+                                <h3 className="mt-5 text-xl font-semibold text-gray-900">Paylaşılabilir Diyagramlar</h3>
+                                <p className="mt-2 text-base text-gray-600">
+                                    Oluşturulan diyagramları, uygulamaya giriş gerektirmeyen özel linklerle ekibinizle paylaşın. <a href={flowViewerUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-indigo-600 hover:underline">Örnek Görüntüle &rarr;</a>
+                                </p>
+                            </div>
                             <div className="flex flex-col">
                                 <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
                                     <Zap className="w-6 h-6" />
@@ -249,24 +317,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onSignup
                                 <h3 className="mt-5 text-xl font-semibold text-gray-900">Hazır Şablonlar</h3>
                                 <p className="mt-2 text-base text-gray-600">
                                     Test senaryoları, proje kapsamı veya gereksinim listeleri gibi kanıtlanmış şablonlar üzerinden ilerleyin.
-                                </p>
-                            </div>
-                            <div className="flex flex-col">
-                                <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
-                                    <PlugZap className="w-6 h-6" />
-                                </div>
-                                <h3 className="mt-5 text-xl font-semibold text-gray-900">Entegrasyonlar</h3>
-                                <p className="mt-2 text-base text-gray-600">
-                                    Çıktılarınızı tek tıkla Jira, Trello, Slack veya GitHub gibi araçlarınıza aktarın.
-                                </p>
-                            </div>
-                            <div className="flex flex-col">
-                                <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-indigo-100 text-indigo-600">
-                                    <Workflow className="w-6 h-6" />
-                                </div>
-                                <h3 className="mt-5 text-xl font-semibold text-gray-900">Görselleştirme</h3>
-                                <p className="mt-2 text-base text-gray-600">
-                                    Analizlerinizi ve iş akışlarınızı otomatik olarak diyagramlara ve görsellere dönüştürün.
                                 </p>
                             </div>
                         </div>
