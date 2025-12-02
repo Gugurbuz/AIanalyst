@@ -84,7 +84,7 @@ export const openaiWrapperService = {
             function: func
         }));
 
-        const messagesWithSystem = [
+        const messagesWithSystem: any[] = [
             { role: 'system', content: systemInstruction },
             ...history.filter(m => m.role === 'user' || m.role === 'assistant').map(m => ({
                 role: m.role,
@@ -93,77 +93,93 @@ export const openaiWrapperService = {
         ];
 
         try {
-            const edgeFunctionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openai-proxy`;
-            const headers = {
-                'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-                'Content-Type': 'application/json',
-            };
+            const stream = openaiService.generateContentStream(messagesWithSystem, systemInstruction, model);
 
-            const response = await fetch(edgeFunctionUrl, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                    model,
-                    messages: messagesWithSystem,
-                    tools: tools,
-                    stream: false,
-                }),
-            });
+            let buffer = '';
+            let thoughtYielded = false;
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'OpenAI API ile iletişimde hata oluştu');
-            }
+            for await (const chunk of stream) {
+                if (chunk.type === 'error') {
+                    yield chunk;
+                    continue;
+                }
 
-            const data = await response.json();
-            const choice = data.choices?.[0];
+                if (chunk.type === 'usage_update') {
+                    yield chunk;
+                    continue;
+                }
 
-            if (!choice) {
-                throw new Error('OpenAI yanıtı boş');
-            }
+                if (chunk.type === 'function_call') {
+                    yield chunk;
+                    continue;
+                }
 
-            if (choice.message?.tool_calls && choice.message.tool_calls.length > 0) {
-                const toolCall = choice.message.tool_calls[0];
-                const functionName = toolCall.function.name;
-                const functionArgs = JSON.parse(toolCall.function.arguments || '{}');
+                if (chunk.type === 'text_chunk') {
+                    buffer += chunk.text;
 
-                yield {
-                    type: 'function_call',
-                    name: functionName,
-                    args: functionArgs
-                };
-            }
+                    if (!thoughtYielded) {
+                        const startMarker = '```thinking';
+                        const endMarker = '```';
+                        const startIdx = buffer.indexOf(startMarker);
 
-            if (choice.message?.content) {
-                const content = choice.message.content;
+                        if (startIdx !== -1) {
+                            const searchStart = startIdx + startMarker.length;
+                            const endIdx = buffer.indexOf(endMarker, searchStart);
 
-                const thinkingMatch = content.match(/<dusunce>(.*?)<\/dusunce>/s);
-                if (thinkingMatch) {
-                    try {
-                        const thinkingJson = JSON.parse(thinkingMatch[1].trim());
-                        yield {
-                            type: 'thought_chunk',
-                            payload: thinkingJson
-                        };
-                    } catch (e) {
-                        console.warn('Failed to parse thinking JSON:', e);
+                            if (endIdx !== -1) {
+                                const jsonStr = buffer.substring(searchStart, endIdx).trim();
+                                try {
+                                    const thoughtPayload = JSON.parse(jsonStr);
+                                    yield { type: 'thought_chunk', payload: thoughtPayload };
+                                    thoughtYielded = true;
+                                    const remainingText = buffer.substring(endIdx + endMarker.length);
+                                    if (remainingText.trim()) {
+                                        yield { type: 'text_chunk', text: remainingText };
+                                    }
+                                    buffer = '';
+                                } catch (e) {
+                                    console.log("Failed to parse thought JSON (incomplete):", e);
+                                }
+                            }
+                        }
+                    } else {
+                        yield { type: 'text_chunk', text: buffer };
+                        buffer = '';
                     }
                 }
-
-                const textContent = content.replace(/<dusunce>.*?<\/dusunce>/s, '').trim();
-                if (textContent) {
-                    yield {
-                        type: 'text_chunk',
-                        text: textContent
-                    };
-                }
             }
 
-            if (data.usage?.total_tokens) {
-                yield {
-                    type: 'usage_update',
-                    tokens: data.usage.total_tokens
-                };
+            if (buffer) {
+                if (!thoughtYielded) {
+                    const startMarker = '```thinking';
+                    const endMarker = '```';
+                    const startIdx = buffer.indexOf(startMarker);
+
+                    if (startIdx !== -1) {
+                        const searchStart = startIdx + startMarker.length;
+                        const endIdx = buffer.indexOf(endMarker, searchStart);
+
+                        if (endIdx !== -1) {
+                            const jsonStr = buffer.substring(searchStart, endIdx).trim();
+                            try {
+                                const thoughtPayload = JSON.parse(jsonStr);
+                                yield { type: 'thought_chunk', payload: thoughtPayload };
+                                const remainingText = buffer.substring(endIdx + endMarker.length).trim();
+                                if (remainingText) {
+                                    yield { type: 'text_chunk', text: remainingText };
+                                }
+                            } catch(e) {
+                                yield { type: 'text_chunk', text: buffer };
+                            }
+                        } else {
+                            yield { type: 'text_chunk', text: buffer };
+                        }
+                    } else {
+                        yield { type: 'text_chunk', text: buffer };
+                    }
+                } else {
+                    yield { type: 'text_chunk', text: buffer };
+                }
             }
 
         } catch (error: any) {

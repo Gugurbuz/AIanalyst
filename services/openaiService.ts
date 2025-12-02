@@ -28,6 +28,55 @@ const convertMessagesToOpenAIFormat = (history: Message[]) => {
         }));
 };
 
+const FUNCTION_TOOLS = [
+    {
+        type: "function",
+        function: {
+            name: "generateAnalysisDocument",
+            description: "Kullanıcı bir dokümanı 'güncelle', 'oluştur', 'yeniden yaz' veya 'yeniden oluştur' gibi bir komut verdiğinde bu aracı kullan.",
+            parameters: { type: "object", properties: {} }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "saveRequestDocument",
+            description: "Kullanıcının ilk talebi netleştiğinde, bu talebi otomatik olarak kaydetmek için kullan.",
+            parameters: {
+                type: "object",
+                properties: {
+                    request_summary: { type: "string", description: "Kullanıcının ilk talebinin kısa ve net bir özeti." }
+                },
+                required: ["request_summary"]
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "generateTestScenarios",
+            description: "Test senaryoları oluşturmak için kullan.",
+            parameters: { type: "object", properties: {} }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "generateTraceabilityMatrix",
+            description: "İzlenebilirlik matrisi oluşturmak için kullan.",
+            parameters: { type: "object", properties: {} }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "generateVisualization",
+            description: "Süreç akışını görselleştirmek için kullan.",
+            parameters: { type: "object", properties: {} }
+        }
+    }
+];
+
 export const openaiService = {
     generateContentStream: async function* (
         messages: Message[],
@@ -48,6 +97,7 @@ export const openaiService = {
                         { role: 'system', content: systemPrompt },
                         ...openaiMessages
                     ],
+                    tools: FUNCTION_TOOLS,
                     stream: true,
                 }),
             });
@@ -67,6 +117,7 @@ export const openaiService = {
             let buffer = '';
             let thoughtYielded = false;
             let totalTokens = 0;
+            let functionCallBuffer = { name: '', arguments: '' };
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -83,10 +134,23 @@ export const openaiService = {
 
                     try {
                         const chunk = JSON.parse(jsonStr);
-                        const delta = chunk.choices?.[0]?.delta?.content;
+                        const delta = chunk.choices?.[0]?.delta;
 
-                        if (delta) {
-                            buffer += delta;
+                        if (delta?.tool_calls && delta.tool_calls.length > 0) {
+                            const toolCall = delta.tool_calls[0];
+                            if (toolCall.function) {
+                                if (toolCall.function.name) {
+                                    functionCallBuffer.name = toolCall.function.name;
+                                }
+                                if (toolCall.function.arguments) {
+                                    functionCallBuffer.arguments += toolCall.function.arguments;
+                                }
+                            }
+                        }
+
+                        const content = delta?.content;
+                        if (content) {
+                            buffer += content;
 
                             if (!thoughtYielded) {
                                 const startMarker = '```thinking';
@@ -125,6 +189,15 @@ export const openaiService = {
                     } catch (e) {
                         console.error('JSON parse error:', e);
                     }
+                }
+            }
+
+            if (functionCallBuffer.name) {
+                try {
+                    const args = functionCallBuffer.arguments ? JSON.parse(functionCallBuffer.arguments) : {};
+                    yield { type: 'function_call', name: functionCallBuffer.name, args };
+                } catch (e) {
+                    console.error('Failed to parse function arguments:', e);
                 }
             }
 
