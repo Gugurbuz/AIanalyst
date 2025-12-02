@@ -9,9 +9,7 @@ import { Template, DocumentVersion, LintingIssue, IsBirimiTalep, isIsBirimiTalep
 import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, Edit, Eye, Wrench, X, History } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 import { VersionHistoryModal } from './VersionHistoryModal';
-import { RequestDocumentViewer } from './RequestDocumentViewer';
-import { RequestDocumentEditor } from './RequestDocumentEditor';
-import { TiptapEditor } from './TiptapEditor'; // ANA DEĞİŞİKLİK
+import { TiptapEditor } from './TiptapEditor';
 
 interface DocumentCanvasProps {
     content: string; // Artık HTML (veya JSON string) alacak
@@ -119,17 +117,133 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
 
     useEffect(() => { setLintIssues([]); }, [content]);
 
-    const parsedRequestDoc = useMemo(() => {
-        if (docKey === 'requestDoc') {
-            try {
-                const contentToParse = isEditing ? localContent : content;
-                 if (!contentToParse) return null; // Boşsa ayrıştırmayı deneme
-                const parsed = JSON.parse(contentToParse);
-                return isIsBirimiTalep(parsed) ? parsed : null;
-            } catch { return null; }
+    const convertRequestDocToHTML = (jsonString: string): string => {
+        try {
+            const doc: IsBirimiTalep = JSON.parse(jsonString);
+            return `
+<div class="request-document">
+<h1>${doc.talepAdi}</h1>
+<div class="metadata">
+<p><strong>Doküman No:</strong> ${doc.dokumanNo}</p>
+<p><strong>Revizyon:</strong> ${doc.revizyon}</p>
+<p><strong>Tarih:</strong> ${doc.tarih}</p>
+<p><strong>Talep Sahibi:</strong> ${doc.talepSahibi}</p>
+</div>
+<h2>Mevcut Durum & Problem</h2>
+<p>${doc.mevcutDurumProblem}</p>
+<h2>Talebin Amacı ve Gerekçesi</h2>
+<p>${doc.talepAmaciGerekcesi}</p>
+<h2>Kapsam</h2>
+<h3>Kapsam Dahili</h3>
+<ul>
+${doc.kapsam.inScope.map(item => `<li>${item}</li>`).join('\n')}
+</ul>
+<h3>Kapsam Dışı</h3>
+<ul>
+${doc.kapsam.outOfScope.map(item => `<li>${item}</li>`).join('\n')}
+</ul>
+<h2>Beklenen İş Faydaları</h2>
+<ul>
+${doc.beklenenIsFaydalari.map(item => `<li>${item}</li>`).join('\n')}
+</ul>
+</div>
+            `.trim();
+        } catch {
+            return '';
         }
-        return null;
-    }, [docKey, content, localContent, isEditing]);
+    };
+
+    const convertHTMLToRequestDoc = (html: string): string => {
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+
+            const getText = (selector: string): string => {
+                const el = doc.querySelector(selector);
+                return el?.textContent?.trim() || '';
+            };
+
+            const getListItems = (selector: string): string[] => {
+                const items = doc.querySelectorAll(selector);
+                return Array.from(items).map(item => item.textContent?.trim() || '').filter(Boolean);
+            };
+
+            const requestDoc: IsBirimiTalep = {
+                dokumanTipi: 'IsBirimiTalep',
+                talepAdi: getText('h1'),
+                dokumanNo: '',
+                revizyon: '',
+                tarih: '',
+                talepSahibi: '',
+                mevcutDurumProblem: '',
+                talepAmaciGerekcesi: '',
+                kapsam: {
+                    inScope: [],
+                    outOfScope: []
+                },
+                beklenenIsFaydalari: []
+            };
+
+            const metadataPs = doc.querySelectorAll('.metadata p');
+            metadataPs.forEach(p => {
+                const text = p.textContent || '';
+                const colonChar = ':';
+                if (text.includes('Doküman No' + colonChar)) requestDoc.dokumanNo = text.split(colonChar)[1]?.trim() || '';
+                if (text.includes('Revizyon' + colonChar)) requestDoc.revizyon = text.split(colonChar)[1]?.trim() || '';
+                if (text.includes('Tarih' + colonChar)) requestDoc.tarih = text.split(colonChar)[1]?.trim() || '';
+                if (text.includes('Talep Sahibi' + colonChar)) requestDoc.talepSahibi = text.split(colonChar)[1]?.trim() || '';
+            });
+
+            const allH2 = doc.querySelectorAll('h2');
+            allH2.forEach((h2, idx) => {
+                const title = h2.textContent?.trim() || '';
+                const nextP = h2.nextElementSibling;
+
+                if (title.includes('Mevcut Durum') && nextP?.tagName === 'P') {
+                    requestDoc.mevcutDurumProblem = nextP.textContent?.trim() || '';
+                }
+                if (title.includes('Talebin Amacı') && nextP?.tagName === 'P') {
+                    requestDoc.talepAmaciGerekcesi = nextP.textContent?.trim() || '';
+                }
+                if (title.includes('Beklenen İş Faydaları')) {
+                    let nextEl = h2.nextElementSibling;
+                    while (nextEl && nextEl.tagName !== 'H2') {
+                        if (nextEl.tagName === 'UL') {
+                            requestDoc.beklenenIsFaydalari = getListItems('h2:has-text("Beklenen") ~ ul li');
+                            if (requestDoc.beklenenIsFaydalari.length === 0) {
+                                const lis = nextEl.querySelectorAll('li');
+                                requestDoc.beklenenIsFaydalari = Array.from(lis).map(li => li.textContent?.trim() || '').filter(Boolean);
+                            }
+                            break;
+                        }
+                        nextEl = nextEl.nextElementSibling;
+                    }
+                }
+            });
+
+            const allH3 = doc.querySelectorAll('h3');
+            allH3.forEach(h3 => {
+                const title = h3.textContent?.trim() || '';
+                let nextEl = h3.nextElementSibling;
+                const items: string[] = [];
+                while (nextEl && nextEl.tagName !== 'H2' && nextEl.tagName !== 'H3') {
+                    if (nextEl.tagName === 'UL') {
+                        const lis = nextEl.querySelectorAll('li');
+                        items.push(...Array.from(lis).map(li => li.textContent?.trim() || '').filter(Boolean));
+                        break;
+                    }
+                    nextEl = nextEl.nextElementSibling;
+                }
+                if (title.includes('Kapsam Dahili')) requestDoc.kapsam.inScope = items;
+                if (title.includes('Kapsam Dışı')) requestDoc.kapsam.outOfScope = items;
+            });
+
+            return JSON.stringify(requestDoc);
+        } catch (e) {
+            console.error('Failed to convert HTML to request doc:', e);
+            return '{}';
+        }
+    };
 
 
     const handleToggleEditing = async () => {
@@ -141,8 +255,9 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
             setIsProcessingSave(true);
             try {
                 if (docKey === 'requestDoc') {
-                    // Talep dokümanı (JSON)
-                    onContentChange(localContent, "Talep dokümanı manuel olarak düzenlendi.");
+                    // Talep dokümanı - HTML'den JSON'a dönüştür
+                    const jsonString = convertHTMLToRequestDoc(localContent);
+                    onContentChange(jsonString, "Talep dokümanı manuel olarak düzenlendi.");
                 } else {
                     // Diğer dokümanlar (ARTIK HTML)
                     // Not: Özetleme servisi HTML tag'lerini de görecek.
@@ -167,7 +282,13 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
         } else {
             // --- DÜZENLEMEYE GİR ---
             originalContentRef.current = content;
-            setLocalContent(content); 
+            if (docKey === 'requestDoc') {
+                // Talep dokümanı - JSON'dan HTML'e dönüştür
+                const htmlContent = convertRequestDocToHTML(content);
+                setLocalContent(htmlContent);
+            } else {
+                setLocalContent(content);
+            }
             setIsEditing(true);
         }
     };
@@ -201,24 +322,23 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     
     const filteredHistory = useMemo(() => (documentVersions || []).filter(v => v.document_type === currentDocType), [documentVersions, currentDocType]);
 
-    // !!!!!!!!!!!!!!! ÇÖZÜM - 3 (GÖRÜNTÜLEME) !!!!!!!!!!!!!!!
-    // 'displayContent' artık 'jsonToMarkdownTable' KULLANMIYOR.
     const displayContent = useMemo(() => {
-        if (docKey === 'requestDoc') return content; // requestDoc için JSON string
-
-        // Diğer her şey için (Analiz, Test, İzlenebilirlik)
-        // 'content' (veya düzenleniyorsa 'localContent') artık HTML'dir.
         const contentToDisplay = isEditing ? localContent : content;
-        
-        // ÖNEMLİ: AI'dan stream edilen veri HALA MARKDOWN OLABİLİR.
-        // Tiptap'in bunu işlemesi gerekir. En ideali AI'nın da HTML stream etmesidir,
-        // ancak bu daha büyük bir değişiklik gerektirir.
-        // Şimdilik, Tiptap'in stream'i işlemesini bekleyeceğiz.
-        if (isStreaming) {
-             return contentToDisplay; // TODO: Bu akış Markdown ise Tiptap'e HTML'e çevirip vermeliyiz
+
+        if (docKey === 'requestDoc') {
+            // Düzenleme modunda HTML, görüntüleme modunda JSON'dan HTML'e dönüştür
+            if (isEditing) {
+                return contentToDisplay; // Zaten HTML
+            } else {
+                return convertRequestDocToHTML(content); // JSON'dan HTML'e
+            }
         }
 
-        // isTable kontrolü artık gereksiz, Tiptap tabloları kendi içinde halleder.
+        // Diğer dokümanlar için HTML
+        if (isStreaming) {
+            return contentToDisplay;
+        }
+
         return contentToDisplay;
     }, [isEditing, isStreaming, localContent, content, docKey]);
     
@@ -247,29 +367,13 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
             </div>
             
             <div className="flex-1 relative min-h-0">
-                {docKey === 'requestDoc' ? (
-                    // Talep Dokümanı (JSON): Ayrı component'ler kullanılıyor (Bu kısım doğru)
-                    parsedRequestDoc ? (
-                        isEditing ? (
-                            <RequestDocumentEditor
-                                document={parsedRequestDoc}
-                                onChange={(newDoc) => setLocalContent(JSON.stringify(newDoc))}
-                            />
-                        ) : (
-                            <RequestDocumentViewer document={parsedRequestDoc} />
-                        )
-                    ) : (
-                         <div className="p-6 text-slate-500">{isStreaming ? 'Talep dokümanı oluşturuluyor...' : 'Talep dokümanı yüklenemedi veya geçersiz formatta.'}</div>
-                    )
-                ) : (
-                    <TiptapEditor
-                        key={`${docKey}-${isEditing ? 'edit' : 'view'}`}
-                        content={displayContent}
-                        onChange={setLocalContent}
-                        onSelectionUpdate={handleTiptapSelection}
-                        isEditable={isEditing}
-                    />
-                )}
+                <TiptapEditor
+                    key={`${docKey}-${isEditing ? 'edit' : 'view'}`}
+                    content={displayContent}
+                    onChange={setLocalContent}
+                    onSelectionUpdate={handleTiptapSelection}
+                    isEditable={isEditing}
+                />
             </div>
 
              {isAiModalOpen && selection && <AiAssistantModal selectedText={selection.text} onGenerate={handleAiModify} onClose={() => { setIsAiModalOpen(false); setSelection(null); }} isLoading={!!inlineModificationState} />}
