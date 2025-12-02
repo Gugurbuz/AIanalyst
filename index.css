@@ -9,6 +9,20 @@
 @import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css';
 
 /* index.html dosyasındaki <style> etiketinden taşınan tüm özel stiller */
+
+/* CSS Variables for Toast */
+:root {
+  --toast-bg: #ffffff;
+  --toast-text: #1e293b;
+  --toast-border: #e2e8f0;
+}
+
+.dark {
+  --toast-bg: #1e293b;
+  --toast-text: #f1f5f9;
+  --toast-border: #475569;
+}
+
 body {
   font-family: 'Inter', sans-serif;
 }

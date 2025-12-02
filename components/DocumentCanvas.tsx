@@ -1,15 +1,16 @@
 // components/DocumentCanvas.tsx
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-// MarkdownRenderer'ı SİLİN
-// import { MarkdownRenderer } from './MarkdownRenderer';
 import { StreamingIndicator } from './StreamingIndicator';
 import { TemplateSelector } from './TemplateSelector';
 import { ExportDropdown } from './ExportDropdown';
 import { Template, DocumentVersion, LintingIssue, IsBirimiTalep, isIsBirimiTalep } from '../types';
-import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, Edit, Eye, Wrench, X, History } from 'lucide-react';
+import { Bold, Italic, Heading2, Heading3, List, ListOrdered, Sparkles, LoaderCircle, Edit, Eye, Wrench, X, History, Save } from 'lucide-react';
 import { geminiService } from '../services/geminiService';
 import { VersionHistoryModal } from './VersionHistoryModal';
 import { TiptapEditor } from './TiptapEditor';
+import { useAutoSave } from '../hooks/useAutoSave';
+import { showToast } from '../utils/toast';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 interface DocumentCanvasProps {
     content: string; // Artık HTML (veya JSON string) alacak
@@ -100,20 +101,63 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const [lintIssues, setLintIssues] = useState<LintingIssue[]>([]);
     const [isFixing, setIsFixing] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-    
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
     const originalContentRef = useRef<string>('');
-    
+
     const documentTypeMap: Record<string, DocumentVersion['document_type']> = { analysisDoc: 'analysis', requestDoc: 'request', testScenarios: 'test', traceabilityMatrix: 'traceability' };
     const currentDocType = documentTypeMap[docKey];
-    
+
     const docNameMap: Record<string, string> = { analysisDoc: 'Analiz Dokümanı', requestDoc: 'Talep Dokümanı', testScenarios: 'Test Senaryoları', traceabilityMatrix: 'İzlenebilirlik Matrisi' };
     const documentName = docNameMap[docKey] || 'Doküman';
 
-    useEffect(() => { 
+    const handleAutoSave = useCallback(async () => {
+        if (!isEditing || !hasUnsavedChanges) return;
+
+        try {
+            if (docKey === 'requestDoc') {
+                const jsonString = convertHTMLToRequestDoc(localContent);
+                onContentChange(jsonString, "Otomatik kayıt");
+            } else {
+                onContentChange(localContent, "Otomatik kayıt");
+            }
+            setHasUnsavedChanges(false);
+            showToast.success('Değişiklikler otomatik kaydedildi');
+        } catch (error) {
+            console.error('Auto-save failed:', error);
+        }
+    }, [isEditing, hasUnsavedChanges, docKey, localContent, onContentChange]);
+
+    const { saveNow } = useAutoSave({
+        onSave: handleAutoSave,
+        delay: 30000,
+        enabled: isEditing && hasUnsavedChanges,
+    });
+
+    useKeyboardShortcuts([
+        {
+            key: 's',
+            ctrl: true,
+            handler: (e) => {
+                e.preventDefault();
+                if (isEditing && hasUnsavedChanges) {
+                    saveNow();
+                }
+            },
+        },
+    ]);
+
+    useEffect(() => {
         if (!isEditing) {
-            setLocalContent(content || ''); 
+            setLocalContent(content || '');
         }
     }, [content, isEditing]);
+
+    useEffect(() => {
+        if (isEditing && localContent !== originalContentRef.current) {
+            setHasUnsavedChanges(true);
+        }
+    }, [localContent, isEditing]);
 
     useEffect(() => { setLintIssues([]); }, [content]);
 
@@ -357,11 +401,25 @@ ${doc.beklenenIsFaydalari.map(item => `<li>${item}</li>`).join('\n')}
                      )}
                 </div>
                 <div className="flex items-center gap-4">
+                     {isEditing && hasUnsavedChanges && (
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
+                                Kaydedilmemiş değişiklikler
+                            </span>
+                            <button
+                                onClick={() => saveNow()}
+                                className="p-1.5 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 text-indigo-600 dark:text-indigo-400"
+                                title="Şimdi Kaydet (Ctrl+S)"
+                            >
+                                <Save className="h-4 w-4" />
+                            </button>
+                        </div>
+                    )}
                      <div className="flex items-center gap-1"><span className="text-xs font-mono font-semibold text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-slate-700 px-2 py-1 rounded-md">v{currentVersion}</span><button onClick={() => setIsHistoryModalOpen(true)} title="Versiyon Geçmişi" className="p-2 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400" disabled={filteredHistory.length === 0}><History className="h-4 w-4"/></button></div>
                     {templates && selectedTemplate && onTemplateChange && <TemplateSelector label="Şablon" templates={templates} selectedValue={selectedTemplate} onChange={onTemplateChange} disabled={isGenerating} />}
                      {isStreaming && <div className="flex items-center gap-2"><LoaderCircle className="animate-spin h-5 w-5 text-indigo-500" /><span className="text-sm font-medium text-slate-600 dark:text-slate-400">Oluşturuluyor</span></div>}
                      <button onClick={handleToggleEditing} disabled={isProcessingSave || isStreaming} className="px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 flex items-center gap-2 disabled:opacity-50">{isProcessingSave ? <><LoaderCircle className="h-4 w-4 animate-spin" /> Kaydediliyor...</> : isEditing ? <><Eye className="h-4 w-4" /> Görünüm</> : <><Edit className="h-4 w-4" /> Düzenle</>}</button>
-                    {/* 'displayContent' artık HTML içeriyor. 'ExportDropdown' bunu işleyebilmeli. */}
                     <ExportDropdown content={displayContent} filename={filename} isTable={isTable} diagramType={null} />
                 </div>
             </div>

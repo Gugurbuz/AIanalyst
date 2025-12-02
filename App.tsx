@@ -2,6 +2,8 @@
 import React from 'react';
 import { AppProvider } from './contexts/AppContext';
 import { MainAppLayout } from './layouts/MainAppLayout';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { ToastProvider } from './components/ToastProvider';
 import type { User } from './types';
 import type { AppData } from './index';
 
@@ -13,8 +15,11 @@ interface AppProps {
 
 export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
     return (
-        <AppProvider user={user} initialData={initialData} onLogout={onLogout}>
-            <MainAppLayout />
-        </AppProvider>
+        <ErrorBoundary>
+            <ToastProvider />
+            <AppProvider user={user} initialData={initialData} onLogout={onLogout}>
+                <MainAppLayout />
+            </AppProvider>
+        </ErrorBoundary>
     );
 };
