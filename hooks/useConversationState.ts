@@ -390,6 +390,7 @@ export const useConversationState = ({ user, initialData }: UseConversationState
     return {
         user,
         userProfile,
+        setUserProfile,
         conversations,
         setConversations,
         activeConversationId,
