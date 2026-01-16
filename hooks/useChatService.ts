@@ -169,19 +169,22 @@ export const useChatService = ({
         }
         
         let historyForApi: Message[];
-        
+
         const currentConv = conversationState.conversations.find(c => c.id === activeId);
         if (!isRetry) {
             historyForApi = [...(currentConv?.messages || []), userMessage];
             conversationState.updateConversation(activeId, { messages: historyForApi });
-            
+
             const dbMessage = { ...userMessage };
             delete dbMessage.base64Image;
             delete dbMessage.imageMimeType;
 
-            supabase.from('conversation_details').insert(dbMessage).then(({error}) => {
-                if(error) uiState.setError(`Mesajınız kaydedilemedi: ${error.message}`);
-            });
+            const isAnonymous = conversationState.user.id.startsWith('anonymous-');
+            if (!isAnonymous) {
+                supabase.from('conversation_details').insert(dbMessage).then(({error}) => {
+                    if(error) uiState.setError(`Mesajınız kaydedilemedi: ${error.message}`);
+                });
+            }
         } else {
             historyForApi = [...(currentConv?.messages || [])];
         }
@@ -189,9 +192,12 @@ export const useChatService = ({
         const assistantMessageId = uuidv4();
         const assistantMessage: Message = { id: assistantMessageId, conversation_id: activeId, role: 'assistant', content: '', created_at: new Date().toISOString(), isStreaming: true };
         conversationState.updateConversation(activeId, { messages: [...historyForApi, assistantMessage] });
-        
+
         try {
-            const streamConv = conversationState.conversations.find(c => c.id === activeId)!;
+            const streamConv = conversationState.conversations.find(c => c.id === activeId);
+            if (!streamConv) {
+                throw new Error('Sohbet bulunamadı');
+            }
             const streamGeneratedDocs = streamConv.generatedDocs;
 
             const stream = uiState.isExpertMode 

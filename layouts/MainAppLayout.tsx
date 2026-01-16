@@ -170,17 +170,17 @@ const AnalystWorkspace = () => {
 
 const useNextBestAction = (conversation: any, callbacks: any) => {
     if (!conversation) return { label: "Başlamak için bir mesaj gönderin", action: () => {}, icon: <Sparkles className="h-5 w-5" />, disabled: true };
-    
+
     const { generatedDocs, messages } = conversation;
-    const hasRealAnalysisDoc = !!generatedDocs?.analysisDoc && !generatedDocs.analysisDoc.content.includes("Bu bölüme projenin temel hedefini");
+    const hasRealAnalysisDoc = !!generatedDocs?.analysisDoc?.content && !generatedDocs.analysisDoc.content.includes("Bu bölüme projenin temel hedefini");
     const hasMessages = messages.filter((m: any) => m.role !== 'system').length > 0;
 
     if (hasRealAnalysisDoc && !hasMessages) {
          return { label: "Dokümanı Değerlendir ve Soru Sor", action: () => callbacks.onEvaluateDocument(), icon: <Search className="h-5 w-5" />, disabled: false, tooltip: "AI'nın mevcut dokümanı analiz etmesini ve iyileştirme için sorular sormasını sağlayın." };
     }
-    
+
     const hasVisualization = generatedDocs?.mermaidViz?.content || generatedDocs?.bpmnViz?.content || generatedDocs?.visualization;
-    const hasTestScenarios = typeof generatedDocs.testScenarios === 'object' ? !!generatedDocs.testScenarios.content : !!generatedDocs.testScenarios;
+    const hasTestScenarios = typeof generatedDocs?.testScenarios === 'object' ? !!generatedDocs.testScenarios?.content : !!generatedDocs?.testScenarios;
 
     if (hasRealAnalysisDoc && hasVisualization && hasTestScenarios) return { label: "Proje Görevleri Oluştur", action: () => callbacks.onNavigateToBacklogGeneration(), icon: <PlusSquare className="h-5 w-5" />, disabled: false };
     if (hasRealAnalysisDoc && hasVisualization && !hasTestScenarios) return { label: "Test Senaryoları Oluştur", action: () => callbacks.onGenerateDoc('test'), icon: <Beaker className="h-5 w-5" />, disabled: false };

@@ -175,15 +175,25 @@ export const useAppLogic = ({ user, initialData, onLogout, initialMessage }: Use
         return { newConvId };
     };
 
+    const hasInitialMessageBeenSent = useRef(false);
+
     useEffect(() => {
-        if (initialMessage && user.id.startsWith('anonymous-')) {
-            handleNewConversationAndSend().then(({ newConvId }) => {
+        if (initialMessage && user.id.startsWith('anonymous-') && !hasInitialMessageBeenSent.current) {
+            hasInitialMessageBeenSent.current = true;
+
+            const sendInitialMessage = async () => {
+                const { newConvId } = await handleNewConversationAndSend();
                 if (newConvId) {
-                    chatService.sendMessage(initialMessage, null, false, newConvId, false);
+                    // Wait a bit for the state to update
+                    setTimeout(() => {
+                        chatService.sendMessage(initialMessage, null, false, newConvId, false);
+                    }, 100);
                 }
-            });
+            };
+
+            sendInitialMessage();
         }
-    }, []);
+    }, [initialMessage, user.id]);
     
     return {
         ...uiState,
