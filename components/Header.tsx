@@ -57,10 +57,10 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
     const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
     const userMenuRef = React.useRef<HTMLDivElement>(null);
+    const isAnonymous = user.id.startsWith('anonymous-');
 
      React.useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            // FIX: Corrected typo from `userMenu-ref` to `userMenuRef`.
             if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
                 setIsUserMenuOpen(false);
             }
@@ -76,28 +76,30 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             <div className="flex items-center gap-4 flex-shrink-0 mr-4">
-                {userProfile && <UserTokenIndicator profile={userProfile} />}
-                
+                {!isAnonymous && userProfile && <UserTokenIndicator profile={userProfile} />}
+
                 <ThemeSwitcher theme={theme} onThemeChange={onThemeChange} />
 
-                <div className="relative" ref={userMenuRef}>
-                    <button onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} className="w-8 h-8 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center justify-center font-bold text-slate-600 dark:text-slate-300">
-                        {user.email?.[0]?.toUpperCase()}
-                    </button>
-                    {isUserMenuOpen && (
-                        <div className="origin-top-right absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-30">
-                            <div className="px-4 py-2 text-sm text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
-                                <p className="font-semibold truncate">{user.email}</p>
+                {!isAnonymous && (
+                    <div className="relative" ref={userMenuRef}>
+                        <button onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} className="w-8 h-8 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center justify-center font-bold text-slate-600 dark:text-slate-300">
+                            {user.email?.[0]?.toUpperCase()}
+                        </button>
+                        {isUserMenuOpen && (
+                            <div className="origin-top-right absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 py-1 z-30">
+                                <div className="px-4 py-2 text-sm text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
+                                    <p className="font-semibold truncate">{user.email}</p>
+                                </div>
+                                <button onClick={() => { onOpenShareModal(); setIsUserMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2">
+                                    <Share2 className="h-4 w-4" /> Paylaş
+                                </button>
+                                <button onClick={onLogout} className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+                                    Çıkış Yap
+                                </button>
                             </div>
-                            <button onClick={() => { onOpenShareModal(); setIsUserMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2">
-                                <Share2 className="h-4 w-4" /> Paylaş
-                            </button>
-                            <button onClick={onLogout} className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
-                                Çıkış Yap
-                            </button>
-                        </div>
-                    )}
-                </div>
+                        )}
+                    </div>
+                )}
             </div>
         </header>
     );

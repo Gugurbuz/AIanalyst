@@ -117,8 +117,14 @@ export const useConversationState = ({ user, initialData, setError }: UseConvers
     };
 
     const saveConversation = useCallback(async (conv: Partial<Conversation> & { id: string }) => {
+        const isAnonymous = user.id.startsWith('anonymous-');
+        if (isAnonymous) {
+            setSaveStatus('saved');
+            setTimeout(() => setSaveStatus('idle'), 2000);
+            return;
+        }
+
         setSaveStatus('saving');
-        // Filter out generatedDocs which is a runtime derived property
         const { messages, documentVersions, documents, backlogSuggestions, generatedDocs, ...updatePayload } = conv as any;
         const { error } = await supabase.from('conversations').update(updatePayload).eq('id', conv.id);
         if (error) {
@@ -128,7 +134,7 @@ export const useConversationState = ({ user, initialData, setError }: UseConvers
             setSaveStatus('saved');
             setTimeout(() => setSaveStatus('idle'), 2000);
         }
-    }, []);
+    }, [user.id]);
 
     const triggerSave = useDebounce(saveConversation, 1500);
 
@@ -138,9 +144,12 @@ export const useConversationState = ({ user, initialData, setError }: UseConvers
     }, [triggerSave]);
 
     const saveProfile = useCallback(async (profile: UserProfile) => {
+        const isAnonymous = user.id.startsWith('anonymous-');
+        if (isAnonymous) return;
+
         const { error } = await supabase.from('user_profiles').update({ tokens_used: profile.tokens_used }).eq('id', profile.id);
         if (error) console.error('Failed to update user profile:', error.message);
-    }, []);
+    }, [user.id]);
 
     const triggerProfileSave = useDebounce(saveProfile, 2000);
     
@@ -210,16 +219,28 @@ export const useConversationState = ({ user, initialData, setError }: UseConvers
             reason_for_change: reason, template_id: validTemplateId,
             tokens_used: tokensUsed || 0
         };
-        
-        const { data: newVersionDb, error: insertError } = await supabase.from('document_versions').insert(newVersionRecord).select().single();
-        if (insertError || !newVersionDb) throw new Error("Doküman versiyonu kaydedilemedi: " + (insertError?.message || 'Bilinmeyen hata'));
-        
-        const { error: upsertError } = await supabase.from('documents').upsert({
-            conversation_id: conversationId, user_id: user.id, document_type: document_type,
-            content: newContentString, current_version_id: newVersionDb.id, template_id: validTemplateId,
-            is_stale: false // Reset stale status on update
-        }, { onConflict: 'conversation_id, document_type' }).select().single();
-        if (upsertError) throw new Error("Ana doküman kaydedilemedi: " + (upsertError?.message || 'Bilinmeyen hata'));
+
+        const isAnonymous = user.id.startsWith('anonymous-');
+        let newVersionDb: any;
+
+        if (isAnonymous) {
+            newVersionDb = {
+                ...newVersionRecord,
+                id: uuidv4(),
+                created_at: new Date().toISOString(),
+            };
+        } else {
+            const { data, error: insertError } = await supabase.from('document_versions').insert(newVersionRecord).select().single();
+            if (insertError || !data) throw new Error("Doküman versiyonu kaydedilemedi: " + (insertError?.message || 'Bilinmeyen hata'));
+            newVersionDb = data;
+
+            const { error: upsertError } = await supabase.from('documents').upsert({
+                conversation_id: conversationId, user_id: user.id, document_type: document_type,
+                content: newContentString, current_version_id: newVersionDb.id, template_id: validTemplateId,
+                is_stale: false
+            }, { onConflict: 'conversation_id, document_type' }).select().single();
+            if (upsertError) throw new Error("Ana doküman kaydedilemedi: " + (upsertError?.message || 'Bilinmeyen hata'));
+        }
 
         // Optimistic update
         setConversations(prev => prev.map(c => {
@@ -355,13 +376,19 @@ export const useConversationState = ({ user, initialData, setError }: UseConvers
     }, [activeConversationId, commitTokenUsage]);
     
     const fetchAllFeedback = useCallback(async () => {
+        const isAnonymous = user.id.startsWith('anonymous-');
+        if (isAnonymous) {
+            setAllFeedback([]);
+            return null;
+        }
+
         setIsFetchingFeedback(true);
         const { data, error } = await supabase.from('conversations').select('title, conversation_details(*)').eq('user_id', user.id);
         if (error) {
             console.error("Geri bildirim getirilirken hata:", error);
             setAllFeedback([]);
         } else if (data) {
-            const feedbackItems: FeedbackItem[] = data.flatMap(conv => 
+            const feedbackItems: FeedbackItem[] = data.flatMap(conv =>
                 (conv.conversation_details || []).filter(msg => msg.role === 'assistant' && msg.feedback && (msg.feedback.rating || msg.feedback.comment))
                                                 .map(msg => ({ message: msg, conversationTitle: conv.title || 'Başlıksız Analiz' }))
             );
@@ -373,11 +400,14 @@ export const useConversationState = ({ user, initialData, setError }: UseConvers
 
     const updateConversationTitle = useCallback(async (id: string, title: string) => {
         updateConversation(id, { title });
+        const isAnonymous = user.id.startsWith('anonymous-');
+        if (isAnonymous) return;
+
         const { error } = await supabase.from('conversations').update({ title }).eq('id', id);
         if (error) {
             console.error("Failed to update title:", error);
         }
-    }, [updateConversation]);
+    }, [updateConversation, user.id]);
 
     const deleteConversation = useCallback(async (id: string) => {
         const originalConversations = conversations;
@@ -392,6 +422,9 @@ export const useConversationState = ({ user, initialData, setError }: UseConvers
             const newIndex = Math.min(currentIndex, updatedConversations.length - 1);
             return updatedConversations[newIndex].id;
         });
+
+        const isAnonymous = user.id.startsWith('anonymous-');
+        if (isAnonymous) return;
 
         const { error } = await supabase.from('conversations').delete().eq('id', id);
 

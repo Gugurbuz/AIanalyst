@@ -265,17 +265,20 @@ export const useChatService = ({
                 conversationState.updateMessage(assistantMessageId, finalUpdates);
 
                 if (!finalAssistantMessage.error) {
-                    await supabase.from('conversation_details').insert({
-                        id: finalAssistantMessage.id,
-                        conversation_id: finalAssistantMessage.conversation_id,
-                        role: finalAssistantMessage.role,
-                        content: finalAssistantMessage.content,
-                        created_at: finalAssistantMessage.created_at,
-                        thought: finalAssistantMessage.thought || null,
-                        feedback: finalAssistantMessage.feedback || null,
-                        grounding_metadata: finalAssistantMessage.groundingMetadata || null
-                    });
-                    
+                    const isAnonymous = conversationState.user.id.startsWith('anonymous-');
+                    if (!isAnonymous) {
+                        await supabase.from('conversation_details').insert({
+                            id: finalAssistantMessage.id,
+                            conversation_id: finalAssistantMessage.conversation_id,
+                            role: finalAssistantMessage.role,
+                            content: finalAssistantMessage.content,
+                            created_at: finalAssistantMessage.created_at,
+                            thought: finalAssistantMessage.thought || null,
+                            feedback: finalAssistantMessage.feedback || null,
+                            grounding_metadata: finalAssistantMessage.groundingMetadata || null
+                        });
+                    }
+
                     await conversationState.finalizeStreamedDocuments();
                 }
             }

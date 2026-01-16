@@ -37,60 +37,28 @@ export interface AppData {
 }
 
 const Main = () => {
-    const [isLoading, setIsLoading] = useState(true);
-    const [session, setSession] = useState<Session | null>(null);
-    const [authFlowStep, setAuthFlowStep] = useState<'landing' | 'login' | 'signup'>('landing');
-
+    const [isLoading, setIsLoading] = useState(false);
+    const [showLanding, setShowLanding] = useState(true);
+    const [initialMessage, setInitialMessage] = useState<string>('');
     const [loadResult, setLoadResult] = useState<{
         error?: string;
         publicConversation?: Conversation;
-        appData?: AppData;
     }>({});
-    
+
     // Check for the public /studio route first.
     if (window.location.pathname.startsWith('/studio')) {
         return <PublicFlowStudio />;
     }
 
-    // This effect handles getting the initial session and subscribing to auth changes.
-    useEffect(() => {
-        // We run this only once, on mount.
-        // Initially, we are loading until we have checked for a session.
-        setIsLoading(true);
-        supabase.auth.getSession().then(({ data: { session }, error }) => {
-            if (error) {
-                console.warn('Error fetching session on initial load:', error.message);
-                // If there's an error (like an invalid refresh token), treat it as logged out.
-                // The Supabase client should also fire a SIGNED_OUT event, but this is a safeguard.
-                setSession(null);
-            } else {
-                setSession(session);
-            }
-            // Now we know the auth status, we can stop the initial loading.
-            // Data loading will be handled by the next effect based on the session.
-            setIsLoading(false); 
-        });
-
-        const { data: { subscription } } = authService.onAuthStateChange((_event, session) => {
-            setSession(session);
-        });
-
-        return () => {
-            subscription?.unsubscribe();
-        };
-    }, []);
-
-    // This effect handles fetching data when the session changes or when a share link is present.
+    // Check for share link on mount
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const shareId = urlParams.get('share');
-        
-        const fetchData = async () => {
-            // Reset previous results before fetching new ones
-            setLoadResult({});
 
+        const fetchData = async () => {
             if (shareId) {
                 setIsLoading(true);
+                setShowLanding(false);
                 const { data, error } = await supabase
                     .from('conversations')
                     .select('*, conversation_details(*), documents(*), document_versions(*)')
@@ -114,90 +82,11 @@ const Main = () => {
                     setLoadResult({ publicConversation: convWithDetails as Conversation });
                 }
                 setIsLoading(false);
-            } else if (session) {
-                setIsLoading(true);
-                try {
-                    const [profileResult, conversationsResult, templatesResult] = await Promise.all([
-                        authService.getProfile(session.user.id),
-                        supabase
-                            .from('conversations')
-                            .select('*, conversation_details(*), document_versions(*), documents(*)')
-                            .eq('user_id', session.user.id)
-                            .order('created_at', { ascending: false }),
-                        authService.fetchTemplates(session.user.id)
-                    ]);
-                    
-                    if (conversationsResult.error) {
-                        throw new Error(`Sohbetler yüklenirken bir hata oluştu: ${conversationsResult.error.message}`);
-                    }
-                    
-                    const conversationsWithDetails = (conversationsResult.data || []).map((conv: any) => {
-                        const messagesWithThoughts = (conv.conversation_details || [])
-                            .map((msg: any) => {
-                                let thought: ThoughtProcess | null = null;
-                                // Handle both old 'thoughts' (string) and new 'thought' (jsonb)
-                                const thoughtSource = msg.thought || msg.thoughts;
-                                
-                                if (thoughtSource && typeof thoughtSource === 'string') {
-                                    try {
-                                        const parsed = JSON.parse(thoughtSource);
-                                        // Check if it's the old ExpertStep[] format
-                                        if (Array.isArray(parsed)) {
-                                            thought = {
-                                                title: "Düşünce Akışı",
-                                                steps: parsed as ThinkingStep[]
-                                            };
-                                        } else { // Assume it's the new ThoughtProcess format
-                                            thought = parsed as ThoughtProcess;
-                                        }
-                                    } catch (e) {
-                                        console.warn("Could not parse 'thoughts' field from DB:", e);
-                                        thought = { title: 'Düşünce Akışı (Hata)', steps: [{ id: 'db_parse_error', name: 'Veritabanından gelen düşünce verisi ayrıştırılamadı.', status: 'error' }] };
-                                    }
-                                } else if (thoughtSource && typeof thoughtSource === 'object') {
-                                    // It's already a JSONB object, use it directly
-                                    thought = thoughtSource as ThoughtProcess;
-                                }
-                                
-                                return {
-                                    ...msg,
-                                    thought,
-                                    groundingMetadata: msg.grounding_metadata, // Map snake_case to camelCase
-                                };
-                            })
-                            .sort(
-                                (a: Message, b: Message) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                            );
-
-                        return {
-                            ...conv,
-                            messages: messagesWithThoughts,
-                            documentVersions: (conv.document_versions || []).sort(
-                                (a: DocumentVersion, b: DocumentVersion) => a.version_number - b.version_number
-                            ),
-                            documents: conv.documents || [],
-                        };
-                    });
-
-
-                    setLoadResult({
-                        appData: {
-                            conversations: conversationsWithDetails as Conversation[],
-                            profile: profileResult,
-                            templates: templatesResult,
-                        }
-                    });
-                } catch (err: any) {
-                    setLoadResult({ error: err.message || 'Veri yüklenirken bilinmeyen bir hata oluştu.' });
-                } finally {
-                    setIsLoading(false);
-                }
             }
         };
 
         fetchData();
-
-    }, [session?.user.id]);
+    }, []);
 
     if (isLoading) {
       return <LoadingSpinner />;
@@ -206,28 +95,37 @@ const Main = () => {
     if (loadResult.error) {
         return <ErrorScreen message={loadResult.error} />
     }
-    
+
     if (loadResult.publicConversation) {
         return <PublicView conversation={loadResult.publicConversation} />;
     }
 
-    if (session?.user && loadResult.appData) {
-        return <App 
-            user={session.user as User} 
-            onLogout={() => authService.logout()} 
-            initialData={loadResult.appData}
+    if (!showLanding) {
+        const anonymousUser: User = {
+            id: 'anonymous-' + Date.now(),
+            email: 'anonim@kullanici.com',
+            created_at: new Date().toISOString()
+        };
+
+        const appData: AppData = {
+            conversations: [],
+            profile: null,
+            templates: []
+        };
+
+        return <App
+            user={anonymousUser}
+            onLogout={() => {}}
+            initialData={appData}
+            initialMessage={initialMessage}
         />;
     }
 
-    if (authFlowStep === 'landing') {
-        return <LandingPage 
-            onLoginClick={() => setAuthFlowStep('login')}
-            onSignupClick={() => setAuthFlowStep('signup')}
-        />;
-    }
-    return <AuthPage 
-        initialView={authFlowStep} 
-        onNavigateBack={() => setAuthFlowStep('landing')}
+    return <LandingPage
+        onStartChat={(message: string) => {
+            setInitialMessage(message);
+            setShowLanding(false);
+        }}
     />;
 };
 

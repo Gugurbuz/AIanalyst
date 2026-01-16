@@ -12,13 +12,14 @@ interface AppProps {
   user: User;
   onLogout: () => void;
   initialData: AppData;
+  initialMessage?: string;
 }
 
-export const App: React.FC<AppProps> = ({ user, onLogout, initialData }) => {
+export const App: React.FC<AppProps> = ({ user, onLogout, initialData, initialMessage }) => {
     return (
         <ErrorBoundary>
             <UIProvider>
-                <AppProvider user={user} initialData={initialData} onLogout={onLogout}>
+                <AppProvider user={user} initialData={initialData} onLogout={onLogout} initialMessage={initialMessage}>
                     <MainAppLayout />
                 </AppProvider>
             </UIProvider>

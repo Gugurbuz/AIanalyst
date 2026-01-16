@@ -1,5 +1,5 @@
 // hooks/useAppLogic.ts
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useUIState } from './useUIState';
 import { useConversationState } from './useConversationState';
 import { useDocumentServices } from './useDocumentServices';
@@ -23,9 +23,10 @@ interface UseAppLogicProps {
     user: User;
     initialData: AppData;
     onLogout: () => void;
+    initialMessage?: string;
 }
 
-export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) => {
+export const useAppLogic = ({ user, initialData, onLogout, initialMessage }: UseAppLogicProps) => {
     const uiState = useUIState();
     const conversationState = useConversationState({ user, initialData, setError: uiState.setError });
 
@@ -48,6 +49,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
     const handleNewConversation = useCallback(async (documentContentOrEvent?: string | React.MouseEvent, title?: string) => {
         uiState.setIsNewAnalysisModalOpen(false);
         const documentContent = (typeof documentContentOrEvent === 'string') ? documentContentOrEvent : undefined;
+        const isAnonymous = user.id.startsWith('anonymous-');
 
         setIsProcessing(true);
         let newConvId: string | null = null;
@@ -57,15 +59,32 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
 
             if (!title && documentContent) {
                 const { title: generatedTitle, tokens } = await geminiService.generateConversationTitle(documentContent.substring(0, 250));
-                conversationState.commitTokenUsage(tokens);
+                if (!isAnonymous) {
+                    conversationState.commitTokenUsage(tokens);
+                }
                 finalTitle = generatedTitle || initialTitle;
             }
 
-            const { data: convData, error: convError } = await supabase.from('conversations').insert({ user_id: user.id, title: finalTitle, share_id: uuidv4() }).select().single();
+            let convData: any;
 
-            if (convError || !convData) {
-                uiState.setError("Yeni sohbet oluşturulamadı.");
-                return { newConvId: null, initialContent: null, initialFile: null };
+            if (isAnonymous) {
+                convData = {
+                    id: uuidv4(),
+                    user_id: user.id,
+                    title: finalTitle,
+                    share_id: uuidv4(),
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    is_shared: false,
+                };
+            } else {
+                const { data, error: convError } = await supabase.from('conversations').insert({ user_id: user.id, title: finalTitle, share_id: uuidv4() }).select().single();
+
+                if (convError || !data) {
+                    uiState.setError("Yeni sohbet oluşturulamadı.");
+                    return { newConvId: null, initialContent: null, initialFile: null };
+                }
+                convData = data;
             }
 
             const newConversation: Conversation = {
@@ -74,15 +93,16 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
                 documents: [],
                 documentVersions: [],
             };
-            
+
             conversationState.setConversations(prev => [newConversation, ...prev]);
             conversationState.setActiveConversationId(newConversation.id);
             newConvId = newConversation.id;
 
             if (documentContent) {
                 const { jsonString, tokens } = await geminiService.parseTextToRequestDocument(documentContent);
-                conversationState.commitTokenUsage(tokens);
-                // FIX: Pass newConvId to saveDocumentVersion to prevent race condition
+                if (!isAnonymous) {
+                    conversationState.commitTokenUsage(tokens);
+                }
                 await conversationState.saveDocumentVersion('requestDoc', jsonString, "İlk doküman oluşturuldu", null, newConvId);
                 return { newConvId, initialContent: `Bu dokümanı analiz etmeye başla.`, initialFile: null };
             }
@@ -154,6 +174,16 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         }
         return { newConvId };
     };
+
+    useEffect(() => {
+        if (initialMessage && user.id.startsWith('anonymous-')) {
+            handleNewConversationAndSend().then(({ newConvId }) => {
+                if (newConvId) {
+                    chatService.sendMessage(initialMessage, null, false, newConvId, false);
+                }
+            });
+        }
+    }, []);
     
     return {
         ...uiState,
