@@ -66,9 +66,9 @@ export const useDocumentServices = ({
         };
 
         // Access content safely using the normalized structure
-        const analysisContent = activeConv.generatedDocs.analysisDoc?.content || '';
-        const requestContent = activeConv.generatedDocs.requestDoc?.content || '';
-        const testContent = activeConv.generatedDocs.testScenarios?.content || '';
+        const analysisContent = activeConv.generatedDocs?.analysisDoc?.content || '';
+        const requestContent = activeConv.generatedDocs?.requestDoc?.content || '';
+        const testContent = activeConv.generatedDocs?.testScenarios?.content || '';
 
         const streamGenerators = {
             analysis: () => geminiService.generateAnalysisDocument(requestContent, activeConv.messages, templates.analysis, activeModel()),
@@ -149,11 +149,11 @@ export const useDocumentServices = ({
         const newTemplateId = event.target.value;
         const activeConv = conversationState.activeConversation;
         if (!activeConv) return;
-        
+
         const docKeyMap = { analysis: 'analysisDoc', test: 'testScenarios', traceability: 'traceabilityMatrix' };
         const docKey = docKeyMap[docType] as keyof GeneratedDocs;
-        
-        const doc = activeConv.generatedDocs[docKey];
+
+        const doc = activeConv.generatedDocs?.[docKey];
         const contentExists = !!doc?.content?.trim();
 
         if (contentExists) {

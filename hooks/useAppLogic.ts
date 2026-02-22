@@ -126,7 +126,7 @@ export const useAppLogic = ({ user, initialData, onLogout }: UseAppLogicProps) =
         uiState.setIsFeatureSuggestionsModalOpen(true);
         try {
             const { suggestions, tokens } = await geminiService.suggestNextFeature(
-                conversationState.activeConversation.generatedDocs.analysisDoc,
+                conversationState.activeConversation.generatedDocs?.analysisDoc,
                 conversationState.activeConversation.messages
             );
             conversationState.commitTokenUsage(tokens);
