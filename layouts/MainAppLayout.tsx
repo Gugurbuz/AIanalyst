@@ -170,9 +170,9 @@ const AnalystWorkspace = () => {
 
 const useNextBestAction = (conversation: any, callbacks: any) => {
     if (!conversation) return { label: "Başlamak için bir mesaj gönderin", action: () => {}, icon: <Sparkles className="h-5 w-5" />, disabled: true };
-    
+
     const { generatedDocs, messages } = conversation;
-    const hasRealAnalysisDoc = !!generatedDocs?.analysisDoc && !generatedDocs.analysisDoc.content.includes("Bu bölüme projenin temel hedefini");
+    const hasRealAnalysisDoc = !!generatedDocs?.analysisDoc && !!generatedDocs.analysisDoc.content && !generatedDocs.analysisDoc.content.includes("Bu bölüme projenin temel hedefini");
     const hasMessages = messages.filter((m: any) => m.role !== 'system').length > 0;
 
     if (hasRealAnalysisDoc && !hasMessages) {
