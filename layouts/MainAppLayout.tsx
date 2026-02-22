@@ -180,7 +180,7 @@ const useNextBestAction = (conversation: any, callbacks: any) => {
     }
     
     const hasVisualization = generatedDocs?.mermaidViz?.content || generatedDocs?.bpmnViz?.content || generatedDocs?.visualization;
-    const hasTestScenarios = typeof generatedDocs.testScenarios === 'object' ? !!generatedDocs.testScenarios.content : !!generatedDocs.testScenarios;
+    const hasTestScenarios = typeof generatedDocs?.testScenarios === 'object' ? !!generatedDocs.testScenarios?.content : !!generatedDocs?.testScenarios;
 
     if (hasRealAnalysisDoc && hasVisualization && hasTestScenarios) return { label: "Proje Görevleri Oluştur", action: () => callbacks.onNavigateToBacklogGeneration(), icon: <PlusSquare className="h-5 w-5" />, disabled: false };
     if (hasRealAnalysisDoc && hasVisualization && !hasTestScenarios) return { label: "Test Senaryoları Oluştur", action: () => callbacks.onGenerateDoc('test'), icon: <Beaker className="h-5 w-5" />, disabled: false };
