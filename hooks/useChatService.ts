@@ -169,22 +169,19 @@ export const useChatService = ({
         }
         
         let historyForApi: Message[];
-
+        
         const currentConv = conversationState.conversations.find(c => c.id === activeId);
         if (!isRetry) {
             historyForApi = [...(currentConv?.messages || []), userMessage];
             conversationState.updateConversation(activeId, { messages: historyForApi });
-
+            
             const dbMessage = { ...userMessage };
             delete dbMessage.base64Image;
             delete dbMessage.imageMimeType;
 
-            const isAnonymous = conversationState.user.id.startsWith('anonymous-');
-            if (!isAnonymous) {
-                supabase.from('conversation_details').insert(dbMessage).then(({error}) => {
-                    if(error) uiState.setError(`Mesajınız kaydedilemedi: ${error.message}`);
-                });
-            }
+            supabase.from('conversation_details').insert(dbMessage).then(({error}) => {
+                if(error) uiState.setError(`Mesajınız kaydedilemedi: ${error.message}`);
+            });
         } else {
             historyForApi = [...(currentConv?.messages || [])];
         }
@@ -192,12 +189,9 @@ export const useChatService = ({
         const assistantMessageId = uuidv4();
         const assistantMessage: Message = { id: assistantMessageId, conversation_id: activeId, role: 'assistant', content: '', created_at: new Date().toISOString(), isStreaming: true };
         conversationState.updateConversation(activeId, { messages: [...historyForApi, assistantMessage] });
-
+        
         try {
-            const streamConv = conversationState.conversations.find(c => c.id === activeId);
-            if (!streamConv) {
-                throw new Error('Sohbet bulunamadı');
-            }
+            const streamConv = conversationState.conversations.find(c => c.id === activeId)!;
             const streamGeneratedDocs = streamConv.generatedDocs;
 
             const stream = uiState.isExpertMode 
@@ -271,20 +265,17 @@ export const useChatService = ({
                 conversationState.updateMessage(assistantMessageId, finalUpdates);
 
                 if (!finalAssistantMessage.error) {
-                    const isAnonymous = conversationState.user.id.startsWith('anonymous-');
-                    if (!isAnonymous) {
-                        await supabase.from('conversation_details').insert({
-                            id: finalAssistantMessage.id,
-                            conversation_id: finalAssistantMessage.conversation_id,
-                            role: finalAssistantMessage.role,
-                            content: finalAssistantMessage.content,
-                            created_at: finalAssistantMessage.created_at,
-                            thought: finalAssistantMessage.thought || null,
-                            feedback: finalAssistantMessage.feedback || null,
-                            grounding_metadata: finalAssistantMessage.groundingMetadata || null
-                        });
-                    }
-
+                    await supabase.from('conversation_details').insert({
+                        id: finalAssistantMessage.id,
+                        conversation_id: finalAssistantMessage.conversation_id,
+                        role: finalAssistantMessage.role,
+                        content: finalAssistantMessage.content,
+                        created_at: finalAssistantMessage.created_at,
+                        thought: finalAssistantMessage.thought || null,
+                        feedback: finalAssistantMessage.feedback || null,
+                        grounding_metadata: finalAssistantMessage.groundingMetadata || null
+                    });
+                    
                     await conversationState.finalizeStreamedDocuments();
                 }
             }

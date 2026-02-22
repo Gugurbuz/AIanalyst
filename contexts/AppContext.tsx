@@ -15,11 +15,10 @@ interface AppProviderProps {
     user: User;
     initialData: AppData;
     onLogout: () => void;
-    initialMessage?: string;
 }
 
-export const AppProvider: React.FC<AppProviderProps> = ({ children, user, initialData, onLogout, initialMessage }) => {
-    const appLogic = useAppLogic({ user, initialData, onLogout, initialMessage });
+export const AppProvider: React.FC<AppProviderProps> = ({ children, user, initialData, onLogout }) => {
+    const appLogic = useAppLogic({ user, initialData, onLogout });
 
     return (
         <AppContext.Provider value={appLogic}>
