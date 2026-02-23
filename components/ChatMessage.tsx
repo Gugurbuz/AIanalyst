@@ -158,6 +158,22 @@ export const ChatMessage = memo(({
                     <div className="text-red-700 dark:text-red-300">
                         <p className="font-semibold">Bir Hata Oluştu</p>
                         <p className="text-sm mt-1">{message.error.message}</p>
+                        {message.error.message.includes('API Anahtarı') && (
+                            <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-md">
+                                <p className="text-sm text-amber-800 dark:text-amber-200 font-medium mb-2">
+                                    API Anahtarı Nasıl Alınır?
+                                </p>
+                                <ol className="text-xs text-amber-700 dark:text-amber-300 space-y-1 list-decimal list-inside">
+                                    <li>Sağ üst köşedeki ayarlar menüsünü açın</li>
+                                    <li>"Geliştirici Paneli" seçeneğine tıklayın</li>
+                                    <li>OpenAI API Anahtarı alanına anahtarınızı girin</li>
+                                    <li>"Kaydet ve Yeniden Başlat" butonuna tıklayın</li>
+                                </ol>
+                                <p className="text-xs text-amber-700 dark:text-amber-300 mt-2">
+                                    API anahtarı almak için: <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline hover:text-amber-900 dark:hover:text-amber-100">platform.openai.com/api-keys</a>
+                                </p>
+                            </div>
+                        )}
                         <button
                             onClick={() => onRetry(message.id)}
                             className="mt-3 px-3 py-1 text-xs font-semibold text-white bg-indigo-600 rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"

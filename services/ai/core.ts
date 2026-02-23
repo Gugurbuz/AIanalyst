@@ -21,7 +21,7 @@ export const getApiKey = async (): Promise<string> => {
 
     const apiKey = data?.value?.trim();
     if (!apiKey) {
-        throw new Error("OpenAI API Anahtarı ayarlanmamış. Lütfen Developer Panel'den API anahtarınızı girin.");
+        throw new Error("OpenAI API Anahtarı ayarlanmamış. Lütfen sağ üst köşedeki ayarlar menüsünden 'Geliştirici Paneli' açın ve OpenAI API anahtarınızı girin. API anahtarı almak için: https://platform.openai.com/api-keys");
     }
 
     cachedApiKey = apiKey;
