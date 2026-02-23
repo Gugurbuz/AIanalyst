@@ -12,6 +12,7 @@ import { FileText, GanttChartSquare, Beaker, PlusSquare, Search, Sparkles, Panel
 import { MainSidebar } from './MainSidebar';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 import { Toast } from '../components/Toast';
+import { geminiService } from '../services/geminiService';
 
 // Lazy load modals
 const ShareModal = React.lazy(() => import('../components/ShareModal').then(m => ({ default: m.ShareModal })));
@@ -64,7 +65,11 @@ const AnalystWorkspace = () => {
 
                 if (choice === 'analyze') {
                     if (context.activeConversationId) {
-                        context.sendMessage(content, null);
+                        const { jsonString, tokens } = await geminiService.parseTextToRequestDocument(content);
+                        context.commitTokenUsage(tokens);
+                        await context.saveDocumentVersion('requestDoc', jsonString, 'Yapıştırılan metinden oluşturuldu');
+                        context.setActiveDocTab('request');
+                        context.sendMessage('Bu dokümanı analiz etmeye başla.', null);
                     } else {
                         context.handleNewConversation(content);
                     }
