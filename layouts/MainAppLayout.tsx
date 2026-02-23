@@ -46,7 +46,7 @@ const AnalystWorkspace = () => {
     const handleLongTextPaste = (content: string) => {
         context.setLongTextPrompt({
             content: content,
-            callback: (choice: 'analyze' | 'save') => {
+            callback: async (choice: 'analyze' | 'save') => {
                 const saveAsAnalysisDoc = async (isNew: boolean) => {
                     let convId = context.activeConversationId;
                     if (isNew || !convId) {
@@ -63,7 +63,11 @@ const AnalystWorkspace = () => {
                 };
 
                 if (choice === 'analyze') {
-                    context.handleNewConversation(content);
+                    if (context.activeConversationId) {
+                        context.sendMessage(content, null);
+                    } else {
+                        context.handleNewConversation(content);
+                    }
                 } else if (choice === 'save') {
                     saveAsAnalysisDoc(!context.activeConversationId);
                 }
