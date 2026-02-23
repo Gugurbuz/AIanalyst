@@ -1,9 +1,10 @@
-
-import OpenAI from "openai";
 import type { Message, GeminiModel, StreamChunk, GeneratedDocs, ThoughtProcess } from '../../types';
 import { promptService } from '../promptService';
-import { getApiKey, handleGeminiError } from './core';
+import { handleGeminiError } from './core';
 import { ThoughtProcessSchema } from '../schemas';
+
+const SUPABASE_URL = 'https://mjrshqlpomrezudlpmoj.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qcnNocWxwb21yZXp1ZGxwbW9qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzY1MDcsImV4cCI6MjA3NzM1MjUwN30.CY46g7Qnua63CrsWteAAFvMHeU75hwfZzeLfjOKCKNI';
 
 const modelMapping: Record<GeminiModel, string> = {
     'gemini-2.0-flash': 'gpt-4o-mini',
@@ -21,7 +22,7 @@ export const tools = [
         type: 'function',
         function: {
             name: 'generateAnalysisDocument',
-            description: 'Kullanıcı bir dokümanı "güncelle", "oluştur", "yeniden yaz" veya "yeniden oluştur" gibi bir komut verdiğinde BU ARACI KULLAN. Araç, mevcut konuşma geçmişini ve talebi kullanarak tam bir iş analizi dokümanı JSON nesnesi üretir.',
+            description: 'Kullanici bir dokumani "guncelle", "olustur", "yeniden yaz" veya "yeniden olustur" gibi bir komut verdiginde BU ARACI KULLAN. Arac, mevcut konusma gecmisini ve talebi kullanarak tam bir is analizi dokumani JSON nesnesi uretir.',
             parameters: { type: 'object', properties: {} },
         }
     },
@@ -29,11 +30,11 @@ export const tools = [
         type: 'function',
         function: {
             name: 'saveRequestDocument',
-            description: 'Kullanıcının ilk talebi netleştiğinde, bu talebi özetlemek ve "Talep Dokümanı" olarak OTOMATİK OLARAK KAYDETMEK için kullanılır. Kullanıcıdan onay isteme, doğrudan bu aracı çağır. Bu araç, sadece sohbetin başında, ilk talep oluşturulurken kullanılmalıdır.',
+            description: 'Kullanicinin ilk talebi netlestiginde, bu talebi ozetlemek ve Talep Dokumani olarak OTOMATIK OLARAK KAYDETMEK icin kullanilir. Kullanicidan onay isteme, dogrudan bu araci cagir. Bu arac, sadece sohbetin basinda, ilk talep olusturulurken kullanilmalidir.',
             parameters: {
                 type: 'object',
                 properties: {
-                    request_summary: { type: 'string', description: 'Kullanıcının ilk talebinin kısa ve net bir özeti.' }
+                    request_summary: { type: 'string', description: 'Kullanicinin ilk talebinin kisa ve net bir ozeti.' }
                 },
                 required: ['request_summary'],
             },
@@ -43,7 +44,7 @@ export const tools = [
         type: 'function',
         function: {
             name: 'generateTestScenarios',
-            description: 'Kullanıcı test senaryoları oluşturulmasını istediğinde veya analiz dokümanı yeterince olgunlaştığında bu aracı kullan. Mevcut analiz dokümanından test senaryoları oluşturur.',
+            description: 'Kullanici test senaryolari olusturulmasini istediginde veya analiz dokumani yeterince olgunlastiginda bu araci kullan. Mevcut analiz dokumani ndan test senaryolari olusturur.',
             parameters: { type: 'object', properties: {} },
         }
     },
@@ -51,7 +52,7 @@ export const tools = [
         type: 'function',
         function: {
             name: 'generateTraceabilityMatrix',
-            description: 'Kullanıcı gereksinimler ve testler arasında bir izlenebilirlik matrisi istediğinde veya hem analiz hem de test dokümanları mevcut olduğunda bu aracı kullan.',
+            description: 'Kullanici gereksinimler ve testler arasinda bir izlenebilirlik matrisi istediginde veya hem analiz hem de test dokumanlari mevcut oldugunda bu araci kullan.',
             parameters: { type: 'object', properties: {} },
         }
     },
@@ -59,7 +60,7 @@ export const tools = [
         type: 'function',
         function: {
             name: 'generateVisualization',
-            description: 'Kullanıcı süreç akışını görselleştirmek istediğinde veya bir süreci "çiz", "görselleştir" veya "diyagramını yap" dediğinde bu aracı kullan.',
+            description: 'Kullanici surec akisini gorsellestirmek istediginde veya bir sureci "ciz", "gorsellestir" veya "diyagramini yap" dediginde bu araci kullan.',
             parameters: { type: 'object', properties: {} },
         }
     }
@@ -97,81 +98,86 @@ export const convertMessagesToOpenAIFormat = (history: Message[]): any[] => {
     });
 };
 
-export async function* parseStreamingResponse(stream: any): AsyncGenerator<StreamChunk> {
+export async function* parseStreamingResponse(reader: ReadableStreamDefaultReader<Uint8Array>): AsyncGenerator<StreamChunk> {
+    const decoder = new TextDecoder();
     let buffer = '';
     let thoughtYielded = false;
-    let totalTokens = 0;
+    let textBuffer = '';
 
-    for await (const chunk of stream) {
-        if (chunk.choices?.[0]?.finish_reason) {
-            if (totalTokens > 0) {
-                yield { type: 'usage_update', tokens: totalTokens };
-            }
-        }
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-        const toolCalls = chunk.choices?.[0]?.delta?.tool_calls;
-        if (toolCalls) {
-            for (const tc of toolCalls) {
-                if (tc.function?.name) {
-                    const args = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
-                    yield { type: 'function_call', name: tc.function.name, args };
-                }
-            }
-        }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
 
-        const delta = chunk.choices?.[0]?.delta?.content;
-        if (!delta) continue;
-
-        buffer += delta;
-
-        if (!thoughtYielded) {
-            const startTag = '<dusunce>';
-            const endTag = '</dusunce>';
-            const startIdx = buffer.indexOf(startTag);
-            const endIdx = buffer.indexOf(endTag);
-
-            if (startIdx !== -1 && endIdx !== -1) {
-                const jsonStr = buffer.substring(startIdx + startTag.length, endIdx);
+        for (const line of lines) {
+            if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+                if (data === '[DONE]') continue;
                 try {
-                    const parsedJson = JSON.parse(jsonStr);
-                    const validation = ThoughtProcessSchema.safeParse(parsedJson);
+                    const chunk = JSON.parse(data);
 
-                    if (validation.success) {
-                        yield { type: 'thought_chunk', payload: validation.data };
+                    const toolCalls = chunk.choices?.[0]?.delta?.tool_calls;
+                    if (toolCalls) {
+                        for (const tc of toolCalls) {
+                            if (tc.function?.name) {
+                                const args = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
+                                yield { type: 'function_call', name: tc.function.name, args };
+                            }
+                        }
+                    }
+
+                    const delta = chunk.choices?.[0]?.delta?.content;
+                    if (!delta) continue;
+
+                    textBuffer += delta;
+
+                    if (!thoughtYielded) {
+                        const startTag = '<dusunce>';
+                        const endTag = '</dusunce>';
+                        const startIdx = textBuffer.indexOf(startTag);
+                        const endIdx = textBuffer.indexOf(endTag);
+
+                        if (startIdx !== -1 && endIdx !== -1) {
+                            const jsonStr = textBuffer.substring(startIdx + startTag.length, endIdx);
+                            try {
+                                const parsedJson = JSON.parse(jsonStr);
+                                const validation = ThoughtProcessSchema.safeParse(parsedJson);
+
+                                if (validation.success) {
+                                    yield { type: 'thought_chunk', payload: validation.data };
+                                } else {
+                                    yield { type: 'thought_chunk', payload: parsedJson as ThoughtProcess };
+                                }
+
+                                thoughtYielded = true;
+                                const remainingText = textBuffer.substring(endIdx + endTag.length);
+                                if (remainingText) {
+                                    yield { type: 'text_chunk', text: remainingText };
+                                }
+                                textBuffer = '';
+                            } catch {}
+                        }
                     } else {
-                        console.warn("Thought process validation failed:", validation.error);
-                        yield { type: 'thought_chunk', payload: parsedJson as ThoughtProcess };
+                        yield { type: 'text_chunk', text: textBuffer };
+                        textBuffer = '';
                     }
-
-                    thoughtYielded = true;
-                    const remainingText = buffer.substring(endIdx + endTag.length);
-                    if (remainingText) {
-                        yield { type: 'text_chunk', text: remainingText };
-                    }
-                    buffer = '';
-                } catch (e) {
-                }
+                } catch {}
             }
-        } else {
-            yield { type: 'text_chunk', text: buffer };
-            buffer = '';
         }
     }
-    if (buffer) {
-        yield { type: 'text_chunk', text: buffer };
+
+    if (textBuffer) {
+        yield { type: 'text_chunk', text: textBuffer };
     }
 }
 
 export const handleUserMessageStream = async function* (history: Message[], generatedDocs: GeneratedDocs, templates: any, model: GeminiModel, isSearchEnabled?: boolean): AsyncGenerator<StreamChunk> {
     try {
-        const apiKey = await getApiKey();
-        const openai = new OpenAI({
-            apiKey,
-            dangerouslyAllowBrowser: true
-        });
-
         const hasRequestDoc = !!generatedDocs.requestDoc?.content?.trim();
-        const hasRealAnalysisDoc = !!generatedDocs.analysisDoc?.content && !generatedDocs.analysisDoc.content.includes("Bu bölüme projenin temel hedefini");
+        const hasRealAnalysisDoc = !!generatedDocs.analysisDoc?.content && !generatedDocs.analysisDoc.content.includes("Bu bolume projenin temel hedefini");
         const isStartingConversation = !hasRequestDoc && !hasRealAnalysisDoc && history.filter(m => m && m.role !== 'system').length <= 1;
 
         const systemInstruction = isStartingConversation
@@ -183,18 +189,35 @@ export const handleUserMessageStream = async function* (history: Message[], gene
         const messages = convertMessagesToOpenAIFormat(history);
         const openaiModel = getOpenAIModel(model);
 
-        const responseStream = await openai.chat.completions.create({
-            model: openaiModel,
-            messages: [
-                { role: 'system', content: systemInstruction },
-                ...messages
-            ],
-            tools: isSearchEnabled ? undefined : tools as any,
-            stream: true,
-            temperature: 0.7,
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/openai-proxy`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({
+                model: openaiModel,
+                messages: [
+                    { role: 'system', content: systemInstruction },
+                    ...messages
+                ],
+                tools: isSearchEnabled ? undefined : tools,
+                stream: true,
+                temperature: 0.7,
+            }),
         });
 
-        yield* parseStreamingResponse(responseStream);
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP ${response.status}`);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+            throw new Error('Stream not available');
+        }
+
+        yield* parseStreamingResponse(reader);
     } catch (error) {
         handleGeminiError(error);
     }
