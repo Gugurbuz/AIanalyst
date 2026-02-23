@@ -196,8 +196,8 @@ export const DocumentWorkspace: React.FC<DocumentWorkspaceProps> = ({
     };
 
     const handleDismissMaturityQuestion = (questionToRemove: string) => {
-        if (!conversation.generatedDocs?.maturityReport?.metadata) return;
-        const currentReport = conversation.generatedDocs?.maturityReport.metadata as MaturityReport;
+        if (!conversation.generatedDocs.maturityReport?.metadata) return;
+        const currentReport = conversation.generatedDocs.maturityReport.metadata as MaturityReport;
         
         const newReport: MaturityReport = {
             ...currentReport,

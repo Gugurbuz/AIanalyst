@@ -191,8 +191,8 @@ export const useChatService = ({
         conversationState.updateConversation(activeId, { messages: [...historyForApi, assistantMessage] });
         
         try {
-            const streamConv = conversationState.conversations.find(c => c.id === activeId);
-            const streamGeneratedDocs = streamConv?.generatedDocs || { requestDoc: null, analysisDoc: null, testDoc: null, traceabilityDoc: null };
+            const streamConv = conversationState.conversations.find(c => c.id === activeId)!;
+            const streamGeneratedDocs = streamConv.generatedDocs;
 
             const stream = uiState.isExpertMode 
                 ? geminiService.runExpertAnalysisStream(userMessage, streamGeneratedDocs, {

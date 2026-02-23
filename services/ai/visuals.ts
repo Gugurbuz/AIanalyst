@@ -1,44 +1,31 @@
-import type { GeminiModel } from '../../types';
-import { handleGeminiError, generateContent } from './core';
-import { promptService } from '../promptService';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+import { GoogleGenAI } from "@google/genai";
+import type { GeminiModel } from '../../types';
+import { getApiKey, handleGeminiError, generateContent } from './core';
+import { promptService } from '../promptService';
 
 export const editImage = async (base64Data: string, mimeType: string, prompt: string): Promise<{ base64Image: string, tokens: number }> => {
     try {
-        const response = await fetch(`${SUPABASE_URL}/functions/v1/gemini-proxy`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            },
-            body: JSON.stringify({
-                model: 'gemini-2.5-flash-preview-05-20',
-                contents: {
-                    parts: [
-                        { inlineData: { data: base64Data, mimeType: mimeType } },
-                        { text: prompt },
-                    ],
-                },
-            }),
+        const ai = new GoogleGenAI({ apiKey: getApiKey() });
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash-image',
+          contents: {
+            parts: [
+              { inlineData: { data: base64Data, mimeType: mimeType } },
+              { text: prompt },
+            ],
+          },
         });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        if (data.candidates && data.candidates.length > 0 && data.candidates[0]?.content && data.candidates[0]?.content?.parts) {
-            for (const part of data.candidates[0].content.parts) {
-                if (part.inlineData) {
-                    return { base64Image: part.inlineData.data, tokens: data.usageMetadata?.totalTokenCount || 0 };
-                }
+        
+        // FIX: Add safety checks for response structure including optional chaining for candidates[0]
+        if (response.candidates && response.candidates.length > 0 && response.candidates[0]?.content && response.candidates[0]?.content?.parts) {
+            for (const part of response.candidates[0].content.parts) {
+              if (part.inlineData) {
+                return { base64Image: part.inlineData.data, tokens: response.usageMetadata?.totalTokenCount || 0 };
+              }
             }
         }
-
+        
         throw new Error("AI did not return an image. Check prompt safety or input format.");
     } catch (error) {
         handleGeminiError(error);
@@ -56,7 +43,7 @@ export const updateBpmnDiagram = async (currentXml: string, userPrompt: string):
     const prompt = promptService.getPrompt('updateBpmnDiagram')
         .replace('{user_prompt}', userPrompt)
         .replace('{current_xml}', currentXml);
-    const { text, tokens } = await generateContent(prompt, 'gemini-2.0-pro');
+    const { text, tokens } = await generateContent(prompt, 'gemini-2.5-pro');
     const newXml = text.replace(/```(xml)?\s*|\s*```/g, '').trim();
     return { newXml, tokens };
 };

@@ -46,7 +46,7 @@ const AnalystWorkspace = () => {
     const handleLongTextPaste = (content: string) => {
         context.setLongTextPrompt({
             content: content,
-            callback: async (choice: 'analyze' | 'save') => {
+            callback: (choice: 'analyze' | 'save') => {
                 const saveAsAnalysisDoc = async (isNew: boolean) => {
                     let convId = context.activeConversationId;
                     if (isNew || !convId) {
@@ -63,11 +63,7 @@ const AnalystWorkspace = () => {
                 };
 
                 if (choice === 'analyze') {
-                    if (context.activeConversationId) {
-                        context.sendMessage(content, null);
-                    } else {
-                        context.handleNewConversation(content);
-                    }
+                    context.handleNewConversation(content);
                 } else if (choice === 'save') {
                     saveAsAnalysisDoc(!context.activeConversationId);
                 }
@@ -174,9 +170,9 @@ const AnalystWorkspace = () => {
 
 const useNextBestAction = (conversation: any, callbacks: any) => {
     if (!conversation) return { label: "Başlamak için bir mesaj gönderin", action: () => {}, icon: <Sparkles className="h-5 w-5" />, disabled: true };
-
+    
     const { generatedDocs, messages } = conversation;
-    const hasRealAnalysisDoc = !!generatedDocs?.analysisDoc && !!generatedDocs.analysisDoc.content && !generatedDocs.analysisDoc.content.includes("Bu bölüme projenin temel hedefini");
+    const hasRealAnalysisDoc = !!generatedDocs?.analysisDoc && !generatedDocs.analysisDoc.content.includes("Bu bölüme projenin temel hedefini");
     const hasMessages = messages.filter((m: any) => m.role !== 'system').length > 0;
 
     if (hasRealAnalysisDoc && !hasMessages) {
@@ -184,7 +180,7 @@ const useNextBestAction = (conversation: any, callbacks: any) => {
     }
     
     const hasVisualization = generatedDocs?.mermaidViz?.content || generatedDocs?.bpmnViz?.content || generatedDocs?.visualization;
-    const hasTestScenarios = typeof generatedDocs?.testScenarios === 'object' ? !!generatedDocs.testScenarios?.content : !!generatedDocs?.testScenarios;
+    const hasTestScenarios = typeof generatedDocs.testScenarios === 'object' ? !!generatedDocs.testScenarios.content : !!generatedDocs.testScenarios;
 
     if (hasRealAnalysisDoc && hasVisualization && hasTestScenarios) return { label: "Proje Görevleri Oluştur", action: () => callbacks.onNavigateToBacklogGeneration(), icon: <PlusSquare className="h-5 w-5" />, disabled: false };
     if (hasRealAnalysisDoc && hasVisualization && !hasTestScenarios) return { label: "Test Senaryoları Oluştur", action: () => callbacks.onGenerateDoc('test'), icon: <Beaker className="h-5 w-5" />, disabled: false };
