@@ -176,15 +176,16 @@ export async function* parseStreamingResponse(reader: ReadableStreamDefaultReade
 
 export const handleUserMessageStream = async function* (history: Message[], generatedDocs: GeneratedDocs, templates: any, model: GeminiModel, isSearchEnabled?: boolean): AsyncGenerator<StreamChunk> {
     try {
-        const hasRequestDoc = !!generatedDocs.requestDoc?.content?.trim();
-        const hasRealAnalysisDoc = !!generatedDocs.analysisDoc?.content && !generatedDocs.analysisDoc.content.includes("Bu bolume projenin temel hedefini");
+        const docs = generatedDocs || { requestDoc: null, analysisDoc: null, testDoc: null, traceabilityDoc: null };
+        const hasRequestDoc = !!docs.requestDoc?.content?.trim();
+        const hasRealAnalysisDoc = !!docs.analysisDoc?.content && !docs.analysisDoc.content.includes("Bu bolume projenin temel hedefini");
         const isStartingConversation = !hasRequestDoc && !hasRealAnalysisDoc && history.filter(m => m && m.role !== 'system').length <= 1;
 
         const systemInstruction = isStartingConversation
             ? promptService.getPrompt('continueConversation')
             : promptService.getPrompt('proactiveAnalystSystemInstruction')
-                .replace('{analysis_document_content}', generatedDocs.analysisDoc?.content || "...")
-                .replace('{request_document_content}', generatedDocs.requestDoc?.content || "...");
+                .replace('{analysis_document_content}', docs.analysisDoc?.content || "...")
+                .replace('{request_document_content}', docs.requestDoc?.content || "...");
 
         const messages = convertMessagesToOpenAIFormat(history);
         const openaiModel = getOpenAIModel(model);
