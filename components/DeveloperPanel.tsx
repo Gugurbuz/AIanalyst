@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PromptManager } from './PromptManager';
+import { supabase } from '../services/supabaseClient';
 
 interface DeveloperPanelProps {
     modelName: string;
@@ -37,6 +38,8 @@ export const DeveloperPanel: React.FC<DeveloperPanelProps> = ({
     const [localSupabaseAnonKey, setLocalSupabaseAnonKey] = useState(supabaseAnonKey);
     const [localTestUserEmail, setLocalTestUserEmail] = useState(testUserEmail);
     const [localTestUserPassword, setLocalTestUserPassword] = useState(testUserPassword);
+    const [openaiApiKey, setOpenaiApiKey] = useState('');
+    const [isLoadingApiKey, setIsLoadingApiKey] = useState(true);
     const [savedMessage, setSavedMessage] = useState('');
     const [isPromptManagerOpen, setIsPromptManagerOpen] = useState(false);
 
@@ -46,18 +49,45 @@ export const DeveloperPanel: React.FC<DeveloperPanelProps> = ({
     useEffect(() => { setLocalTestUserEmail(testUserEmail); }, [testUserEmail]);
     useEffect(() => { setLocalTestUserPassword(testUserPassword); }, [testUserPassword]);
 
+    useEffect(() => {
+        const loadApiKey = async () => {
+            try {
+                const { data } = await supabase
+                    .from('settings')
+                    .select('value')
+                    .eq('key', 'OPENAI_API_KEY')
+                    .maybeSingle();
 
-    const handleSave = () => {
+                setOpenaiApiKey(data?.value || '');
+            } catch (error) {
+                console.error('API anahtarı yüklenemedi:', error);
+            } finally {
+                setIsLoadingApiKey(false);
+            }
+        };
+        loadApiKey();
+    }, []);
+
+
+    const handleSave = async () => {
         onModelNameChange(localModelName);
         onSupabaseUrlChange(localSupabaseUrl);
         onSupabaseAnonKeyChange(localSupabaseAnonKey);
         onTestUserEmailChange(localTestUserEmail);
         onTestUserPasswordChange(localTestUserPassword);
 
+        try {
+            await supabase
+                .from('settings')
+                .upsert({ key: 'OPENAI_API_KEY', value: openaiApiKey }, { onConflict: 'key' });
+        } catch (error) {
+            console.error('API anahtarı kaydedilemedi:', error);
+        }
+
         setSavedMessage('Ayarlar kaydedildi. Uygulama yeniden başlatılıyor...');
         setTimeout(() => {
             window.location.reload();
-        }, 1500); // Give user time to read the message
+        }, 1500);
     };
 
     return (
@@ -73,9 +103,27 @@ export const DeveloperPanel: React.FC<DeveloperPanelProps> = ({
                 <div className="space-y-4 overflow-y-auto px-4 pb-4 flex-1">
                     <div>
                         <p className="text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 p-2 rounded-md">
-                            <strong>Not:</strong> Gemini API Anahtarı, güvenlik nedeniyle artık sadece ortam değişkenlerinden (`process.env.API_KEY`) okunmaktadır.
+                            <strong>Not:</strong> Uygulama artık OpenAI (ChatGPT) kullanmaktadır. API anahtarınız güvenli bir şekilde Supabase'de saklanır.
                         </p>
                     </div>
+                    <div>
+                        <label htmlFor="openai-api-key" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            OpenAI API Anahtarı
+                        </label>
+                        <input
+                            type="password"
+                            id="openai-api-key"
+                            value={openaiApiKey}
+                            onChange={(e) => setOpenaiApiKey(e.target.value)}
+                            className="w-full p-2 text-sm border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:outline-none bg-slate-100 dark:bg-slate-700"
+                            placeholder="sk-..."
+                            disabled={isLoadingApiKey}
+                        />
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            OpenAI hesabınızdan API anahtarı alabilirsiniz: <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">platform.openai.com</a>
+                        </p>
+                    </div>
+                    <hr className="border-slate-300 dark:border-slate-600"/>
                     <div>
                         <label htmlFor="model-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                             Gemini Model Adı

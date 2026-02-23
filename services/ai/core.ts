@@ -1,10 +1,30 @@
 
 import OpenAI from "openai";
 import type { GeminiModel } from '../../types';
+import { supabase } from '../supabaseClient';
 
-export const getApiKey = (): string => {
-    const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-    if (!apiKey) throw new Error("OpenAI API Anahtarı ayarlanmamış. Lütfen .env dosyasına VITE_OPENAI_API_KEY ekleyin.");
+let cachedApiKey: string | null = null;
+
+export const getApiKey = async (): Promise<string> => {
+    if (cachedApiKey) return cachedApiKey;
+
+    const { data, error } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('key', 'OPENAI_API_KEY')
+        .maybeSingle();
+
+    if (error) {
+        console.error('Supabase settings error:', error);
+        throw new Error("OpenAI API Anahtarı alınamadı.");
+    }
+
+    const apiKey = data?.value?.trim();
+    if (!apiKey) {
+        throw new Error("OpenAI API Anahtarı ayarlanmamış. Lütfen Developer Panel'den API anahtarınızı girin.");
+    }
+
+    cachedApiKey = apiKey;
     return apiKey;
 };
 
@@ -31,8 +51,9 @@ export function handleGeminiError(error: any): never {
 
 export const generateContent = async (prompt: string, model: GeminiModel, modelConfig?: any): Promise<{ text: string, tokens: number }> => {
     try {
+        const apiKey = await getApiKey();
         const openai = new OpenAI({
-            apiKey: getApiKey(),
+            apiKey,
             dangerouslyAllowBrowser: true
         });
 
@@ -57,8 +78,9 @@ export const generateContent = async (prompt: string, model: GeminiModel, modelC
 
 export const generateContentStream = async function* (prompt: string, model: GeminiModel, modelConfig?: any): AsyncGenerator<any> {
     try {
+        const apiKey = await getApiKey();
         const openai = new OpenAI({
-            apiKey: getApiKey(),
+            apiKey,
             dangerouslyAllowBrowser: true
         });
 

@@ -164,8 +164,9 @@ export async function* parseStreamingResponse(stream: any): AsyncGenerator<Strea
 
 export const handleUserMessageStream = async function* (history: Message[], generatedDocs: GeneratedDocs, templates: any, model: GeminiModel, isSearchEnabled?: boolean): AsyncGenerator<StreamChunk> {
     try {
+        const apiKey = await getApiKey();
         const openai = new OpenAI({
-            apiKey: getApiKey(),
+            apiKey,
             dangerouslyAllowBrowser: true
         });
 
