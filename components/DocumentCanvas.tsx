@@ -52,41 +52,82 @@ const jsonToMarkdownTable = (content: string): string => {
     }
 };
 
-// Helper to convert strict JSON Request Doc to professional Markdown
-const convertRequestJsonToMarkdown = (json: any): string => {
-    // Helper to safely get string values
-    const val = (v: any) => v || 'Belirtilmemiş';
-    const list = (arr: any[]) => Array.isArray(arr) && arr.length > 0 ? arr.map(item => `- ${item}`).join('\n') : '- Belirtilmemiş';
+const extractJsonFromText = (text: string): any | null => {
+    if (!text || typeof text !== 'string') return null;
 
-    return `
-# ${val(json.talepAdi)}
+    let jsonToParse = text.trim();
+
+    const codeBlockMatch = jsonToParse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (codeBlockMatch) {
+        jsonToParse = codeBlockMatch[1].trim();
+    }
+
+    const firstBrace = jsonToParse.indexOf('{');
+    const lastBrace = jsonToParse.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        jsonToParse = jsonToParse.substring(firstBrace, lastBrace + 1);
+    }
+
+    try {
+        return JSON.parse(jsonToParse);
+    } catch {
+        return null;
+    }
+};
+
+const convertRequestJsonToMarkdown = (json: any): string => {
+    const val = (v: any) => {
+        if (v === null || v === undefined || v === '') return 'Belirtilmemiş';
+        return String(v).trim();
+    };
+    const list = (arr: any[]) => {
+        if (!Array.isArray(arr) || arr.length === 0) return '- Belirtilmemiş';
+        return arr.filter(item => item && String(item).trim()).map(item => `- ${String(item).trim()}`).join('\n') || '- Belirtilmemiş';
+    };
+
+    const title = val(json.talepAdi);
+    const docNo = val(json.dokumanNo);
+    const date = val(json.tarih);
+    const revision = val(json.revizyon);
+    const owner = val(json.talepSahibi);
+    const problem = val(json.mevcutDurumProblem);
+    const purpose = val(json.talepAmaciGerekcesi);
+    const inScope = list(json.kapsam?.inScope);
+    const outScope = list(json.kapsam?.outOfScope);
+    const benefits = list(json.beklenenIsFaydalari);
+
+    return `# ${title}
 
 | Doküman Bilgileri | Detay |
 | :--- | :--- |
-| **Doküman No** | ${val(json.dokumanNo)} |
-| **Tarih** | ${val(json.tarih)} |
-| **Revizyon** | ${val(json.revizyon)} |
-| **Talep Sahibi** | ${val(json.talepSahibi)} |
+| **Doküman No** | ${docNo} |
+| **Tarih** | ${date} |
+| **Revizyon** | ${revision} |
+| **Talep Sahibi** | ${owner} |
 
 ---
 
 ## 1. Mevcut Durum ve Problem
-> ${val(json.mevcutDurumProblem)}
+
+${problem}
 
 ## 2. Talebin Amacı ve Gerekçesi
-${val(json.talepAmaciGerekcesi)}
+
+${purpose}
 
 ## 3. Kapsam
 
 ### 3.1. Kapsam Dahili
-${list(json.kapsam?.inScope)}
+
+${inScope}
 
 ### 3.2. Kapsam Dışı
-${list(json.kapsam?.outOfScope)}
+
+${outScope}
 
 ## 4. Beklenen İş Faydaları
-${list(json.beklenenIsFaydalari)}
-    `.trim();
+
+${benefits}`;
 };
 
 const AiAssistantModal: React.FC<{ selectedText: string; onGenerate: (prompt: string) => void; onClose: () => void; isLoading: boolean; }> = ({ selectedText, onGenerate, onClose, isLoading }) => {
@@ -135,40 +176,16 @@ export const DocumentCanvas: React.FC<DocumentCanvasProps> = (props) => {
     const docNameMap: Record<string, string> = { analysisDoc: 'Analiz Dokümanı', requestDoc: 'Talep Dokümanı', testScenarios: 'Test Senaryoları', traceabilityMatrix: 'İzlenebilirlik Matrisi' };
     const documentName = docNameMap[docKey] || 'Doküman';
 
-    // Unified content processing logic
     const processedContent = useMemo(() => {
         const rawContent = isEditing ? localContent : content;
-        
-        // 1. If it's a Request Doc and looks like JSON, convert to Markdown
+
         if (docKey === 'requestDoc' && rawContent) {
-            try {
-                // Aggressive cleaning to handle markdown code blocks or extra text
-                let jsonToParse = rawContent.trim();
-                
-                // If it looks like a markdown code block, extract the content
-                const codeBlockMatch = jsonToParse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-                if (codeBlockMatch) {
-                    jsonToParse = codeBlockMatch[1];
-                }
-
-                // Or find the first { and last }
-                const firstBrace = jsonToParse.indexOf('{');
-                const lastBrace = jsonToParse.lastIndexOf('}');
-                if (firstBrace !== -1 && lastBrace !== -1) {
-                    jsonToParse = jsonToParse.substring(firstBrace, lastBrace + 1);
-                }
-
-                const parsed = JSON.parse(jsonToParse);
-                // Check if it has at least one key field to verify it's a request doc, rather than strict schema check
-                if (parsed && (parsed.talepAdi || parsed.mevcutDurumProblem || parsed.kapsam)) {
-                    return convertRequestJsonToMarkdown(parsed);
-                }
-            } catch (e) {
-                // Not valid JSON, or not matching schema, treat as text
+            const parsed = extractJsonFromText(rawContent);
+            if (parsed && (parsed.talepAdi || parsed.mevcutDurumProblem || parsed.kapsam || parsed.talepAmaciGerekcesi)) {
+                return convertRequestJsonToMarkdown(parsed);
             }
         }
 
-        // 2. If it's a Table view (Test/Traceability) and not streaming, convert JSON array to Markdown Table
         if (isTable && !isStreaming) {
             return jsonToMarkdownTable(rawContent);
         }
